@@ -1,4 +1,6 @@
 import re
+import os
+import subprocess
 
 # Matches 1+ occurrences of a number, followed by a letter from {MIDNSHPX=}
 CIGAR_RE = re.compile('[0-9]+[MIDNSHPX=]')
@@ -129,92 +131,96 @@ def merge_pairs (seq1, seq2, qual1, qual2, q_cutoff=10, minimum_q_delta=5):
     return mseq
 
 
-def get_seq_from_sam(sam_filename, mapping_cutoff, read_qual_cutoff, max_prop_N):
+def get_msa_fasta_from_sam(sam_filename, mapping_cutoff, read_qual_cutoff, max_prop_N, fasta_filename):
     """
-    Parse SAM file contents and return sequence. For matched read pairs,
-    merge the reads together into a single sequence
-    mapping_cutoff int mapping quality cutoff.  Ignore alignments with mapping quality lower than the cutoff.
-    RETURNS:  list of tuples [query name, aligned query seq]
+    Parse SAM file contents and return sequence. For mate pairs, merges the reads into a single sequence with gaps
+    with respect to the reference.
+    TODO:  handle inserts.  Right now, all inserts are squelched so that there is multiple sequence alignment.
+    Writes the sequences to fasta file.
+    :param sam_filename: full path to sam file
+    :param mapping_cutoff:  Ignore alignments with mapping quality lower than the cutoff.
+    :param read_qual_cutoff: When merging overlapping paired-end reads, ignore mate with read quality lower than the cutoff.
+    :param max_prop_N: If both mates have base quality lower than the cutoff, then the merged sequence uses N in that position
+    :param fasta_filename: full path of fasta file to write to.  Will completely overwite file.
     """
-    fasta = []
+
     with open(sam_filename, 'r') as sam_fh:
-        lines = sam_fh.readlines()
+        with open(fasta_filename, 'w') as fasta_fh:
+            lines = sam_fh.readlines()
 
-        # If this is a completely empty file, return
-        if len(lines) == 0:
-            return None
+            # If this is a completely empty file, return
+            if len(lines) == 0:
+                return None
 
-        # Skip top SAM header lines
-        for start, line in enumerate(lines):
-            if not line.startswith('@'):
-                break
+            # Skip top SAM header lines
+            for start, line in enumerate(lines):
+                if not line.startswith('@'):
+                    break
 
-        # If this is an empty SAM, return
-        if start == len(lines) - 1:
-            return None
+            # If this is an empty SAM, return
+            if start == len(lines) - 1:
+                return None
 
-        i = start
-        while i < len(lines):
-            qname, flag, refname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual = lines[i].rstrip().split('\t')[:11]
+            i = start
+            while i < len(lines):
+                qname, flag, refname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual = lines[i].rstrip().split('\t')[:11]
 
-            # If read failed to map or has poor mapping quality, skip it
-            if refname == '*' or cigar == '*' or int(mapq) < mapping_cutoff:
-                i += 1
-                continue
+                # If read failed to map or has poor mapping quality, skip it
+                if refname == '*' or cigar == '*' or int(mapq) < mapping_cutoff:
+                    i += 1
+                    continue
 
-            pos1 = int(pos)
-            shift, seq1, qual1 = apply_cigar(cigar, seq, qual)
+                pos1 = int(pos)
+                shift, seq1, qual1 = apply_cigar(cigar, seq, qual)
 
-            if not seq1:
-                i += 1
-                continue
+                if not seq1:
+                    i += 1
+                    continue
 
-            seq1 = '-' * pos1 + seq1  # FIXME: We no longer censor bases up front
-            qual1 = '-' * pos1 + qual1  # FIXME: Give quality string the same offset
+                seq1 = '-' * pos1 + seq1  # FIXME: We no longer censor bases up front
+                qual1 = '-' * pos1 + qual1  # FIXME: Give quality string the same offset
 
 
-            # No more lines
-            if (i + 1) == len(lines):
-                break
+                # No more lines
+                if (i + 1) == len(lines):
+                    break
 
-            # Look ahead in the SAM for matching read
-            qname2, flag, refname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual = lines[i + 1].rstrip().split('\t')[:11]
+                # Look ahead in the SAM for matching read
+                qname2, flag, refname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual = lines[i + 1].rstrip().split('\t')[:11]
 
-            if qname2 == qname:
+                fasta_fh.write(">" + qname + "\n")
 
-                # Second read failed to map
-                if refname == '*' or cigar == '*':
-                    fasta.append([qname, seq1])
+                if qname2 == qname:
+                    # Second read failed to map
+                    if refname == '*' or cigar == '*':
+                        fasta_fh.write(seq1 + "\n")
+                        i += 2
+                        continue
+
+                    pos2 = int(pos)
+                    shift, seq2, qual2 = apply_cigar(cigar, seq, qual)
+
+                    # Failed to parse CIGAR
+                    if not seq2:
+                        fasta_fh.write(seq1 + "\n")
+                        i += 2
+                        continue
+
+                    seq2 = '-' * pos2 + seq2  # FIXME: We no longer censor bases up front
+                    qual2 = '-' * pos2 + qual2  # FIXME: Give quality string the same offset
+
+                    mseq = merge_pairs(seq1, seq2, qual1, qual2, read_qual_cutoff)  # FIXME: We now feed these quality data into merge_pairs
+
+                    # Sequence must not have too many censored bases
+                    if mseq.count('N') / float(len(mseq)) < max_prop_N:
+                         fasta_fh.write(mseq + "\n")
+
                     i += 2
                     continue
 
-                pos2 = int(pos)
-                shift, seq2, qual2 = apply_cigar(cigar, seq, qual)
-
-                # Failed to parse CIGAR
-                if not seq2:
-                    fasta.append([qname, seq1])
-                    i += 2
-                    continue
-
-                #seq2 = '-'*pos2 + censor_bases(seq2, qual2, cutoff)
-                seq2 = '-' * pos2 + seq2  # FIXME: We no longer censor bases up front
-                qual2 = '-' * pos2 + qual2  # FIXME: Give quality string the same offset
-
-                mseq = merge_pairs(seq1, seq2, qual1, qual2, read_qual_cutoff)  # FIXME: We now feed these quality data into merge_pairs
-
-                # Sequence must not have too many censored bases
-                if mseq.count('N') / float(len(mseq)) < max_prop_N:
-                    fasta.append([qname, mseq])
-
-                i += 2
-                continue
-
-            # ELSE no matched pair
-            fasta.append([qname, seq1])
-            i += 1
-
-    return fasta
+                # ELSE no matched pair
+                fasta_fh.write(seq1 + "\n")
+                i += 1
 
 
 def samBitFlag(flag):
@@ -257,21 +263,53 @@ def samBitFlag(flag):
 def create_depth_file_from_bam (bam_filename):
     """
     Gets the coverage from samtools depth.
-    Creates a sorted bam file with the same name as bam_filename but appended with ".sort".
     Creates a samtools per-base depth file with the same name as bam_filename but appended with ".depth".
-    str bam_filename:  full path to bam file
-    Raises subprocess.CalledProcessError
+
+    TODO: what to do with STDERR
+
+    :param str bam_filename:  full path to sorted and indexed bam file
+    :raise subprocess.CalledProcessError
+    :rtype str : returns full filepath to depth file
     """
 
     import subprocess
 
     # Get per-base depth
     depth_filename = bam_filename + ".depth"
-    with open(depth_filename, 'w') as depth_fh:
-        # Sort the bam file by leftmost position on the reference assembly.  Required for samtools depth.
-        sorted_bam_filename = bam_filename + ".sort"
-        subprocess.check_call('samtools', 'sort', '-f', bam_filename, sorted_bam_filename, stderr=subprocess.STDOUT, shell=False)
-        depth_output = subprocess.check_output(['samtools', 'depth', bam_filename, '>', ], stderr=subprocess.STDOUT, shell=False)
+    subprocess.check_output(['samtools', 'depth', bam_filename], stdout=depth_fh, shell=False)
+    return depth_filename
+
+
+def sam_to_sort_bam(sam_filename, ref_filename):
+    """
+    Creates index of reference.  Converts sam to bam file sorted by coordinates.  Creates index of sorted bam.
+    Pipes STDERR to STDOUT.
+    Uses default samtools from PATH environment variable.
+
+    :rtype str: full filepath to bam  file
+    :param samtools_exe:  full filepath to samtools executable
+    :param sam_filename: full filepath to sam alignment file
+    """
+
+    sam_filename_prefix, file_suffix = os.path.splitext(sam_filename)
+    bam_filename = sam_filename_prefix + ".bam"
+
+    # index reference
+    index_ref_filename = ref_filename + ".fai"
+    subprocess.check_call(['samtools', 'faidx', ref_filename], stderr=subprocess.STDOUT, shell=False)
+
+    # convert sam to bam
+    subprocess.check_call(['samtools', 'view', '-Sb', index_ref_filename, '-o', bam_filename, sam_filename],
+                          stderr=subprocess.STDOUT, shell=False)
+
+    # Sort the bam file by leftmost position on the reference assembly.  Required for samtools depth.
+    sorted_bam_filename = bam_filename + ".sort"
+    subprocess.check_call(['samtools', 'sort', '-f', bam_filename, sorted_bam_filename], stderr=subprocess.STDOUT, shell=False)
+
+    # index sorted bam file
+    subprocess.check_call(['samtools', 'index', sorted_bam_filename, ], stderr=subprocess.STDOUT, shell=False)
+
+
 
 
 def get_ave_coverage_from_bam (bam_filename, ref, pos_start, pos_end):
