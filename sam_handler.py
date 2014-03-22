@@ -274,19 +274,22 @@ def create_depth_file_from_bam (bam_filename):
 
     # Get per-base depth
     depth_filename = bam_filename + ".depth"
-    subprocess.check_output(['samtools', 'depth', bam_filename], stdout=depth_fh, shell=False)
+    with open(depth_filename, 'w') as depth_fh:
+        subprocess.check_call(['samtools', 'depth', bam_filename], stdout=depth_fh, shell=False)
     return depth_filename
 
 
 def sam_to_sort_bam(sam_filename, ref_filename):
     """
-    Creates index of reference.  Converts sam to bam file sorted by coordinates.  Creates index of sorted bam.
+    Creates index of reference.  This creates a <ref_filename>.fai file.
+    Converts sam to bam file sorted by coordinates.  This creates a <sam_filename prefix>.bam and <sam filename prefix>.bam.sort files.
+    Creates index of sorted bam.  This creates a <bam_filename>.index file.
     Pipes STDERR to STDOUT.
     Uses default samtools from PATH environment variable.
 
-    :rtype str: full filepath to bam  file
-    :param samtools_exe:  full filepath to samtools executable
-    :param sam_filename: full filepath to sam alignment file
+    :rtype str : full filepath to sorted, indexed bam  file
+    :param str sam_filename: full filepath to sam alignment file
+    :param str ref_filename:  full filepath to reference fasta
     """
 
     sam_filename_prefix, file_suffix = os.path.splitext(sam_filename)
@@ -297,7 +300,7 @@ def sam_to_sort_bam(sam_filename, ref_filename):
     subprocess.check_call(['samtools', 'faidx', ref_filename], stderr=subprocess.STDOUT, shell=False)
 
     # convert sam to bam
-    subprocess.check_call(['samtools', 'view', '-Sb', index_ref_filename, '-o', bam_filename, sam_filename],
+    subprocess.check_call(['samtools', 'view', '-Sb', '-o', bam_filename, sam_filename],
                           stderr=subprocess.STDOUT, shell=False)
 
     # Sort the bam file by leftmost position on the reference assembly.  Required for samtools depth.
@@ -307,7 +310,7 @@ def sam_to_sort_bam(sam_filename, ref_filename):
     # index sorted bam file
     subprocess.check_call(['samtools', 'index', sorted_bam_filename, ], stderr=subprocess.STDOUT, shell=False)
 
-
+    return sorted_bam_filename
 
 
 def get_ave_coverage_from_bam (bam_filename, ref, pos_start, pos_end):
@@ -333,8 +336,8 @@ def get_ave_coverage_from_bam (bam_filename, ref, pos_start, pos_end):
             # Output of samtools depth:
             # <reference>   <position>  <depth>
             line_ref, line_pos, line_depth = line.rstrip().split('\t')
-            if line_ref == ref and (line_pos >= pos_start or line_pos <= pos_end):
-                total_coverage += line_depth
+            if line_ref == ref and int(line_pos) >= pos_start and int(line_pos) <= pos_end:
+                total_coverage += int(line_depth)
 
-    ave_coverage = total_coverage / (pos_end - pos_start + 1)
+    ave_coverage = round(float(total_coverage) / (pos_end - pos_start + 1), 0)
     return ave_coverage
