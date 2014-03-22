@@ -1,9 +1,12 @@
 import re
 import os
 import subprocess
+import logging
 
 # Matches 1+ occurrences of a number, followed by a letter from {MIDNSHPX=}
 CIGAR_RE = re.compile('[0-9]+[MIDNSHPX=]')
+
+LOGGER = logging.getLogger(__name__)
 
 # TODO:  handle X, =, P, N
 def apply_cigar (cigar, seq, qual):
@@ -131,96 +134,91 @@ def merge_pairs (seq1, seq2, qual1, qual2, q_cutoff=10, minimum_q_delta=5):
     return mseq
 
 
-def get_msa_fasta_from_sam(sam_filename, mapping_cutoff, read_qual_cutoff, max_prop_N, fasta_filename):
+def get_padded_seq_from_cigar(pos, cigar, seq, qual):
     """
-    Parse SAM file contents and return sequence. For mate pairs, merges the reads into a single sequence with gaps
-    with respect to the reference.
+    Returns the left-padded sequence from the cigar, with soft-clipped bases removed.
+    Pads with '-' up to pos.
+
+    :param int pos : pos field from SAM.  1-based position with respect to the reference.
+    :param str cigar:  cigar field from SAM
+    :param str seq : sequence field from SAM
+    :param str qual : qual field from SAM
+    :rtype str : left-padded sequence, with soft-clips removed
+
+    """
+    shift, formatted_seq, formatted_qual = apply_cigar(cigar, seq, qual)
+    formatted_seq = '-' * (pos - 1) + formatted_seq
+    formatted_qual = '-' * (pos - 1) + formatted_qual
+    return [formatted_seq, formatted_qual]
+
+
+def get_msa_fasta_from_sam(sam_filename, mapping_cutoff, read_qual_cutoff, max_prop_N, out_fasta_filename):
+    """
+    Parse SAM file contents for query-ref aligned sequences.
+    Does pseudo multiple sequence alignment on all the query sequences and reference.
     TODO:  handle inserts.  Right now, all inserts are squelched so that there is multiple sequence alignment.
-    Writes the sequences to fasta file.
+    For paired-end reads, merges the reads into a single sequence with gaps with respect to the reference.
+    TODO:  handle mate pairs.
+    Writes the MSA sequences to out_fasta_filename.
+
     :param sam_filename: full path to sam file
     :param mapping_cutoff:  Ignore alignments with mapping quality lower than the cutoff.
     :param read_qual_cutoff: When merging overlapping paired-end reads, ignore mate with read quality lower than the cutoff.
-    :param max_prop_N: If both mates have base quality lower than the cutoff, then the merged sequence uses N in that position
-    :param fasta_filename: full path of fasta file to write to.  Will completely overwite file.
+    :param max_prop_N:  Do not output sequences with proportion of N higher than the cutoff
+    :param out_fasta_filename: full path of fasta file to write to.  Will completely overwite file.
     """
 
+    LOGGER.debug("sam_filename=" + sam_filename + " out_fasta_filename=" + out_fasta_filename)
     with open(sam_filename, 'r') as sam_fh:
-        with open(fasta_filename, 'w') as fasta_fh:
+        with open(out_fasta_filename, 'w') as out_fasta_fh:
             lines = sam_fh.readlines()
 
-            # If this is a completely empty file, return
-            if len(lines) == 0:
-                return None
+            if not lines:
+                LOGGER.warn("Empty intput SAM file " + sam_filename)
 
             # Skip top SAM header lines
             for start, line in enumerate(lines):
                 if not line.startswith('@'):
                     break
 
-            # If this is an empty SAM, return
-            if start == len(lines) - 1:
-                return None
-
-            i = start
+            i = start  # Keep track of the current line so that we can come back after traversing forward for mates
             while i < len(lines):
                 qname, flag, refname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual = lines[i].rstrip().split('\t')[:11]
+                i += 1
 
                 # If read failed to map or has poor mapping quality, skip it
-                if refname == '*' or cigar == '*' or int(mapq) < mapping_cutoff:
-                    i += 1
+                ipos = int(pos)
+                if refname == '*' or cigar == '*' or ipos == 0 or int(mapq) < mapping_cutoff:
                     continue
 
-                pos1 = int(pos)
-                shift, seq1, qual1 = apply_cigar(cigar, seq, qual)
+                padded_seq1, padded_qual1 = get_padded_seq_from_cigar(pos=ipos, cigar=cigar, seq=seq, qual=qual)
 
-                if not seq1:
-                    i += 1
-                    continue
+                padded_seq2 = ''
+                padded_qual2 = ''
+                if i < len(lines):
+                    # Look ahead in the SAM for matching read
+                    qname2, flag2, refname2, pos2, mapq2, cigar2, rnext2, pnext2, tlen2, seq2, qual2 = lines[i].rstrip().split('\t')[:11]
 
-                seq1 = '-' * pos1 + seq1  # FIXME: We no longer censor bases up front
-                qual1 = '-' * pos1 + qual1  # FIXME: Give quality string the same offset
+                    if qname2 == qname:  # TODO:  what if read maps multiple times?
+                        i += 1
 
+                        # If 2nd mate failed to map, then skip it
+                        ipos2 = int(pos2)
+                        if refname2 == '*' or cigar2 == '*' or ipos2 == 0 or int(mapq2) < mapping_cutoff:
+                            continue
 
-                # No more lines
-                if (i + 1) == len(lines):
-                    break
+                        padded_seq2, padded_qual2 = get_padded_seq_from_cigar(pos=ipos2, cigar=cigar2, seq=seq2, qual=qual2)
 
-                # Look ahead in the SAM for matching read
-                qname2, flag, refname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual = lines[i + 1].rstrip().split('\t')[:11]
-
-                fasta_fh.write(">" + qname + "\n")
-
-                if qname2 == qname:
-                    # Second read failed to map
-                    if refname == '*' or cigar == '*':
-                        fasta_fh.write(seq1 + "\n")
-                        i += 2
-                        continue
-
-                    pos2 = int(pos)
-                    shift, seq2, qual2 = apply_cigar(cigar, seq, qual)
-
-                    # Failed to parse CIGAR
-                    if not seq2:
-                        fasta_fh.write(seq1 + "\n")
-                        i += 2
-                        continue
-
-                    seq2 = '-' * pos2 + seq2  # FIXME: We no longer censor bases up front
-                    qual2 = '-' * pos2 + qual2  # FIXME: Give quality string the same offset
-
-                    mseq = merge_pairs(seq1, seq2, qual1, qual2, read_qual_cutoff)  # FIXME: We now feed these quality data into merge_pairs
+                if padded_seq1 or padded_seq2:
+                    # merge mates into one padded sequence
+                    mseq = merge_pairs(padded_seq1, padded_seq2, padded_qual1, padded_qual2, read_qual_cutoff)
 
                     # Sequence must not have too many censored bases
-                    if mseq.count('N') / float(len(mseq)) < max_prop_N:
-                         fasta_fh.write(mseq + "\n")
+                    if mseq.count('N') / float(len(mseq)) <= max_prop_N:
+                        # Write multiple-sequence-aligned merged read to file using the name of the first mate
+                        out_fasta_fh.write(">" + qname + "\n")
+                        out_fasta_fh.write(mseq + "\n")
 
-                    i += 2
-                    continue
-
-                # ELSE no matched pair
-                fasta_fh.write(seq1 + "\n")
-                i += 1
 
 
 def samBitFlag(flag):
@@ -257,7 +255,7 @@ def samBitFlag(flag):
     for i, bit in enumerate(bitflags):
         res.update({labels[i]: bool(int(bit))})
 
-    return (res)
+    return res
 
 
 def create_depth_file_from_bam (bam_filename):

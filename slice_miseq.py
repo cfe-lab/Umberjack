@@ -1,19 +1,5 @@
-#pull a slice out of a *.csf file (that our miseq pipeline generates) as a FASTA file.  It works!  And you can build some respectable trees from slices of 300 bp or more.
-import sys
 import sam_handler
 import os
-
-def convert_csf (csf_handle):
-    """
-    Extract the header, offset, and seq from the csf, return a list of
-    [header, seq] tuples of decompressed sequence data.
-    """
-    fasta = []
-    for line in csf_handle:
-        header, offset, seq = line.strip('\n').split(',')
-        fasta.append([header, seq, int(offset), int(offset) + len(seq)])        
-    return fasta
-
 
 def slice_msa_fasta(fasta_filename, start_pos, end_pos):
     """
@@ -122,66 +108,3 @@ def get_best_window_size(sam_filename, ref_filename, cov_thresh):
             lastref = ref
 
 
-
-
-# Get a *.remap.sam file
-# These files contain reads aligned to a consensus
-# We get the depth of each base position of the consensus
-# TODO:  get the depth of each position of insertions wrt the consensus.  We ignore insertions for now.
-sam_filename = sys.argv[1]
-coverage_threshold = sys.argv[2]
-msa_fasta_filename  = sys.argv[3]
-# Convert the sam alignments to the given reference to a multiple sequence alignment fasta file
-sam_handler.get_msa_fasta_from_sam(mapping_cutoff=0, max_prop_N=0, sam_filename=sam_filename, read_qual_cutoff=20,
-                               fasta_filename=msa_fasta_filename)
-# Find the per-position depth, positions are with respect to reference
-# slide window across reference.  Find the constant size window such that the average
-get_best_window_size(sam_filename=sam_filename, cov_thresh=coverage_threshold)
-
-
-
-
-try:
-    infile = open(sys.argv[1], 'rU')
-    fasta = convert_csf(infile)
-    infile.close()
-
-    # coordinates defined relative to reference of alignment
-    from_left = int(sys.argv[2])
-    to_right = int(sys.argv[3])
-    span = to_right - from_left
-
-    outfile = open(sys.argv[4], 'w')
-except IndexError:
-    print 'python extract_csf.py [csf file] [left] [right] [outfile]'
-    sys.exit()
-except:
-    raise
-
-for i, (h, s, left, right) in enumerate(fasta):
-    if left > to_right:
-        # we are past the window
-        # reads are in order, so exit from loop
-        break
-        
-    if right < from_left:
-        continue
-    
-    # pad the read so we are working on a consistent coordinate system
-    # and add gaps out to the desired right bound
-    s2 = '-'*left + s
-    
-    if right < to_right:
-        # read falls short of desired right bound
-        s2 += '-' * (to_right - right)
-    
-    s3 = s2[from_left:to_right]
-    
-    overlap = sum(map(lambda x: int(x != '-'), list(s3)))
-    
-    if overlap / float(span) < 0.75:
-        continue
-    
-    outfile.write('>%d\n%s\n' % (i, s3))
-
-outfile.close()
