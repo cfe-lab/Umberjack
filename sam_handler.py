@@ -148,7 +148,7 @@ def get_padded_seq_from_cigar(pos, cigar, seq, qual):
     """
     shift, formatted_seq, formatted_qual = apply_cigar(cigar, seq, qual)
     formatted_seq = '-' * (pos - 1) + formatted_seq
-    formatted_qual = '-' * (pos - 1) + formatted_qual
+    formatted_qual = '!' * (pos - 1) + formatted_qual
     return [formatted_seq, formatted_qual]
 
 
