@@ -46,7 +46,7 @@ def process_windows(ref_fasta_filename, sam_filename, mapping_cutoff, read_qual_
 
     # Slice the multiple sequence aligned fasta file and feed to fasttree2
     # TODO:  handle multiple contig/chromosome in reference fasta.  Right now only handles one contig/chromosome.
-    windowsize = slice_miseq.get_best_window_size(sam_filename=sam_filename, ref_filename=ref_fasta_filename, cov_thresh=cov_thresh)
+    windowsize = slice_miseq.get_best_window_size_by_read_cov(sam_filename=sam_filename, ref_filename=ref_fasta_filename, cov_thresh=cov_thresh)
 
     for ref in ref_to_len:
         last_window_start_pos = ref_to_len[ref] - windowsize
