@@ -2,69 +2,52 @@ import sam_handler
 import os
 import subprocess
 import StringIO
+import Utility
 
 
 # TODO:  split MSA fasta files by reference contig/chromosome
-def slice_msa_fasta(fasta_filename, start_pos, end_pos):
+def create_slice_msa_fasta(fasta_filename, start_pos, end_pos):
     """
     From a fasta file of multiple sequence alignments, extract the sequence sequence from desired region.
     Writes the extracted sequences into a new fasta file with ".<start_pos>_<end_pos>.fasta" suffix.
     If the sequence is shorter than <end_pos>, then fills in the gaps with '-' characters so that it ends at <end_pos>
-    :rtype : object list of tuples [[header1, seq1], [header2, seq2]...]
+    :rtype str: full filepath to sliced multiple sequence alignment fasta
     :param fasta_filename: full file path to fasta of multiple sequence alignments
     :param start_pos: 1-based start position of region to extract
     :param end_pos: 1-based end position of region to extract
     """
     fasta_filename_prefix, fileExtension = os.path.splitext(fasta_filename)
     slice_fasta_filename = fasta_filename_prefix + "." + str(start_pos) + "_" + str(end_pos) + ".fasta"
-    with open(fasta_filename, 'r') as fasta_fh:
-        with open(slice_fasta_filename, 'w') as slice_fasta_fh:
-            header = ""
-            seq = ""
-            for line in fasta_fh:
-                line = line.rstrip()  # remove trailing whitespace
-
-                if line[0] == '>':  # last sequence is finished.  Write out last sequence
-                    if seq:
-                        pad = ''
-                        if end_pos > len(seq):
-                            pad = '-' * (end_pos - len(seq))
-                        slice_fasta_fh.write(seq[start_pos-1:end_pos] + pad + "\n")
-
-
-                    seq = ""
-
-                    header = line   # Write out current header
-                    slice_fasta_fh.write(header + "\n")
-                else:   # cache current sequence so that entire sequence is on one line
-                    seq += line
-
-            if seq:   # end of fasta file, write out the last sequence still in cache
-                pad = ''
-                if end_pos > len(seq):
-                    pad = '-' * (end_pos - len(seq))
-                slice_fasta_fh.write(seq[start_pos-1:end_pos] + pad + "\n")
-
-
-def get_fasta_headers(fasta_filename):
-    """
-    Gets a list of headers from the fasta.  Does not include the ">" header prefix.
-    Does not include anything after the first whitespace in the header.
-    :rtype list[str] : list of headers
-    :param fasta_filename : full file path to the fasta file
-    """
-    headers = []
-    with open(fasta_filename, 'r') as fasta_fh:
+    with open(fasta_filename, 'r') as fasta_fh, open(slice_fasta_filename, 'w') as slice_fasta_fh:
+        header = ""
+        seq = ""
         for line in fasta_fh:
-            if line[0] == '>':
-                header = line[1:].rstrip().split()
-                headers.append(header)
-    return headers
+            line = line.rstrip()  # remove trailing whitespace
+
+            if line[0] == '>':  # last sequence is finished.  Write out last sequence
+                if seq:
+                    pad = ''
+                    if end_pos > len(seq):
+                        pad = '-' * (end_pos - len(seq))
+                    slice_fasta_fh.write(seq[start_pos-1:end_pos] + pad + "\n")
 
 
+                seq = ""
+
+                header = line   # Write out current header
+                slice_fasta_fh.write(header + "\n")
+            else:   # cache current sequence so that entire sequence is on one line
+                seq += line
+
+        if seq:   # end of fasta file, write out the last sequence still in cache
+            pad = ''
+            if end_pos > len(seq):
+                pad = '-' * (end_pos - len(seq))
+            slice_fasta_fh.write(seq[start_pos-1:end_pos] + pad + "\n")
+    return slice_fasta_filename
 
 
-def get_best_window_size(sam_filename, ref_filename, depth_thresh, breadth_thresh):
+def get_best_window_size_from_sam(sam_filename, ref_filename, depth_thresh, breadth_thresh):
     """
     Create index reference file.
     Create sorted, indexed bam file from sam file.
@@ -86,32 +69,15 @@ def get_best_window_size(sam_filename, ref_filename, depth_thresh, breadth_thres
     # create depth file for all references
     depth_filename = sam_handler.create_depth_file_from_bam(bam_filename=bam_filename)
 
-    best_size = get_best_window_size_from_depth(depth_filename, depth_thresh, breadth_thresh)
+    best_size = get_best_window_size_from_depthfile(sorted_bam_filename=bam_filename,
+                                                    depth_filename=depth_filename,
+                                                    ref_fasta_filename=ref_filename,
+                                                    depth_thresh=depth_thresh, breadth_thresh=breadth_thresh)
+
     return best_size
 
 
-def get_longest_seq_size_from_fasta(fasta_filename):
-    """
-    Gets the size of the longest sequence in the fasta.
-    :rtype int :  size in bp of the longest sequence in the fasta.  Or -1 if error.
-    :param fasta_filename: full filepath to the fasta.
-    """
-    longest_seq_len = -1
-    with open(fasta_filename, 'r') as fasta_fh:
-        seq_len = 0
-        for line in fasta_fh:
-            line = line.rstrip()
-            if line[0] == '>':
-                longest_seq_len = max(seq_len, longest_seq_len)
-                seq_len = 0
-            else:
-                seq_len += len(line)
-        longest_seq_len = max(seq_len, longest_seq_len)
-
-    return longest_seq_len
-
-
-def is_valid_window_exist_from_depth(depth_filename, ref_fasta_filename, depth_thresh, breadth_thresh):
+def is_valid_window_exist_from_depthfile(depth_filename, ref_fasta_filename, depth_thresh, breadth_thresh):
     """
     In order for a window to be valid, it must be have at least depth_thresh reads that cover
     <breadth_cov_thresh> fraction of the window.
@@ -153,7 +119,7 @@ def is_valid_window_exist_from_depth(depth_filename, ref_fasta_filename, depth_t
             last_ref = ref
             last_pos = pos
 
-        max_poss_windowsize = get_longest_seq_size_from_fasta(fasta_filename=ref_fasta_filename)
+        max_poss_windowsize = Utility.get_longest_seq_size_from_fasta(fasta_filename=ref_fasta_filename)
 
         if longest_consec_base_below_depth <= (breadth_thresh * max_poss_windowsize):
             is_valid = True
@@ -161,7 +127,7 @@ def is_valid_window_exist_from_depth(depth_filename, ref_fasta_filename, depth_t
     return is_valid
 
 
-def get_best_window_size_from_depth(sorted_sam_filename, depth_filename, ref_fasta_filename, depth_thresh, breadth_thresh):
+def get_best_window_size_from_depthfile(sorted_bam_filename, depth_filename, ref_fasta_filename, depth_thresh, breadth_thresh):
     """
     Slide through the alignments for every sequence in the reference file.
     Find the window size such that the smallest window size is selected such that
@@ -169,7 +135,7 @@ def get_best_window_size_from_depth(sorted_sam_filename, depth_filename, ref_fas
     the window is covered by at least <min_reads> that cover <breadth_cov_thresh> fraction of the window.
 
     :rtype int :  best window size in bases or -1 if there is no window size that meets the constraints
-    :param str sorted_sam_filename: full file path to sam file sorted by left coordinates
+    :param str sorted_bam_filename: full file path to bam file sorted by left coordinates
     :param str depth_filename: full file path to the samtools depth file
     :param str ref_fasta_filename: full file path to the reference fasta file
     :param float breadth_thresh : fraction of window that reads must cover
@@ -179,16 +145,16 @@ def get_best_window_size_from_depth(sorted_sam_filename, depth_filename, ref_fas
     best_size = 1
 
     # Do a pass to check that there is a window size that meets the constraints
-    is_valid = is_valid_window_exist_from_depth(depth_filename=depth_filename, ref_fasta_filename=ref_fasta_filename,
-                                     depth_thresh=depth_thresh, breadth_thresh==breadth_thresh)
+    is_valid = is_valid_window_exist_from_depthfile(depth_filename=depth_filename, ref_fasta_filename=ref_fasta_filename,
+                                     depth_thresh=depth_thresh, breadth_thresh=breadth_thresh)
 
     if not is_valid:
         return -1
 
     # get end position of alignment based on cigar
-    sam_output = StringIO.StringIO()
-    # TODO:  how to pipe line by line to stringio from samtools?????
-    subprocess.check_call(['samtools', 'view', sorted_sam_filename], stdout=sam_output, shell=False)
+    # sam_output = StringIO.StringIO()
+    # # TODO:  how to pipe line by line to stringio from samtools?????
+    # subprocess.check_call(['samtools', 'view', sorted_bam_filename], stdout=sam_output, shell=False)
 
 
 

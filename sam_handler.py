@@ -2,11 +2,15 @@ import re
 import os
 import subprocess
 import logging
+import Utility
 
 # Matches 1+ occurrences of a number, followed by a letter from {MIDNSHPX=}
 CIGAR_RE = re.compile('[0-9]+[MIDNSHPX=]')
-
+SEQ_PAD_CHAR = '-'
+QUAL_PAD_CHAR = '!'     # This is the ASCII character for the lowest PHRED quality score
+NEWICK_NAME_RE = re.compile('[:;\-\(\)\[\]]')
 LOGGER = logging.getLogger(__name__)
+
 
 # TODO:  handle X, =, P, N
 def apply_cigar (cigar, seq, qual):
@@ -134,25 +138,47 @@ def merge_pairs (seq1, seq2, qual1, qual2, q_cutoff=10, minimum_q_delta=5):
     return mseq
 
 
-def get_padded_seq_from_cigar(pos, cigar, seq, qual):
+def get_padded_seq_from_cigar(pos, cigar, seq, qual, rname, ref_fasta_filename, flag):
     """
-    Returns the left-padded sequence from the cigar, with soft-clipped bases removed.
-    Pads with '-' up to pos.
+    Returns the padded sequence from the cigar, with soft-clipped bases removed.
+    Left Pads with '-' up to pos.
+    Right pads with '-' until the end of the reference.
+    TODO:  handle indels!!!
 
     :param int pos : pos field from SAM.  1-based position with respect to the reference.
     :param str cigar:  cigar field from SAM
     :param str seq : sequence field from SAM
     :param str qual : qual field from SAM
+    :param str rname : rname field from SAM
+    :param str ref_fasta_filename : full filepath to reference fasta file
     :rtype str : left-padded sequence, with soft-clips removed
 
     """
+
     shift, formatted_seq, formatted_qual = apply_cigar(cigar, seq, qual)
-    formatted_seq = '-' * (pos - 1) + formatted_seq
-    formatted_qual = '!' * (pos - 1) + formatted_qual
-    return [formatted_seq, formatted_qual]
+    ref2len = Utility.get_seq2len(fasta_filename=ref_fasta_filename)
+
+    left_pad_len = pos - 1
+    right_pad_len = ref2len[rname] - left_pad_len - len(formatted_seq)
+    # TODO:  hack - We hard cut sequences if they extend past the reference boundaries.  Don't do this.
+    # This hack is in place so that we don't have to worry about MSA alignments
+    if right_pad_len < 0:
+        formatted_seq = formatted_seq[:right_pad_len]
+        formatted_qual = formatted_qual[:right_pad_len]
+        right_pad_len = 0
+
+    padded_seq = (SEQ_PAD_CHAR * left_pad_len) + formatted_seq + (SEQ_PAD_CHAR * right_pad_len)
+    padded_qual = (QUAL_PAD_CHAR * left_pad_len) + formatted_qual + (QUAL_PAD_CHAR*right_pad_len)
 
 
-def get_msa_fasta_from_sam(sam_filename, mapping_cutoff, read_qual_cutoff, max_prop_N, out_fasta_filename):
+
+    if len(padded_seq) != ref2len[rname]:
+        raise Exception("WTF? len(padded_seq)=" + str(len(padded_seq)) + " ref2len[rname]=" + str(ref2len[rname]))
+
+    return [padded_seq, padded_qual]
+
+
+def get_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, read_qual_cutoff, max_prop_N, out_fasta_filename):
     """
     Parse SAM file contents for query-ref aligned sequences.
     Does pseudo multiple sequence alignment on all the query sequences and reference.
@@ -160,64 +186,72 @@ def get_msa_fasta_from_sam(sam_filename, mapping_cutoff, read_qual_cutoff, max_p
     For paired-end reads, merges the reads into a single sequence with gaps with respect to the reference.
     TODO:  handle mate pairs.
     Writes the MSA sequences to out_fasta_filename.
+    TODO: handle hypens, colons, semicolons in name
+    From Newick format:   name can be any string of printable characters except blanks, colons, semicolons, parentheses, and square brackets.
 
-    :param sam_filename: full path to sam file
-    :param mapping_cutoff:  Ignore alignments with mapping quality lower than the cutoff.
-    :param read_qual_cutoff: When merging overlapping paired-end reads, ignore mate with read quality lower than the cutoff.
-    :param max_prop_N:  Do not output sequences with proportion of N higher than the cutoff
-    :param out_fasta_filename: full path of fasta file to write to.  Will completely overwite file.
+    :param str sam_filename: full path to sam file
+    :param str ref_fasta_filename: full path to reference fasta
+    :param float mapping_cutoff:  Ignore alignments with mapping quality lower than the cutoff.
+    :param int read_qual_cutoff: When merging overlapping paired-end reads, ignore mate with read quality lower than the cutoff.
+    :param float max_prop_N:  Do not output sequences with proportion of N higher than the cutoff
+    :param str out_fasta_filename: full path of fasta file to write to.  Will completely overwite file.
     """
 
     LOGGER.debug("sam_filename=" + sam_filename + " out_fasta_filename=" + out_fasta_filename)
-    with open(sam_filename, 'r') as sam_fh:
-        with open(out_fasta_filename, 'w') as out_fasta_fh:
-            lines = sam_fh.readlines()
+    with open(sam_filename, 'r') as sam_fh, open(out_fasta_filename, 'w') as out_fasta_fh:
+        lines = sam_fh.readlines()
 
-            if not lines:
-                LOGGER.warn("Empty intput SAM file " + sam_filename)
+        if not lines:
+            LOGGER.warn("Empty intput SAM file " + sam_filename)
 
-            # Skip top SAM header lines
-            for start, line in enumerate(lines):
-                if not line.startswith('@'):
-                    break
+        # Skip top SAM header lines
+        for start, line in enumerate(lines):
+            if not line.startswith('@'):
+                break
 
-            i = start  # Keep track of the current line so that we can come back after traversing forward for mates
-            while i < len(lines):
-                qname, flag, refname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual = lines[i].rstrip().split('\t')[:11]
-                i += 1
+        i = start  # Keep track of the current line so that we can come back after traversing forward for mates
+        while i < len(lines):
+            qname, flag, refname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual = lines[i].rstrip().split('\t')[:11]
+            i += 1
 
-                # If read failed to map or has poor mapping quality, skip it
-                ipos = int(pos)
-                if refname == '*' or cigar == '*' or ipos == 0 or int(mapq) < mapping_cutoff:
-                    continue
+            # If read failed to map or has poor mapping quality, skip it
+            ipos = int(pos)
+            if refname == '*' or cigar == '*' or ipos == 0 or int(mapq) < mapping_cutoff:
+                continue
 
-                padded_seq1, padded_qual1 = get_padded_seq_from_cigar(pos=ipos, cigar=cigar, seq=seq, qual=qual)
+            padded_seq1, padded_qual1 = get_padded_seq_from_cigar(pos=ipos, cigar=cigar, seq=seq, qual=qual,
+                                                                  rname=refname, ref_fasta_filename=ref_fasta_filename,
+                                                                  flag=flag)
 
-                padded_seq2 = ''
-                padded_qual2 = ''
-                if i < len(lines):
-                    # Look ahead in the SAM for matching read
-                    qname2, flag2, refname2, pos2, mapq2, cigar2, rnext2, pnext2, tlen2, seq2, qual2 = lines[i].rstrip().split('\t')[:11]
+            padded_seq2 = ''
+            padded_qual2 = ''
+            if i < len(lines):
+                # Look ahead in the SAM for matching read
+                qname2, flag2, refname2, pos2, mapq2, cigar2, rnext2, pnext2, tlen2, seq2, qual2 = lines[i].rstrip().split('\t')[:11]
 
-                    if qname2 == qname:  # TODO:  what if read maps multiple times?
-                        i += 1
+                if qname2 == qname:  # TODO:  what if read maps multiple times?
+                    i += 1
 
-                        # If 2nd mate failed to map, then skip it
-                        ipos2 = int(pos2)
-                        if refname2 == '*' or cigar2 == '*' or ipos2 == 0 or int(mapq2) < mapping_cutoff:
-                            continue
+                    # If 2nd mate failed to map, then skip it
+                    ipos2 = int(pos2)
+                    if refname2 == '*' or cigar2 == '*' or ipos2 == 0 or int(mapq2) < mapping_cutoff:
+                        continue
 
-                        padded_seq2, padded_qual2 = get_padded_seq_from_cigar(pos=ipos2, cigar=cigar2, seq=seq2, qual=qual2)
+                    padded_seq2, padded_qual2 = get_padded_seq_from_cigar(pos=ipos2, cigar=cigar2, seq=seq2, qual=qual2,
+                                                                          rname=refname2, ref_fasta_filename=ref_fasta_filename,
+                                                                          flag=flag2)
 
-                if padded_seq1 or padded_seq2:
-                    # merge mates into one padded sequence
-                    mseq = merge_pairs(padded_seq1, padded_seq2, padded_qual1, padded_qual2, read_qual_cutoff)
+            if padded_seq1 or padded_seq2:
+                # merge mates into one padded sequence
+                mseq = merge_pairs(padded_seq1, padded_seq2, padded_qual1, padded_qual2, read_qual_cutoff)
 
-                    # Sequence must not have too many censored bases
-                    if mseq.count('N') / float(len(mseq)) <= max_prop_N:
-                        # Write multiple-sequence-aligned merged read to file using the name of the first mate
-                        out_fasta_fh.write(">" + qname + "\n")
-                        out_fasta_fh.write(mseq + "\n")
+                # Sequence must not have too many censored bases
+                if mseq.count('N') / float(len(mseq)) <= max_prop_N:
+                    # Write multiple-sequence-aligned merged read to file using the name of the first mate
+                    # Newick tree formats don't like special characters.  Conver them to underscores.
+                    newick_nice_qname = re.sub(pattern=NEWICK_NAME_RE, repl='_', string=qname)
+                    out_fasta_fh.write(">" + newick_nice_qname + "\n")
+                    out_fasta_fh.write(mseq + "\n")
 
 
 
