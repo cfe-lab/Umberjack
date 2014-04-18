@@ -42,17 +42,20 @@ def process_windows(ref_fasta_filename, sam_filename, mapping_cutoff, read_qual_
 
     #  Get the best window size
     # TODO:  handle multiple contig/chromosome in reference fasta.  Right now only handles one contig/chromosome.
-    #windowsize = slice_miseq.get_best_window_size_from_sam(sam_filename=sam_filename, ref_filename=ref_fasta_filename,
+    # windowsize = slice_miseq.get_best_window_size_from_sam(sam_filename=sam_filename, ref_filename=ref_fasta_filename,
     #                                             depth_thresh=window_depth_thresh, breadth_thresh=window_breadth_thresh)
 
-    windowsize = 100 # TODO:  do not hardcode
+    windowsize = 300    # TODO:  do not hardcode this
     for ref in ref_to_len:
-        last_window_start_pos = ref_to_len[ref] - windowsize
-        for start_pos in range(1, last_window_start_pos):  # start_pos is 1-based
-            end_pos = start_pos + windowsize                # end_pos is 1-based
+        last_window_start_nucpos = ref_to_len[ref] - windowsize
+        for start_nucpos in range(1, last_window_start_nucpos):  # start_nucpos is 1-based nucleotide position
+            if ((start_nucpos - 1) % 3) != 0:
+                continue    # Windows start on the beginning of the codon
+
+            end_nucpos = start_nucpos + windowsize                # end_nucpos is 1-based nucleotide position
 
             # Slice the multiple sequence aligned fasta file into a window fasta
-            msa_window_fasta_filename = slice_miseq.create_slice_msa_fasta(fasta_filename=msa_fasta_filename, start_pos=start_pos, end_pos=end_pos)
+            msa_window_fasta_filename = slice_miseq.create_slice_msa_fasta(fasta_filename=msa_fasta_filename, start_pos=start_nucpos, end_pos=end_nucpos)
 
             # Feed window fasta into fasttree to make a tree
             window_prefix = os.path.splitext(msa_window_fasta_filename)[0]
@@ -68,6 +71,7 @@ def process_windows(ref_fasta_filename, sam_filename, mapping_cutoff, read_qual_
 
             hyphy_modelfit_filename = window_prefix + ".nucmodelfit"
             hyphy_dnds_tsv_filename = window_prefix + ".dnds.tsv"
+            pvalue = 0.95   # TODO:  do not hardcode
             hyphy_input_str = "\n".join(["Universal",
                                         "New Analysis",
                                         os.path.abspath(msa_window_fasta_filename),
@@ -91,6 +95,11 @@ def process_windows(ref_fasta_filename, sam_filename, mapping_cutoff, read_qual_
                 hyphy_proc = subprocess.Popen([HYPHY_EXE, "LIBPATH", HYPHY_LIBDIR, "BASEPATH", HYPHY_BASEDIR, SELECTION_BF],
                                               stdin=subprocess.PIPE, stdout=hyphy_out_fh, stderr=hyphy_out_fh, shell=False)
                 hyphy_proc.communicate(hyphy_input_str)
+
+    dnds_tsv_dir = os.path.dirname(hyphy_dnds_tsv_filename)
+    ref2SeqDnDsInfo = slice_miseq.get_seq_dnds(dnds_tsv_dir=dnds_tsv_dir, pvalue_thresh=pvalue, ref_fasta_filename=ref_fasta_filename)
+
+    return ref2SeqDnDsInfo
 
 
 

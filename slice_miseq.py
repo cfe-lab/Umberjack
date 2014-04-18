@@ -3,6 +3,55 @@ import os
 import subprocess
 import StringIO
 import Utility
+import csv
+import glob
+
+
+HYPHY_TSV_SCALED_DNDS_COL = 'Scaled dN-dS'
+HYPHY_TSV_PROB_FULLSEQ_NS = 'P{S leq. observed}'
+
+NUC_PER_CODON = 3
+
+
+class SiteDnDsInfo:
+    def __init__(self):
+        self.accum_win_dnds = 0
+        self.total_win_cover_site = 0
+
+    def add_dnds(self, dnds):
+        self.total_win_cover_site += 1
+        self.accum_win_dnds += dnds
+
+    def get_ave_dnds(self):
+        if self.accum_win_dnds == 0 and self.total_win_cover_site == 0:
+            return None
+        else:
+            return self.accum_win_dnds / self.total_win_cover_site
+
+
+class SeqDnDsInfo:
+    """
+    A sequence of Dn/Ds by site
+    """
+    def __init__(self, seq_len):
+        self.dnds_seq = [SiteDnDsInfo()] * seq_len
+
+    def add_site_dnds(self, site, dnds):
+        self.dnds_seq[site].add_dnds(dnds)
+
+    def get_site_ave_dnds(self, site):
+        return self.dnds_seq[site].get_ave_dnds()
+
+    def get_seq_len(self):
+        return len(self.dnds_seq)
+
+
+
+
+
+
+
+
 
 
 # TODO:  split MSA fasta files by reference contig/chromosome
@@ -47,7 +96,7 @@ def create_slice_msa_fasta(fasta_filename, start_pos, end_pos):
     return slice_fasta_filename
 
 
-def get_best_window_size_from_sam(sam_filename, ref_filename, depth_thresh, breadth_thresh):
+def get_best_window_size_from_sam(sam_filename, ref_filename, depth_thresh, breadth_thresh, min_size):
     """
     Create index reference file.
     Create sorted, indexed bam file from sam file.
@@ -61,6 +110,7 @@ def get_best_window_size_from_sam(sam_filename, ref_filename, depth_thresh, brea
     :param ref_filename: full file path to the reference file
     :param float breadth_thresh : fraction of window that reads must cover
     :param int depth_thresh: minimum number of reads in window that must cover <breadth_cov_thresh> fraction of the window
+    :param int min_size: minimum number of bases allowed in the window.
     """
 
     # convert sam to bam
@@ -72,12 +122,12 @@ def get_best_window_size_from_sam(sam_filename, ref_filename, depth_thresh, brea
     best_size = get_best_window_size_from_depthfile(sorted_bam_filename=bam_filename,
                                                     depth_filename=depth_filename,
                                                     ref_fasta_filename=ref_filename,
-                                                    depth_thresh=depth_thresh, breadth_thresh=breadth_thresh)
+                                                    depth_thresh=depth_thresh, breadth_thresh=breadth_thresh, min_size=min_size)
 
     return best_size
 
 
-def is_valid_window_exist_from_depthfile(depth_filename, ref_fasta_filename, depth_thresh, breadth_thresh):
+def get_longest_consec_base_below_depth(depth_filename, ref_fasta_filename, depth_thresh):
     """
     In order for a window to be valid, it must be have at least depth_thresh reads that cover
     <breadth_cov_thresh> fraction of the window.
@@ -87,13 +137,13 @@ def is_valid_window_exist_from_depthfile(depth_filename, ref_fasta_filename, dep
     is larger than the breadth_thres * largest possible window size,
     then there are no valid windows.
 
-    :rtype boolean: whether a valid window exists
+    :rtype int: total consecutive bases below the specified depth
     :param depth_filename:  full path to samtools depth file
     :param ref_fasta_filename: full path to reference fasta file
     :param depth_thresh: minimum reads that must exist in the window that cover breadth_thresh fraction of the window.
     :param breadth_thresh:  minimum fraction of window that must be covered by at least depth_thresh reads.
     """
-    is_valid = False
+    # is_valid = False
     with open(depth_filename, 'r') as depth_fh:
 
         # Assume that depth file is sorted by reference, then position
@@ -121,13 +171,40 @@ def is_valid_window_exist_from_depthfile(depth_filename, ref_fasta_filename, dep
 
         max_poss_windowsize = Utility.get_longest_seq_size_from_fasta(fasta_filename=ref_fasta_filename)
 
-        if longest_consec_base_below_depth <= (breadth_thresh * max_poss_windowsize):
-            is_valid = True
+        # if longest_consec_base_below_depth <= (breadth_thresh * max_poss_windowsize):
+        #     is_valid = True
 
-    return is_valid
+    return longest_consec_base_below_depth
 
 
-def get_best_window_size_from_depthfile(sorted_bam_filename, depth_filename, ref_fasta_filename, depth_thresh, breadth_thresh):
+def is_window_size_valid(depth_filename, ref_fasta_filename, depth_thresh, breadth_thresh, window_size):
+
+    with open(depth_filename, 'r') as depth_fh:
+
+        # Assume that depth file is sorted by reference, then position
+        # Assume position is 1-based.
+        # Assume that the depth file skips bases with zero coverage.
+        last_ref = ''
+        last_pos = 0
+        longest_consec_base_below_depth = 0
+        consec_base_below_depth = 0
+        for line in depth_fh:
+            ref, pos, depth = line.rstrip().split()  # pos is 1-based
+            if depth < depth_thresh:
+                if last_ref != ref:
+                    longest_consec_base_below_depth = max(longest_consec_base_below_depth, consec_base_below_depth)
+                    consec_base_below_depth = 0
+
+                consec_base_below_depth += (pos - last_pos)
+
+            else:
+                longest_consec_base_below_depth = max(longest_consec_base_below_depth, consec_base_below_depth)
+                consec_base_below_depth = 0
+
+            last_ref = ref
+            last_pos = pos
+
+def get_best_window_size_from_depthfile(sorted_bam_filename, depth_filename, ref_fasta_filename, depth_thresh, breadth_thresh, min_size):
     """
     Slide through the alignments for every sequence in the reference file.
     Find the window size such that the smallest window size is selected such that
@@ -139,23 +216,21 @@ def get_best_window_size_from_depthfile(sorted_bam_filename, depth_filename, ref
     :param str depth_filename: full file path to the samtools depth file
     :param str ref_fasta_filename: full file path to the reference fasta file
     :param float breadth_thresh : fraction of window that reads must cover
-    :param int depth_thresh: minimum number of reads in window that must cover <breadth_thresh> fraction of the window
+    :param int depth_thresh: minimum number of reads in window that cover at least <breadth_thresh> fraction of the window
+    :param int min_size: minimum number of bases allowed in the window.
     """
 
     best_size = 1
 
-    # Do a pass to check that there is a window size that meets the constraints
-    is_valid = is_valid_window_exist_from_depthfile(depth_filename=depth_filename, ref_fasta_filename=ref_fasta_filename,
-                                     depth_thresh=depth_thresh, breadth_thresh=breadth_thresh)
-
-    if not is_valid:
-        return -1
+    # Find the smallest possible window size
+    size_bad_cov = get_longest_consec_base_below_depth(depth_filename=depth_filename, ref_fasta_filename=ref_fasta_filename,
+                                                   depth_thresh=depth_thresh)
+    windowsize = size_bad_cov/(1-breadth_thresh)  # our initial window size.
 
     # get end position of alignment based on cigar
     # sam_output = StringIO.StringIO()
     # # TODO:  how to pipe line by line to stringio from samtools?????
     # subprocess.check_call(['samtools', 'view', sorted_bam_filename], stdout=sam_output, shell=False)
-
 
 
 
@@ -196,3 +271,67 @@ def get_best_window_size_from_depthfile(sorted_bam_filename, depth_filename, ref
             lastref = ref
 
         return best_size  # NOPE!  check out http://seqanswers.com/forums/showthread.php?t=25587 ?
+
+
+def get_seq_dnds(dnds_tsv_dir, ref_fasta_filename, pvalue_thresh):
+    """
+    For an entire window, get the average dn/ds for every base position.
+    We expect that all HyPhy has written out dn/ds tsv files for every window.
+
+    :rtype dict of SeqDnDsInfo
+    :param dnds_tsv_dir: 
+    :param ref_fasta_filename: 
+    :param pvalue_thresh:
+
+    Assumes these are the columns in the HyPhy DN/DS TSV output:
+    Observed S Changes
+    Observed NS Changes
+    E[S Sites]: proportion of random one-nucleotide substitutions that are expected to be synonymous
+    E[NS Sites]: roportion of random one-nucleotide substitutions that are expected to be non-synonymous
+    Observed S. Prop.
+    P{S}:  proportion of substitutions expected to be synonymous under neutral evolution
+    dS
+    dN
+    dN-dS
+    P{S leq. observed}:  binomial distro pvalue.  Probability of getting less than the observed synynomous substitutions
+        under the binomial distribution where probability of 1 synonymous codon = P{S}
+    P{S geq. observed}: 1-pvalue.  Probability of getting more than the observed synynomous substitutions
+        under the binomial distribution where probability of 1 synonymous codon = P{S}
+    Scaled dN-dS:  dN-dS normalized by the total length of the tree.
+
+    We only want significant Dn/Ds.  Use the normalized value so that dn/ds can be compared from every window.
+    """
+
+    ref2nuclen = Utility.get_seq2len(ref_fasta_filename)
+    ref2SeqDnDsInfo = {}
+    for dnds_tsv_filename in glob.glob(dnds_tsv_dir + os.sep + "*.dnds.tsv"):
+        with open(dnds_tsv_filename, 'r') as dnds_fh:  # TODO:  get all the files in teh directory
+            # TODO:  get the actual reference name from the filename
+            ref = 'TestSample-RT'
+
+            if not ref in ref2SeqDnDsInfo:
+                # TODO:  check what happens if window length is not divisible by 3
+                ref_codon_len = ref2nuclen[ref]/NUC_PER_CODON
+                ref2SeqDnDsInfo[ref] = SeqDnDsInfo(ref_codon_len)
+
+            # TestSample-RT_S17.HIV1B-vif.remap.msa.14_114.dnds.tsv
+            # NB:  the *dnds.tsv file names use 1-based nucleotide position numbering
+            # Window starts at this 1-based nucleotide position with respect to the reference
+            win_start_nuc_pos_1based_wrt_ref = int(dnds_tsv_filename.split('.dnds.tsv')[0].split('.')[-1].split('_')[0])
+            # Window starts at this 0-based codon position with respect to the reference
+            win_start_codon_idx_0based_wrt_ref = (win_start_nuc_pos_1based_wrt_ref - 1)/NUC_PER_CODON
+
+            reader = csv.DictReader(dnds_fh, delimiter='\t',)
+            for offset_0based, codon_row in enumerate(reader):    # Every codon site is a row in the *.dnds.tsv file
+                pval = float(codon_row[HYPHY_TSV_PROB_FULLSEQ_NS])
+                if pval <= pvalue_thresh:
+                    ref_codon_idx_0based = win_start_codon_idx_0based_wrt_ref + offset_0based
+
+                    # Dict  {ref1:SeqDnDsInfo, ref2: SeqDnDsInfo}
+                    dnds = float(codon_row[HYPHY_TSV_SCALED_DNDS_COL])
+                    ref2SeqDnDsInfo[ref].add_site_dnds(ref_codon_idx_0based, dnds)
+
+        return ref2SeqDnDsInfo
+
+
+
