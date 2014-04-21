@@ -51,7 +51,49 @@ class SeqDnDsInfo:
 
 
 
+# TODO:  finish me!!!
+def create_slice_msa_fasta_from_bam(bam_filename, start_pos, end_pos):
+    """
+    From a fasta file of multiple sequence alignments, extract the sequence sequence from desired region.
+    Writes the extracted sequences into a new fasta file with ".<start_pos>_<end_pos>.fasta" suffix.
+    If the sequence is shorter than <end_pos>, then fills in the gaps with '-' characters so that it ends at <end_pos>
 
+    ASSUMES:  that the start and end position of the clipped, unpadded sequence is in the header with this format
+    >sequence_name start_pos_1based end_pos_1based
+    :rtype str: full filepath to sliced multiple sequence alignment fasta
+    :param bam_filename: full file path to bam file sorted by left coordinate
+    :param start_pos: 1-based start position of region to extract
+    :param end_pos: 1-based end position of region to extract
+    """
+    fasta_filename_prefix, fileExtension = os.path.splitext(fasta_filename)
+    slice_fasta_filename = fasta_filename_prefix + "." + str(start_pos) + "_" + str(end_pos) + ".fasta"
+    with open(fasta_filename, 'r') as fasta_fh, open(slice_fasta_filename, 'w') as slice_fasta_fh:
+        header = ""
+        seq = ""
+        for line in fasta_fh:
+            line = line.rstrip()  # remove trailing whitespace
+
+            if line[0] == '>':  # last sequence is finished.  Write out last sequence
+                if seq:
+                    pad = ''
+                    if end_pos > len(seq):
+                        pad = '-' * (end_pos - len(seq))
+                    slice_fasta_fh.write(seq[start_pos-1:end_pos] + pad + "\n")
+
+
+                seq = ""
+
+                header = line   # Write out current header
+                slice_fasta_fh.write(header + "\n")
+            else:   # cache current sequence so that entire sequence is on one line
+                seq += line
+
+        if seq:   # end of fasta file, write out the last sequence still in cache
+            pad = ''
+            if end_pos > len(seq):
+                pad = '-' * (end_pos - len(seq))
+            slice_fasta_fh.write(seq[start_pos-1:end_pos] + pad + "\n")
+    return slice_fasta_filename
 
 
 # TODO:  split MSA fasta files by reference contig/chromosome
@@ -60,6 +102,7 @@ def create_slice_msa_fasta(fasta_filename, start_pos, end_pos):
     From a fasta file of multiple sequence alignments, extract the sequence sequence from desired region.
     Writes the extracted sequences into a new fasta file with ".<start_pos>_<end_pos>.fasta" suffix.
     If the sequence is shorter than <end_pos>, then fills in the gaps with '-' characters so that it ends at <end_pos>
+
     :rtype str: full filepath to sliced multiple sequence alignment fasta
     :param fasta_filename: full file path to fasta of multiple sequence alignments
     :param start_pos: 1-based start position of region to extract

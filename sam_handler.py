@@ -9,6 +9,7 @@ CIGAR_RE = re.compile('[0-9]+[MIDNSHPX=]')
 SEQ_PAD_CHAR = '-'
 QUAL_PAD_CHAR = '!'     # This is the ASCII character for the lowest PHRED quality score
 NEWICK_NAME_RE = re.compile('[:;\-\(\)\[\]]')
+NUCL_RE = re.compile('[^nN\-]')
 LOGGER = logging.getLogger(__name__)
 
 
@@ -151,7 +152,7 @@ def get_padded_seq_from_cigar(pos, cigar, seq, qual, rname, ref_fasta_filename, 
     :param str qual : qual field from SAM
     :param str rname : rname field from SAM
     :param str ref_fasta_filename : full filepath to reference fasta file
-    :rtype str : left-padded sequence, with soft-clips removed
+    :rtype list : [left-padded sequence with soft-clips removed, left-padded quality sequence with soft-clips removed]
 
     """
 
@@ -173,7 +174,7 @@ def get_padded_seq_from_cigar(pos, cigar, seq, qual, rname, ref_fasta_filename, 
 
 
     if len(padded_seq) != ref2len[rname]:
-        raise Exception("WTF? len(padded_seq)=" + str(len(padded_seq)) + " ref2len[rname]=" + str(ref2len[rname]))
+        raise Exception("len(padded_seq)=" + str(len(padded_seq)) + " ref2len[rname]=" + str(ref2len[rname]))
 
     return [padded_seq, padded_qual]
 
@@ -185,7 +186,7 @@ def get_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, rea
     TODO:  handle inserts.  Right now, all inserts are squelched so that there is multiple sequence alignment.
     For paired-end reads, merges the reads into a single sequence with gaps with respect to the reference.
     TODO:  handle mate pairs.
-    Writes the MSA sequences to out_fasta_filename.
+    Writes the MSA sequences to out_fasta_filename.  Specifies the 1-based start and end position of the unpadded sequence in the header.
     TODO: handle hypens, colons, semicolons in name
     From Newick format:   name can be any string of printable characters except blanks, colons, semicolons, parentheses, and square brackets.
 
@@ -219,6 +220,7 @@ def get_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, rea
             if refname == '*' or cigar == '*' or ipos == 0 or int(mapq) < mapping_cutoff:
                 continue
 
+
             padded_seq1, padded_qual1 = get_padded_seq_from_cigar(pos=ipos, cigar=cigar, seq=seq, qual=qual,
                                                                   rname=refname, ref_fasta_filename=ref_fasta_filename,
                                                                   flag=flag)
@@ -243,6 +245,8 @@ def get_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, rea
 
             if padded_seq1 or padded_seq2:
                 # merge mates into one padded sequence
+                # We merge because we expect the pairs to overlap and the overlap gives us confidence on the bases
+                # TODO:  this doesn't always apply to other people's pipelines.  We should change this.
                 mseq = merge_pairs(padded_seq1, padded_seq2, padded_qual1, padded_qual2, read_qual_cutoff)
 
                 # Sequence must not have too many censored bases
@@ -250,7 +254,11 @@ def get_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, rea
                     # Write multiple-sequence-aligned merged read to file using the name of the first mate
                     # Newick tree formats don't like special characters.  Conver them to underscores.
                     newick_nice_qname = re.sub(pattern=NEWICK_NAME_RE, repl='_', string=qname)
-                    out_fasta_fh.write(">" + newick_nice_qname + "\n")
+                    # find first character that is not n, N, or a gap -
+                    start_pos_1based = re.search(NUCL_RE, mseq).start() + 1
+                    # find last character that is not n, N, or a gap
+                    end_pos_1based = len(mseq) - re.search(NUCL_RE, mseq[::-1]).start() - 1
+                    out_fasta_fh.write(">" + newick_nice_qname + " " + start_pos_1based + " " + end_pos_1based + "\n")
                     out_fasta_fh.write(mseq + "\n")
 
 
