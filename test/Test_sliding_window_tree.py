@@ -1,22 +1,95 @@
 import unittest
 import sliding_window_tree
-import sys
+import sys, os
+import array
+import csv
+import subprocess
 
 # For now, use a *.remap.sam file (paired end reads aligned to a consensus sequence with indels removed).
+# SAM_FILENAME = "./data/TestSample-RT_S17.HIV1B-vif.remap.sam"
+# MAPQ_CUTOFF = 0  # alignment quality cutoff
+# MAX_PROP_N = 0  # maximum proportion of N bases in MSA-aligned sequence
+# READ_QUAL_CUTOFF = 20   # Phred quality score cutoff [0,40]
+# REFERENCE_FASTA = "./data/TestSample-RT_S17.HIV1B-vif.10.conseq"
+
 SAM_FILENAME = "./data/TestSample-RT_S17.HIV1B-vif.remap.sam"
 MAPQ_CUTOFF = 0  # alignment quality cutoff
 MAX_PROP_N = 0  # maximum proportion of N bases in MSA-aligned sequence
 READ_QUAL_CUTOFF = 20   # Phred quality score cutoff [0,40]
-REFERENCE_FASTA = "./data/TestSample-RT_S17.HIV1B-vif.10.conseq"
+REFERENCE_FASTA = "./simulations/data/scaling_1.0_TRUE.fas"
+
+GAMMA_DNDS_LOOKUP_FILENAME = "./simulations/data/sample_genomes.rates"
+GAMMA_DNDS_LOOKUP_COL_SCALE_FACTOR = "scaling.factor"
+GAMMA_DNDS_LOOKUP_COL_RATE_CLASS = "rate_class"
+GAMMA_DNDS_LOOKUP_COL_DNDS = "omega"
+
+INDELIBLE_RATE_OUTPUT_COLS = ["Site", "Class", "Partition", "Inserted?"]
+INDELIBLE_RATE_OUTPUT_FILENAME_PATTERN = './simulations/data/scaling_{}.0_RATES.txt'
+TOTAL_REF_CODON_SITES = 10000
+
+SCALING_FACTORS = [1, 2, 5, 10, 20, 50, 100]
+
 
 MIN_WINDOW_BREADTH_COV_FRACTION = 0.5
 MIN_WINDOW_DEPTH_COV = 2
 
+BWA_EXE = "/home/thuy/programs/bwa/bwa-0.7.8/bwa"  # TODO:  do not hardcode
+
+
+
 
 class TestSlidingWindowTree(unittest.TestCase):
 
+    def __get_actual_dnds(self, indelible_rates_filename, scaling_factor):
+        """
+        Look up site class from indelible rates file to gamma distribution rate class and corresponding dn/ds from
+        sample_genomes.rates file.
+        :rtype array of float: array where each element is a site dn/ds value.
+        :param indelible_rates_filename str: full file path to indelible rates output file.
+        :param scaling.factor int: the amount the the branch lengths are scaled
+        """
+
+        with open(GAMMA_DNDS_LOOKUP_FILENAME, 'r') as lookup_fh, open(indelible_rates_filename, 'r') as indelible_fh:
+            gamma2dnds = {}
+            for row in csv.DictReader(lookup_fh, delimiter='\t'):
+                if row[GAMMA_DNDS_LOOKUP_COL_SCALE_FACTOR] == scaling_factor:
+                    gamma2dnds[row[GAMMA_DNDS_LOOKUP_COL_RATE_CLASS]] = row[GAMMA_DNDS_LOOKUP_COL_DNDS]
+
+            site0based_to_dnds = array.array('f')
+            is_table = False
+            for line in indelible_fh:
+                cols = line.rstrip().split('\t')
+                is_table = is_table or (cols == INDELIBLE_RATE_OUTPUT_COLS)
+
+                if is_table:
+                    site1based, gamma_class, partition = cols[1:3]
+                    dnds = gamma2dnds[gamma_class]
+                    site0based_to_dnds[site1based-1] = dnds
+
+            return site0based_to_dnds
+
+
+    # def __align(self, ref_fasta_filename, logfilename, threads, query_fastq_filename):
+    #     query_filename_prefix = os.path.splitext(query_fastq_filename)[0]
+    #     sai_filename = query_filename_prefix + ".sai"   # bwa aln output file
+    #     with open(logfilename, 'w') as logfile_fh, open(sai_filename, 'w') as sai_fh:
+    #         subprocess.check_call([BWA_EXE, 'index', ref_fasta_filename], stderr=logfile_fh, stdout=logfile_fh)
+    #         subprocess.check_call([BWA_EXE, 'aln', '-t', threads, ref_fasta_filename, query_fastq_filename],
+    #                               stderr=logfile_fh, stdout=sai_fh)
+    #
+    #         # TODO:  call this for pair 1 and pair 2
+    #         subprocess.check_call([BWA_EXE, 'aln', '-t', threads, ref_fasta_filename, query_fastq_filename],
+    #                               stderr=logfile_fh, stdout=sai_fh)
+    #
+    #         subprocess.check_call([BWA_EXE, 'sampe', '-P', ref_fasta_filename, ])
+    #         sampe 	bwa sampe [-a maxInsSize] [-o maxOcc] [-n maxHitPaired] [-N maxHitDis] [-P] <in.db.fasta> <in1.sai> <in2.sai> <in1.fq> <in2.fq> > <out.sam>
+
     def test_process_windows(self):
-        ref2SeqDnDsInfo = sliding_window_tree.process_windows(sam_filename=SAM_FILENAME,
+        for scaling_factor in SCALING_FACTORS:
+            indelible_rates_filename = INDELIBLE_RATE_OUTPUT_FILENAME_PATTERN.format(scaling_factor)
+            site_2_dnds = self.__get_actual_dnds(indelible_rates_filename, scaling_factor)
+
+            ref2SeqDnDsInfo = sliding_window_tree.process_windows(sam_filename=SAM_FILENAME,
                                             ref_fasta_filename=REFERENCE_FASTA,
                                             mapping_cutoff=MAPQ_CUTOFF,
                                             read_qual_cutoff=READ_QUAL_CUTOFF,
@@ -25,15 +98,17 @@ class TestSlidingWindowTree(unittest.TestCase):
                                             window_depth_thresh=MIN_WINDOW_DEPTH_COV)
 
 
-        for ref in ref2SeqDnDsInfo:
-            sys.stdout.write(ref + " ")
-            for site in range(ref2SeqDnDsInfo[ref].get_seq_len()):
-                site_dnds = ref2SeqDnDsInfo[ref].get_site_ave_dnds(site)
-                if site_dnds is None:
-                    sys.stdout.write(str(site) + ":- ")
-                else:
-                    sys.stdout.write(str(site) + ":" + str(site_dnds) + " ")
-            print "\n"
+            for ref in ref2SeqDnDsInfo:
+                sys.stdout.write(ref + " ")
+                for site in range(ref2SeqDnDsInfo[ref].get_seq_len()):
+                    site_dnds = ref2SeqDnDsInfo[ref].get_site_ave_dnds(site)
+                    if site_dnds is None:
+                        sys.stdout.write(str(site) + ":- ")
+                    else:
+                        sys.stdout.write(str(site) + ":" + str(site_dnds) + " ")
+                print "\n"
+
+            
 
 if __name__ == '__main__':
     unittest.main()
