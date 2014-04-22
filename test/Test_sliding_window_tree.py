@@ -16,7 +16,7 @@ SAM_FILENAME = "./data/TestSample-RT_S17.HIV1B-vif.remap.sam"
 MAPQ_CUTOFF = 0  # alignment quality cutoff
 MAX_PROP_N = 0  # maximum proportion of N bases in MSA-aligned sequence
 READ_QUAL_CUTOFF = 20   # Phred quality score cutoff [0,40]
-REFERENCE_FASTA = "./simulations/data/scaling_1.0_TRUE.fas"
+REFERENCE_FASTA = "./simulations/data/sample_genomes.consensus.fas"
 
 GAMMA_DNDS_LOOKUP_FILENAME = "./simulations/data/sample_genomes.rates"
 GAMMA_DNDS_LOOKUP_COL_SCALE_FACTOR = "scaling.factor"
@@ -34,13 +34,14 @@ MIN_WINDOW_BREADTH_COV_FRACTION = 0.5
 MIN_WINDOW_DEPTH_COV = 2
 
 BWA_EXE = "/home/thuy/programs/bwa/bwa-0.7.8/bwa"  # TODO:  do not hardcode
-
+BOWTIE_EXE = ""
+BOWTIE_BUILD_EXE=""
 
 
 
 class TestSlidingWindowTree(unittest.TestCase):
 
-    def __get_actual_dnds(self, indelible_rates_filename, scaling_factor):
+    def __get_expected_dnds(self, indelible_rates_filename, scaling_factor):
         """
         Look up site class from indelible rates file to gamma distribution rate class and corresponding dn/ds from
         sample_genomes.rates file.
@@ -84,30 +85,46 @@ class TestSlidingWindowTree(unittest.TestCase):
     #         subprocess.check_call([BWA_EXE, 'sampe', '-P', ref_fasta_filename, ])
     #         sampe 	bwa sampe [-a maxInsSize] [-o maxOcc] [-n maxHitPaired] [-N maxHitDis] [-P] <in.db.fasta> <in1.sai> <in2.sai> <in1.fq> <in2.fq> > <out.sam>
 
+    def __align(self, ref_fasta_filename, logfilename, threads, query_fq_1_filename, query_fq_2_filename):
+        MEAN_FRAG_LEN = 500
+        MAX_FRAG_LEN = MEAN_FRAG_LEN * 0,25
+        sam_filename_prefix = os.path.splitext(logfilename)[0]
+
+        subprocess.check_call(BOWTIE_BUILD_EXE, ref_fasta_filename)
+        subprocess.check_call(BOWTIE_EXE, '--local', '-p', threads,
+                              '-X', MAX_FRAG_LEN,
+                              '-x', ref_fasta_filename,
+                              '-1', query_fq_1_filename,
+                              '-2', query_fq_2_filename,
+                              '-S', sam_filename_prefix)
+
+
     def test_process_windows(self):
-        for scaling_factor in SCALING_FACTORS:
-            indelible_rates_filename = INDELIBLE_RATE_OUTPUT_FILENAME_PATTERN.format(scaling_factor)
-            site_2_dnds = self.__get_actual_dnds(indelible_rates_filename, scaling_factor)
+        
+        actual_dnds_filename = './simulations/data/actual_dnds.tsv'
+        with open(actual_dnds_filename, 'w') as dnds_fh:
+            dnds_fh.write("ref", "scaling_factor", "site", "dnds")
+            for scaling_factor in SCALING_FACTORS:
+                indelible_rates_filename = INDELIBLE_RATE_OUTPUT_FILENAME_PATTERN.format(scaling_factor)
+                expected_site_2_dnds = self.__get_expected_dnds(indelible_rates_filename, scaling_factor)
 
-            ref2SeqDnDsInfo = sliding_window_tree.process_windows(sam_filename=SAM_FILENAME,
-                                            ref_fasta_filename=REFERENCE_FASTA,
-                                            mapping_cutoff=MAPQ_CUTOFF,
-                                            read_qual_cutoff=READ_QUAL_CUTOFF,
-                                            max_prop_N=MAX_PROP_N,
-                                            window_breadth_thresh=MIN_WINDOW_BREADTH_COV_FRACTION,
-                                            window_depth_thresh=MIN_WINDOW_DEPTH_COV)
+                ref2SeqDnDsInfo = sliding_window_tree.process_windows(sam_filename=SAM_FILENAME,
+                                                ref_fasta_filename=REFERENCE_FASTA,
+                                                mapping_cutoff=MAPQ_CUTOFF,
+                                                read_qual_cutoff=READ_QUAL_CUTOFF,
+                                                max_prop_N=MAX_PROP_N,
+                                                window_breadth_thresh=MIN_WINDOW_BREADTH_COV_FRACTION,
+                                                window_depth_thresh=MIN_WINDOW_DEPTH_COV)
 
 
-            for ref in ref2SeqDnDsInfo:
-                sys.stdout.write(ref + " ")
-                for site in range(ref2SeqDnDsInfo[ref].get_seq_len()):
-                    site_dnds = ref2SeqDnDsInfo[ref].get_site_ave_dnds(site)
-                    if site_dnds is None:
-                        sys.stdout.write(str(site) + ":- ")
-                    else:
-                        sys.stdout.write(str(site) + ":" + str(site_dnds) + " ")
-                print "\n"
+                for ref in ref2SeqDnDsInfo:
+                    for site in range(ref2SeqDnDsInfo[ref].get_seq_len()):
+                        site_dnds = ref2SeqDnDsInfo[ref].get_site_ave_dnds(site)
+                        dnds_fh.write(ref + "\t" + scaling_factor + "\t" + site + "\t" + site_dnds + "\n")
 
+
+
+            
             
 
 if __name__ == '__main__':
