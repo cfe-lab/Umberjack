@@ -12,16 +12,18 @@ import subprocess
 # READ_QUAL_CUTOFF = 20   # Phred quality score cutoff [0,40]
 # REFERENCE_FASTA = "./data/TestSample-RT_S17.HIV1B-vif.10.conseq"
 
-SAM_FILENAME = "./data/TestSample-RT_S17.HIV1B-vif.remap.sam"
+SAM_FILENAME = "./simulations/data/sample_genomes.grinder-reads.rename.sam"
 MAPQ_CUTOFF = 0  # alignment quality cutoff
 MAX_PROP_N = 0  # maximum proportion of N bases in MSA-aligned sequence
 READ_QUAL_CUTOFF = 20   # Phred quality score cutoff [0,40]
 REFERENCE_FASTA = "./simulations/data/sample_genomes.consensus.fas"
 
 GAMMA_DNDS_LOOKUP_FILENAME = "./simulations/data/sample_genomes.rates"
-GAMMA_DNDS_LOOKUP_COL_SCALE_FACTOR = "scaling.factor"
-GAMMA_DNDS_LOOKUP_COL_RATE_CLASS = "rate_class"
-GAMMA_DNDS_LOOKUP_COL_DNDS = "omega"
+GAMMA_DNDS_LOOKUP_COL_INTERVAL = "Interval"
+GAMMA_DNDS_LOOKUP_COL_SITE = "Site"
+GAMMA_DNDS_LOOKUP_COL_SCALE_FACTOR = "Scaling_factor"
+GAMMA_DNDS_LOOKUP_COL_RATE_CLASS = "Rate_class"
+GAMMA_DNDS_LOOKUP_COL_DNDS = "Omega"
 
 INDELIBLE_RATE_OUTPUT_COLS = ["Site", "Class", "Partition", "Inserted?"]
 INDELIBLE_RATE_OUTPUT_FILENAME_PATTERN = './simulations/data/scaling_{}.0_RATES.txt'
@@ -41,31 +43,20 @@ BOWTIE_BUILD_EXE=""
 
 class TestSlidingWindowTree(unittest.TestCase):
 
-    def __get_expected_dnds(self, indelible_rates_filename, scaling_factor):
+    def __get_expected_dnds(self, dnds_lookup_filename):
         """
-        Look up site class from indelible rates file to gamma distribution rate class and corresponding dn/ds from
-        sample_genomes.rates file.
+        Look dn/ds from sample_genomes.rates file.
         :rtype array of float: array where each element is a site dn/ds value.
         :param indelible_rates_filename str: full file path to indelible rates output file.
         :param scaling.factor int: the amount the the branch lengths are scaled
         """
 
-        with open(GAMMA_DNDS_LOOKUP_FILENAME, 'r') as lookup_fh, open(indelible_rates_filename, 'r') as indelible_fh:
-            gamma2dnds = {}
-            for row in csv.DictReader(lookup_fh, delimiter='\t'):
-                if row[GAMMA_DNDS_LOOKUP_COL_SCALE_FACTOR] == scaling_factor:
-                    gamma2dnds[row[GAMMA_DNDS_LOOKUP_COL_RATE_CLASS]] = row[GAMMA_DNDS_LOOKUP_COL_DNDS]
-
+        with open(dnds_lookup_filename, 'r') as lookup_fh:
             site0based_to_dnds = array.array('f')
-            is_table = False
-            for line in indelible_fh:
-                cols = line.rstrip().split('\t')
-                is_table = is_table or (cols == INDELIBLE_RATE_OUTPUT_COLS)
-
-                if is_table:
-                    site1based, gamma_class, partition = cols[1:3]
-                    dnds = gamma2dnds[gamma_class]
-                    site0based_to_dnds[site1based-1] = dnds
+            for row in csv.DictReader(lookup_fh, delimiter=','):
+                site = row[GAMMA_DNDS_LOOKUP_COL_SITE]
+                dnds = row[GAMMA_DNDS_LOOKUP_COL_DNDS]
+                site0based_to_dnds.append(float(dnds))
 
             return site0based_to_dnds
 
@@ -103,24 +94,21 @@ class TestSlidingWindowTree(unittest.TestCase):
         
         actual_dnds_filename = './simulations/data/actual_dnds.tsv'
         with open(actual_dnds_filename, 'w') as dnds_fh:
-            dnds_fh.write("ref", "scaling_factor", "site", "dnds")
-            for scaling_factor in SCALING_FACTORS:
-                indelible_rates_filename = INDELIBLE_RATE_OUTPUT_FILENAME_PATTERN.format(scaling_factor)
-                expected_site_2_dnds = self.__get_expected_dnds(indelible_rates_filename, scaling_factor)
+            dnds_fh.write("ref\tsite\tdnds")
+            expected_site_2_dnds = self.__get_expected_dnds(GAMMA_DNDS_LOOKUP_FILENAME)
 
-                ref2SeqDnDsInfo = sliding_window_tree.process_windows(sam_filename=SAM_FILENAME,
-                                                ref_fasta_filename=REFERENCE_FASTA,
-                                                mapping_cutoff=MAPQ_CUTOFF,
-                                                read_qual_cutoff=READ_QUAL_CUTOFF,
-                                                max_prop_N=MAX_PROP_N,
-                                                window_breadth_thresh=MIN_WINDOW_BREADTH_COV_FRACTION,
-                                                window_depth_thresh=MIN_WINDOW_DEPTH_COV)
+            ref2SeqDnDsInfo = sliding_window_tree.process_windows(sam_filename=SAM_FILENAME,
+                                                                ref_fasta_filename=REFERENCE_FASTA,
+                                                                mapping_cutoff=MAPQ_CUTOFF,
+                                                                read_qual_cutoff=READ_QUAL_CUTOFF,
+                                                                max_prop_N=MAX_PROP_N,
+                                                                window_breadth_thresh=MIN_WINDOW_BREADTH_COV_FRACTION,
+                                                                window_depth_thresh=MIN_WINDOW_DEPTH_COV)
 
-
-                for ref in ref2SeqDnDsInfo:
-                    for site in range(ref2SeqDnDsInfo[ref].get_seq_len()):
-                        site_dnds = ref2SeqDnDsInfo[ref].get_site_ave_dnds(site)
-                        dnds_fh.write(ref + "\t" + scaling_factor + "\t" + site + "\t" + site_dnds + "\n")
+            for ref in ref2SeqDnDsInfo:
+                for site in range(ref2SeqDnDsInfo[ref].get_seq_len()):
+                    site_dnds = ref2SeqDnDsInfo[ref].get_site_ave_dnds(site)
+                    dnds_fh.write(ref + "\t" + site + "\t" + site_dnds + "\n")
 
 
 

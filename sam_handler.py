@@ -3,7 +3,7 @@ import os
 import subprocess
 import logging
 import Utility
-from enum import Enum
+from enum import IntEnum
 
 # Matches 1+ occurrences of a number, followed by a letter from {MIDNSHPX=}
 CIGAR_RE = re.compile('[0-9]+[MIDNSHPX=]')
@@ -14,7 +14,7 @@ NUCL_RE = re.compile('[^nN\-]')
 LOGGER = logging.getLogger(__name__)
 
 
-class SamFlag (Enum):
+class SamFlag (IntEnum):
     IS_PAIRED =                0x001
     IS_MAPPED_IN_PROPER_PAIR = 0x002
     IS_UNMAPPED =              0x004
@@ -243,7 +243,7 @@ def get_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, rea
             # From SAM specs:
             # "For a unmapped paired-end or mate-pair read whose mate is mapped, the unmapped read
             #   should have RNAME and POS identical to its mate"
-            if (SamFlag.IS_UNMAPPED & int(flag) or SamFlag.IS_SECONDARY_ALIGNMENT & int(flag) or
+            if (SamFlag.IS_UNMAPPED.value & int(flag) or SamFlag.IS_SECONDARY_ALIGNMENT & int(flag) or
                     refname == '*' or cigar == '*' or int(pos) == 0 or int(mapq) < mapping_cutoff):
                 continue
 
@@ -286,7 +286,7 @@ def get_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, rea
                     start_pos_1based = re.search(NUCL_RE, mseq).start() + 1
                     # find last character that is not n, N, or a gap
                     end_pos_1based = len(mseq) - re.search(NUCL_RE, mseq[::-1]).start() - 1
-                    out_fasta_fh.write(">" + newick_nice_qname + " " + start_pos_1based + " " + end_pos_1based + "\n")
+                    out_fasta_fh.write(">" + newick_nice_qname + " " + str(start_pos_1based) + " " + str(end_pos_1based) + "\n")
                     out_fasta_fh.write(mseq + "\n")
 
 
