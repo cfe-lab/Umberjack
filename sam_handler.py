@@ -3,6 +3,7 @@ import os
 import subprocess
 import logging
 import Utility
+from enum import Enum
 
 # Matches 1+ occurrences of a number, followed by a letter from {MIDNSHPX=}
 CIGAR_RE = re.compile('[0-9]+[MIDNSHPX=]')
@@ -11,6 +12,21 @@ QUAL_PAD_CHAR = '!'     # This is the ASCII character for the lowest PHRED quali
 NEWICK_NAME_RE = re.compile('[:;\-\(\)\[\]]')
 NUCL_RE = re.compile('[^nN\-]')
 LOGGER = logging.getLogger(__name__)
+
+
+class SamFlag (Enum):
+    IS_PAIRED =                0x001
+    IS_MAPPED_IN_PROPER_PAIR = 0x002
+    IS_UNMAPPED =              0x004
+    IS_MATE_UNMAPPED =         0x008
+    IS_REVERSE =               0x010
+    IS_MATE_REVERSE =          0x020
+    IS_FIRST =                 0x040
+    IS_SECOND =                0x080
+    IS_SECONDARY_ALIGNMENT =   0x100
+    IS_FAILED =                0x200
+    IS_DUPLICATE =             0x400
+    IS_CHIMERIC_ALIGNMENT =    0x800
 
 
 # TODO:  handle X, =, P, N
@@ -190,6 +206,11 @@ def get_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, rea
     TODO: handle hypens, colons, semicolons in name
     From Newick format:   name can be any string of printable characters except blanks, colons, semicolons, parentheses, and square brackets.
 
+    ASSUMES:  mates from same read are ordered together in the file, with the first mate occuring first
+    TODO:  do not assume order
+
+    Only takes the primary alignment.
+
     :param str sam_filename: full path to sam file
     :param str ref_fasta_filename: full path to reference fasta
     :param float mapping_cutoff:  Ignore alignments with mapping quality lower than the cutoff.
@@ -216,30 +237,37 @@ def get_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, rea
             i += 1
 
             # If read failed to map or has poor mapping quality, skip it
-            ipos = int(pos)
-            if refname == '*' or cigar == '*' or ipos == 0 or int(mapq) < mapping_cutoff:
+            # Be careful!  The refname is only set to '*' and pos is only set to '0'
+            #   if all reads in the mate pair are unmapped.
+            # If the mate is mapped, but this read is not, the refname and pos will be set to the mate's reference hit.
+            # From SAM specs:
+            # "For a unmapped paired-end or mate-pair read whose mate is mapped, the unmapped read
+            #   should have RNAME and POS identical to its mate"
+            if (SamFlag.IS_UNMAPPED & int(flag) or SamFlag.IS_SECONDARY_ALIGNMENT & int(flag) or
+                    refname == '*' or cigar == '*' or int(pos) == 0 or int(mapq) < mapping_cutoff):
                 continue
 
 
-            padded_seq1, padded_qual1 = get_padded_seq_from_cigar(pos=ipos, cigar=cigar, seq=seq, qual=qual,
+            padded_seq1, padded_qual1 = get_padded_seq_from_cigar(pos=int(pos), cigar=cigar, seq=seq, qual=qual,
                                                                   rname=refname, ref_fasta_filename=ref_fasta_filename,
                                                                   flag=flag)
 
             padded_seq2 = ''
             padded_qual2 = ''
-            if i < len(lines):
-                # Look ahead in the SAM for matching read
-                qname2, flag2, refname2, pos2, mapq2, cigar2, rnext2, pnext2, tlen2, seq2, qual2 = lines[i].rstrip().split('\t')[:11]
-
-                if qname2 == qname:  # TODO:  what if read maps multiple times?
+            qname2 = qname
+            if not SamFlag.IS_MATE_UNMAPPED & int(flag):
+                while i < len(lines) and padded_seq2 == '' and qname2 == qname:
+                    # Look ahead in the SAM for matching read
+                    qname2, flag2, refname2, pos2, mapq2, cigar2, rnext2, pnext2, tlen2, seq2, qual2 = lines[i].rstrip().split('\t')[:11]
                     i += 1
 
-                    # If 2nd mate failed to map, then skip it
-                    ipos2 = int(pos2)
-                    if refname2 == '*' or cigar2 == '*' or ipos2 == 0 or int(mapq2) < mapping_cutoff:
+                    # If not the 2nd mate, failed to map, or is secondary alignment, then skip it
+                    if (not qname2 == qname or
+                            SamFlag.IS_UNMAPPED & int(flag2) or SamFlag.IS_SECONDARY_ALIGNMENT & int(flag2) or
+                            refname2 == '*' or cigar2 == '*' or int(pos2) == 0 or int(mapq2) < mapping_cutoff):
                         continue
 
-                    padded_seq2, padded_qual2 = get_padded_seq_from_cigar(pos=ipos2, cigar=cigar2, seq=seq2, qual=qual2,
+                    padded_seq2, padded_qual2 = get_padded_seq_from_cigar(pos=int(pos2), cigar=cigar2, seq=seq2, qual=qual2,
                                                                           rname=refname2, ref_fasta_filename=ref_fasta_filename,
                                                                           flag=flag2)
 
@@ -263,8 +291,15 @@ def get_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, rea
 
 
 
+
+
 def samBitFlag(flag):
     """
+
+
+    :rtype dict  {str: bool}:  dict of whether the label applies to the given flag
+    :param flag int:  flag field from sam file as int
+
     Interpret bitwise flag in SAM field as follows:
 
     Flag	Chr	Description
@@ -280,10 +315,12 @@ def samBitFlag(flag):
     0x0100	s	the alignment is not primary
     0x0200	f	the read fails platform/vendor quality checks
     0x0400	d	the read is either a PCR or an optical duplicate
+    0x0800      the alignment is part of a chimeric alignment
     """
     labels = ['is_paired', 'is_mapped_in_proper_pair', 'is_unmapped', 'mate_is_unmapped',
               'is_reverse', 'mate_is_reverse', 'is_first', 'is_second', 'is_secondary_alignment',
               'is_failed', 'is_duplicate']
+
 
     binstr = bin(int(flag)).replace('0b', '')
     # flip the string
