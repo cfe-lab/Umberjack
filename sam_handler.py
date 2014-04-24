@@ -164,10 +164,10 @@ def get_padded_seq_from_cigar(pos, cigar, seq, qual, flag, rname, ref_len):
     """
 
     formatted_seq, formatted_qual = apply_cigar(cigar, seq, qual)
-    ref2len = Utility.get_seq2len(fasta_filename=ref_fasta_filename)
+
 
     left_pad_len = pos - 1
-    right_pad_len = ref2len[rname] - left_pad_len - len(formatted_seq)
+    right_pad_len = ref_len - left_pad_len - len(formatted_seq)
     # TODO:  hack - We hard cut sequences if they extend past the reference boundaries.  Don't do this.
     # This hack is in place so that we don't have to worry about MSA alignments
     if right_pad_len < 0:
@@ -180,8 +180,8 @@ def get_padded_seq_from_cigar(pos, cigar, seq, qual, flag, rname, ref_len):
 
 
 
-    if len(padded_seq) != ref2len[rname]:
-        raise Exception("len(padded_seq)=" + str(len(padded_seq)) + " ref2len[rname]=" + str(ref2len[rname]))
+    if len(padded_seq) != ref_len:
+        raise Exception("len(padded_seq)=" + str(len(padded_seq)) + " ref2len[rname]=" + str(ref_len))
 
     return [padded_seq, padded_qual]
 
