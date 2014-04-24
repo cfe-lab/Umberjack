@@ -33,28 +33,26 @@ class SamFlag (IntEnum):
 def apply_cigar (cigar, seq, qual):
     """
     Parse SAM CIGAR and apply to the SAM nucleotide sequence.
+    Do not remove soft clipped sequences in case they contain valid polymorphisms.
+    If the bases have low quality, they can be removed using merge_pairs()
 
     Input: cigar, sequence, and quality string from SAM.
-    Output: shift (?), sequence with CIGAR incorporated + new quality string
+    Output: sequence with CIGAR incorporated + new quality string
     """
 
     newseq = ''
     newqual = ''
     tokens = CIGAR_RE.findall(cigar)
     if len(tokens) == 0:
-        return None, None, None
+        return None, None
 
-    # Account for removing soft clipped bases on left
-    shift = 0
-    if tokens[0].endswith('S'):
-        shift = int(tokens[0][:-1])
 
     left = 0
     for token in tokens:
         length = int(token[:-1])
 
         # Matching sequence: carry it over
-        if token[-1] == 'M':
+        if token[-1] == 'M' or token[-1] == 'S':
             newseq += seq[left:(left+length)]
             newqual += qual[left:(left+length)]
             left += length
@@ -72,15 +70,10 @@ def apply_cigar (cigar, seq, qual):
             left += length
             continue
 
-        # Soft clipping leaves the sequence in the SAM - so we should skip it
-        elif token[-1] == 'S':
-            left += length
-            continue
-
         else:
             raise Exception("Unable to handle CIGAR token: {} - quitting".format(token))
 
-    return shift, newseq, newqual
+    return newseq, newqual
 
 
 # TODO:  handle reverse complemented reads
@@ -170,7 +163,7 @@ def get_padded_seq_from_cigar(pos, cigar, seq, qual, flag, rname, ref_len):
 
     """
 
-    shift, formatted_seq, formatted_qual = apply_cigar(cigar, seq, qual)
+    formatted_seq, formatted_qual = apply_cigar(cigar, seq, qual)
     ref2len = Utility.get_seq2len(fasta_filename=ref_fasta_filename)
 
     left_pad_len = pos - 1
