@@ -1,3 +1,5 @@
+
+```{r }
 library(limma)
 library(ggplot2)
 library(reshape2)
@@ -16,19 +18,28 @@ dim(expected_dnds)
 head(expected_dnds)
 str(expected_dnds)
 summary(expected_dnds)
+```
 
-#' **Paired test without assumption of normalcy**
+**Paired test without assumption of normalcy**
+
+```{r }
 htest <-  wilcox.test(actual_dnds$dNdS, expected_dnds$Omega, paired=TRUE, exact=TRUE, 
                       conf.int=TRUE, conf.level=0.95, na.action="na.exclude")
 print (htest)
+```
 
-#' **Scatterplot actual vs expected dn ds together**
+**Scatterplot actual vs expected dn ds together**
+
+```{r }
 fullDat <- data.frame(site=expected_dnds$Site,
                       actual=actual_dnds$dNdS, 
                       expected=expected_dnds$Omega)
 ggplot(fullDat, aes(x=actual, y=expected)) + geom_smooth(method=lm)
+```
 
-#' Scatterplot the dn/ds across the genome
+Scatterplot the dn/ds across the genome
+
+```{r }
 fullDatBySource <- reshape2:::melt.data.frame(data=fullDat, na.rm = TRUE, id.vars="site", variable.name="source", value.name="dnds")
 head(fullDatBySource)
 tail(fullDatBySource)
@@ -37,6 +48,8 @@ summary(fullDatBySource)
 ggplot(fullDatBySource[fullDatBySource$site < 400,], aes(x=site, y=dnds, color=source)) + 
   geom_point(main="Regression of dnds by site", xlab="Codon Site Along Genome", ylab="dN/dS")
 
-#+ **Find how correlated the actual vs expected dnds are**
+```{r **Find how correlated the actual vs expected dnds are**}
 dnds_cor <- cor(actual_dnds$dNdS, expected_dnds$Omega, method="spearman", use="pairwise.complete.obs")
 print(dnds_cor)
+```
+

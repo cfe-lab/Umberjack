@@ -1,3 +1,19 @@
+import os
+import errno
+
+
+def create_dir_check(new_dir):
+    """
+    Creates the directory if it doesn't exist.  Raises errors encountered except 'file already exists' error.
+    :param str new_dir:  full file path of new directory
+    :raises OSError
+    """
+    try:
+        os.makedirs(new_dir)
+    except OSError as exception:
+        if exception.errno != errno.EEXIST:
+            raise
+
 def get_seq2len(fasta_filename):
     # keep track of reference contig/chromosome and its length
     """
@@ -38,7 +54,7 @@ def get_fasta_headers(fasta_filename):
         for line in fasta_fh:
             if line[0] == '>':
                 header = line[1:].rstrip().split()
-                headers.append(header)
+                headers.extend(header)
     return headers
 
 

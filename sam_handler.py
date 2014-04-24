@@ -152,11 +152,12 @@ def merge_pairs (seq1, seq2, qual1, qual2, q_cutoff=10, minimum_q_delta=5):
     return mseq
 
 
-def get_padded_seq_from_cigar(pos, cigar, seq, qual, rname, ref_fasta_filename, flag):
+def get_padded_seq_from_cigar(pos, cigar, seq, qual, flag, rname, ref_len):
     """
     Returns the padded sequence from the cigar, with soft-clipped bases removed.
     Left Pads with '-' up to pos.
     Right pads with '-' until the end of the reference.
+    :param ref_len:
     TODO:  handle indels!!!
 
     :param int pos : pos field from SAM.  1-based position with respect to the reference.
@@ -170,10 +171,10 @@ def get_padded_seq_from_cigar(pos, cigar, seq, qual, rname, ref_fasta_filename, 
     """
 
     shift, formatted_seq, formatted_qual = apply_cigar(cigar, seq, qual)
-    ref2len = Utility.get_seq2len(fasta_filename=ref_fasta_filename)
+
 
     left_pad_len = pos - 1
-    right_pad_len = ref2len[rname] - left_pad_len - len(formatted_seq)
+    right_pad_len = ref_len - left_pad_len - len(formatted_seq)
     # TODO:  hack - We hard cut sequences if they extend past the reference boundaries.  Don't do this.
     # This hack is in place so that we don't have to worry about MSA alignments
     if right_pad_len < 0:
@@ -186,16 +187,18 @@ def get_padded_seq_from_cigar(pos, cigar, seq, qual, rname, ref_fasta_filename, 
 
 
 
-    if len(padded_seq) != ref2len[rname]:
-        raise Exception("len(padded_seq)=" + str(len(padded_seq)) + " ref2len[rname]=" + str(ref2len[rname]))
+    if len(padded_seq) != ref_len:
+        raise Exception("len(padded_seq)=" + str(len(padded_seq)) + " ref2len[rname]=" + str(ref_len))
 
     return [padded_seq, padded_qual]
 
 
-def create_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, read_qual_cutoff, max_prop_N, out_fasta_filename):
+def create_msa_fasta_from_sam(sam_filename, ref, ref_len, out_fasta_filename, mapping_cutoff, read_qual_cutoff,
+                              max_prop_N):
     """
     Parse SAM file contents for query-ref aligned sequences.
     Does pseudo multiple sequence alignment on all the query sequences and reference.
+    :param ref:
     TODO:  handle inserts.  Right now, all inserts are squelched so that there is multiple sequence alignment.
     For paired-end reads, merges the reads into a single sequence with gaps with respect to the reference.
     TODO:  handle mate pairs.
@@ -209,7 +212,6 @@ def create_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, 
     Only takes the primary alignment.
 
     :param str sam_filename: full path to sam file
-    :param str ref_fasta_filename: full path to reference fasta
     :param float mapping_cutoff:  Ignore alignments with mapping quality lower than the cutoff.
     :param int read_qual_cutoff: When merging overlapping paired-end reads, ignore mate with read quality lower than the cutoff.
     :param float max_prop_N:  Do not output sequences with proportion of N higher than the cutoff
@@ -233,6 +235,9 @@ def create_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, 
             qname, flag, refname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual = lines[i].rstrip().split('\t')[:11]
             i += 1
 
+            if not refname == ref:
+                continue
+
             # If read failed to map or has poor mapping quality, skip it
             # Be careful!  The refname is only set to '*' and pos is only set to '0'
             #   if all reads in the mate pair are unmapped.
@@ -246,8 +251,7 @@ def create_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, 
 
 
             padded_seq1, padded_qual1 = get_padded_seq_from_cigar(pos=int(pos), cigar=cigar, seq=seq, qual=qual,
-                                                                  rname=refname, ref_fasta_filename=ref_fasta_filename,
-                                                                  flag=flag)
+                                                                  flag=flag, rname=refname, ref_len=ref_len)
 
             padded_seq2 = ''
             padded_qual2 = ''
@@ -258,15 +262,18 @@ def create_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, 
                     qname2, flag2, refname2, pos2, mapq2, cigar2, rnext2, pnext2, tlen2, seq2, qual2 = lines[i].rstrip().split('\t')[:11]
                     i += 1
 
+                    if not refname2 == ref:
+                        continue
+
                     # If not the 2nd mate, failed to map, or is secondary alignment, then skip it
                     if (not qname2 == qname or
                             SamFlag.IS_UNMAPPED & int(flag2) or SamFlag.IS_SECONDARY_ALIGNMENT & int(flag2) or
                             refname2 == '*' or cigar2 == '*' or int(pos2) == 0 or int(mapq2) < mapping_cutoff):
                         continue
 
-                    padded_seq2, padded_qual2 = get_padded_seq_from_cigar(pos=int(pos2), cigar=cigar2, seq=seq2, qual=qual2,
-                                                                          rname=refname2, ref_fasta_filename=ref_fasta_filename,
-                                                                          flag=flag2)
+                    padded_seq2, padded_qual2 = get_padded_seq_from_cigar(pos=int(pos2), cigar=cigar2, seq=seq2,
+                                                                          qual=qual2, flag=flag2, rname=refname2,
+                                                                          ref_len=ref_len)
 
             if padded_seq1 or padded_seq2:
                 # merge mates into one padded sequence

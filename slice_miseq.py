@@ -7,6 +7,7 @@ import csv
 import glob
 
 
+
 HYPHY_TSV_SCALED_DNDS_COL = 'Scaled dN-dS'
 HYPHY_TSV_PROB_FULLSEQ_NS = 'P{S leq. observed}'
 
@@ -15,7 +16,7 @@ NUC_PER_CODON = 3
 
 class SiteDnDsInfo:
     def __init__(self):
-        self.accum_win_dnds = 0
+        self.accum_win_dnds = 0.0
         self.total_win_cover_site = 0
 
     def add_dnds(self, dnds):
@@ -23,7 +24,7 @@ class SiteDnDsInfo:
         self.accum_win_dnds += dnds
 
     def get_ave_dnds(self):
-        if self.accum_win_dnds == 0 and self.total_win_cover_site == 0:
+        if not self.total_win_cover_site:
             return None
         else:
             return self.accum_win_dnds / self.total_win_cover_site
@@ -34,13 +35,24 @@ class SeqDnDsInfo:
     A sequence of Dn/Ds by site
     """
     def __init__(self, seq_len):
-        self.dnds_seq = [SiteDnDsInfo()] * seq_len
+        """
+        Constructor.
 
-    def add_site_dnds(self, site, dnds):
-        self.dnds_seq[site].add_dnds(dnds)
+        :rtype SeqDnDsInfo :  instance object
+        :param int seq_len: total codons in the sequence
+        """
+        self.dnds_seq = [SiteDnDsInfo() for i in range(seq_len)]
 
-    def get_site_ave_dnds(self, site):
-        return self.dnds_seq[site].get_ave_dnds()
+    def add_site_dnds(self, site_1based, dnds):
+        """
+        Keep track of dn/ds from a window containing this site.
+        :param site_1based: 1-based codon site
+        :param dnds: dn/ds for this codon site as determined from a window fed into hyphy
+        """
+        self.dnds_seq[site_1based-1].add_dnds(dnds)
+
+    def get_site_ave_dnds(self, site_1based):
+        return self.dnds_seq[site_1based-1].get_ave_dnds()
 
     def get_seq_len(self):
         return len(self.dnds_seq)
@@ -343,15 +355,17 @@ def get_best_window_size_from_depthfile(sorted_bam_filename, depth_filename, ref
         return best_size  # NOPE!  check out http://seqanswers.com/forums/showthread.php?t=25587 ?
 
 
-def get_seq_dnds(dnds_tsv_dir, ref_fasta_filename, pvalue_thresh):
+def get_seq_dnds_info(dnds_tsv_dir, pvalue_thresh, ref, ref_codon_len):
     """
     For an entire window, get the average dn/ds for every base position.
     We expect that all HyPhy has written out dn/ds tsv files for every window.
 
-    :rtype dict of SeqDnDsInfo
+    :rtype SeqDnDsInfo object
     :param dnds_tsv_dir: 
-    :param ref_fasta_filename: 
     :param pvalue_thresh:
+    :param str ref: reference contig/chromosome name.  Does not include the '>' faster header delimter or
+                    any thing after the first space in the header text
+    :param int ref_codon_len:  length of the reference in codons
 
     Assumes these are the columns in the HyPhy DN/DS TSV output:
     Observed S Changes
@@ -371,37 +385,28 @@ def get_seq_dnds(dnds_tsv_dir, ref_fasta_filename, pvalue_thresh):
 
     We only want significant Dn/Ds.  Use the normalized value so that dn/ds can be compared from every window.
     """
+    seq_dnds_info = SeqDnDsInfo(seq_len=ref_codon_len)
 
-    refs = Utility.get_fasta_headers(fasta_filename=ref_fasta_filename)
-    ref2nuclen = Utility.get_seq2len(ref_fasta_filename)
-    ref2SeqDnDsInfo = {}
     for dnds_tsv_filename in glob.glob(dnds_tsv_dir + os.sep + "*.dnds.tsv"):
         with open(dnds_tsv_filename, 'r') as dnds_fh:
+            # *.{start bp}_{end bp}.dnds.tsv filenames use 1-based nucleotide position numbering
+            dnds_tsv_fileprefix = dnds_tsv_filename.split('.dnds.tsv')[0]
+            win_nuc_range = dnds_tsv_fileprefix.split('.')[-1]
+            # Window ends at this 1-based nucleotide position with respect to the reference
+            win_start_nuc_pos_1based_wrt_ref = int(win_nuc_range.split('_')[0])
+            # Window starts at this 1-based codon position with respect to the reference
+            win_start_codon_1based_wrt_ref = win_start_nuc_pos_1based_wrt_ref/NUC_PER_CODON + 1
 
-            for ref in refs:
-                if not ref in ref2SeqDnDsInfo:
-                    # TODO:  check what happens if window length is not divisible by 3
-                    ref_codon_len = ref2nuclen[ref]/NUC_PER_CODON
-                    ref2SeqDnDsInfo[ref] = SeqDnDsInfo(ref_codon_len)
+            reader = csv.DictReader(dnds_fh, delimiter='\t',)
+            for offset, codon_row in enumerate(reader):    # Every codon site is a row in the *.dnds.tsv file
+                pval = float(codon_row[HYPHY_TSV_PROB_FULLSEQ_NS])
+                if pval <= pvalue_thresh:
+                    ref_codon_1based = win_start_codon_1based_wrt_ref + offset
 
-                # TestSample-RT_S17.HIV1B-vif.remap.msa.14_114.dnds.tsv
-                # NB:  the *dnds.tsv file names use 1-based nucleotide position numbering
-                # Window starts at this 1-based nucleotide position with respect to the reference
-                win_start_nuc_pos_1based_wrt_ref = int(dnds_tsv_filename.split('.dnds.tsv')[0].split('.')[-1].split('_')[0])
-                # Window starts at this 0-based codon position with respect to the reference
-                win_start_codon_idx_0based_wrt_ref = (win_start_nuc_pos_1based_wrt_ref - 1)/NUC_PER_CODON
+                    dnds = float(codon_row[HYPHY_TSV_SCALED_DNDS_COL])
+                    seq_dnds_info.add_site_dnds(site_1based=ref_codon_1based, dnds=dnds)
 
-                reader = csv.DictReader(dnds_fh, delimiter='\t',)
-                for offset_0based, codon_row in enumerate(reader):    # Every codon site is a row in the *.dnds.tsv file
-                    pval = float(codon_row[HYPHY_TSV_PROB_FULLSEQ_NS])
-                    if pval <= pvalue_thresh:
-                        ref_codon_idx_0based = win_start_codon_idx_0based_wrt_ref + offset_0based
-
-                        # Dict  {ref1:SeqDnDsInfo, ref2: SeqDnDsInfo}
-                        dnds = float(codon_row[HYPHY_TSV_SCALED_DNDS_COL])
-                        ref2SeqDnDsInfo[ref].add_site_dnds(ref_codon_idx_0based, dnds)
-
-        return ref2SeqDnDsInfo
+    return seq_dnds_info
 
 
 
