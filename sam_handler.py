@@ -66,8 +66,9 @@ def apply_cigar (cigar, seq, qual):
 
         # Insertion relative to reference:
         elif token[-1] == 'I':
-            newseq += seq[left:(left+length)]
-            newqual += qual[left:(left+length)]
+            # TODO:  handle inserts
+            # newseq += seq[left:(left+length)]
+            # newqual += qual[left:(left+length)]
             left += length
             continue
 
@@ -113,12 +114,8 @@ def merge_pairs (seq1, seq2, qual1, qual2, q_cutoff=10, minimum_q_delta=5):
             c1 = seq1[i]
             q1 = ord(qual1[i])-33
 
-            # Gaps are given the lowest q-rank (q = -1) but are NOT N-censored
-            if c1 == '-' and c2 == '-':
-                mseq += '-'
-
             # NOT SURE IF THESE NEXT 3 CASES MAKE SENSE
-            elif q1 is None and q2 is None:
+            if q1 is None and q2 is None:
                 mseq += 'N'
 
             elif q2 is None and q1 is not None and q1 > q_cutoff:
@@ -127,8 +124,8 @@ def merge_pairs (seq1, seq2, qual1, qual2, q_cutoff=10, minimum_q_delta=5):
             elif q1 is None and q2 is not None and q2 > q_cutoff:
                 mseq += seq2[i]
 
-            # Reads agree and one has sufficient confidence
-            elif c1 == c2 and q1 > q_cutoff or q2 > q_cutoff:
+            # Reads agree (does not matter if sufficient confidence)
+            elif c1 == c2:  # Gaps are NOT N-censored
                 mseq += c1
 
             # Reads disagree but both have too similar a confidence
@@ -195,7 +192,7 @@ def get_padded_seq_from_cigar(pos, cigar, seq, qual, rname, ref_fasta_filename, 
     return [padded_seq, padded_qual]
 
 
-def get_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, read_qual_cutoff, max_prop_N, out_fasta_filename):
+def create_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, read_qual_cutoff, max_prop_N, out_fasta_filename):
     """
     Parse SAM file contents for query-ref aligned sequences.
     Does pseudo multiple sequence alignment on all the query sequences and reference.
@@ -280,7 +277,7 @@ def get_msa_fasta_from_sam(sam_filename, ref_fasta_filename, mapping_cutoff, rea
                 # Sequence must not have too many censored bases
                 if mseq.count('N') / float(len(mseq)) <= max_prop_N:
                     # Write multiple-sequence-aligned merged read to file using the name of the first mate
-                    # Newick tree formats don't like special characters.  Conver them to underscores.
+                    # Newick tree formats don't like special characters.  Convert them to underscores.
                     newick_nice_qname = re.sub(pattern=NEWICK_NAME_RE, repl='_', string=qname)
                     # find first character that is not n, N, or a gap -
                     start_pos_1based = re.search(NUCL_RE, mseq).start() + 1

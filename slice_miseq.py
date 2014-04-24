@@ -96,47 +96,74 @@ def create_slice_msa_fasta_from_bam(bam_filename, start_pos, end_pos):
     return slice_fasta_filename
 
 
-# TODO:  split MSA fasta files by reference contig/chromosome
-def create_slice_msa_fasta(fasta_filename, start_pos, end_pos):
+def __get_window_seq(seq, start_pos, end_pos, breadth_thresh=0.0):
+    """
+    If the sequence fits the window constraints, then returns the sliced sequence.
+    Otherwise returns None.
+
+    :rtype str :  Sequence that fits in the window, right padded if necessary.  None if sequence doesn't fit window constraints.
+    :param seq str: sequence with no newlines
+    :param start_pos int: 1-based
+    :param end_pos int : 1-based
+    :param breadth_thresh float: fraction of sequence that be A,C,T,or G within start_pos and end_pos inclusive.
+    """
+    if seq and len(seq) >= start_pos:
+        slice_seq = seq[start_pos-1:end_pos]
+        slice_seq_uc = slice_seq.upper()
+        a_count = slice_seq_uc.count('A')
+        t_count = slice_seq_uc.count('T')
+        g_count = slice_seq_uc.count('G')
+        c_count = slice_seq_uc.count('C')
+        if float(a_count+g_count+c_count+t_count)/(end_pos - start_pos + 1) >= breadth_thresh:
+            pad = '-' * max(0, end_pos - len(seq))
+            return slice_seq
+
+    return None
+
+
+def create_slice_msa_fasta(fasta_filename, out_fasta_filename, start_pos, end_pos, breadth_thresh=0.0):
     """
     From a fasta file of multiple sequence alignments, extract the sequence sequence from desired region.
     Writes the extracted sequences into a new fasta file with ".<start_pos>_<end_pos>.fasta" suffix.
     If the sequence is shorter than <end_pos>, then fills in the gaps with '-' characters so that it ends at <end_pos>
 
-    :rtype str: full filepath to sliced multiple sequence alignment fasta
-    :param fasta_filename: full file path to fasta of multiple sequence alignments
-    :param start_pos: 1-based start position of region to extract
-    :param end_pos: 1-based end position of region to extract
+    Only puts in the read into the sliced msa fasta if it obeys the window constraints.
+
+    :rtype int: total sequences written
+    :param str fasta_filename: full file path to fasta of multiple sequence alignments
+    :param str out_fasta_filename:  full file path to output fasta of sliced multiple sequence alignments
+    :param int start_pos : 1-based start position of region to extract
+    :param int end_pos: 1-based end position of region to extract
+    :param float breadth_thresh: fraction of sequence that be A,C,T,or G within start_pos and end_pos inclusive.
     """
-    fasta_filename_prefix, fileExtension = os.path.splitext(fasta_filename)
-    slice_fasta_filename = fasta_filename_prefix + "." + str(start_pos) + "_" + str(end_pos) + ".fasta"
-    with open(fasta_filename, 'r') as fasta_fh, open(slice_fasta_filename, 'w') as slice_fasta_fh:
+
+    total_seq = 0
+    with open(fasta_filename, 'r') as fasta_fh, open(out_fasta_filename, 'w') as slice_fasta_fh:
         header = ""
         seq = ""
         for line in fasta_fh:
-            line = line.rstrip()  # remove trailing whitespace
+            line = line.rstrip().split()[0]  # remove trailing whitespace and any test after the first whitespace
 
-            if line[0] == '>':  # last sequence is finished.  Write out last sequence
-                if seq:
-                    pad = ''
-                    if end_pos > len(seq):
-                        pad = '-' * (end_pos - len(seq))
-                    slice_fasta_fh.write(seq[start_pos-1:end_pos] + pad + "\n")
-
+            if line[0] == '>':  # previous sequence is finished.  Write out previous sequence
+                window_seq = __get_window_seq(seq=seq, start_pos=start_pos, end_pos=end_pos, breadth_thresh=breadth_thresh)
+                if window_seq:
+                    slice_fasta_fh.write(header + "\n")
+                    slice_fasta_fh.write(window_seq + "\n")
+                    total_seq += 1
 
                 seq = ""
+                header = line
 
-                header = line   # Write out current header
-                slice_fasta_fh.write(header + "\n")
             else:   # cache current sequence so that entire sequence is on one line
                 seq += line
 
-        if seq:   # end of fasta file, write out the last sequence still in cache
-            pad = ''
-            if end_pos > len(seq):
-                pad = '-' * (end_pos - len(seq))
-            slice_fasta_fh.write(seq[start_pos-1:end_pos] + pad + "\n")
-    return slice_fasta_filename
+        window_seq = __get_window_seq(seq=seq, start_pos=start_pos, end_pos=end_pos, breadth_thresh=breadth_thresh)
+        if window_seq:
+            slice_fasta_fh.write(header + "\n")
+            slice_fasta_fh.write(window_seq + "\n")
+            total_seq += 1
+
+    return total_seq
 
 
 def get_best_window_size_from_sam(sam_filename, ref_filename, depth_thresh, breadth_thresh, min_size):
@@ -345,34 +372,34 @@ def get_seq_dnds(dnds_tsv_dir, ref_fasta_filename, pvalue_thresh):
     We only want significant Dn/Ds.  Use the normalized value so that dn/ds can be compared from every window.
     """
 
+    refs = Utility.get_fasta_headers(fasta_filename=ref_fasta_filename)
     ref2nuclen = Utility.get_seq2len(ref_fasta_filename)
     ref2SeqDnDsInfo = {}
     for dnds_tsv_filename in glob.glob(dnds_tsv_dir + os.sep + "*.dnds.tsv"):
-        with open(dnds_tsv_filename, 'r') as dnds_fh:  # TODO:  get all the files in teh directory
-            # TODO:  get the actual reference name from the filename
-            ref = 'TestSample-RT'
+        with open(dnds_tsv_filename, 'r') as dnds_fh:
 
-            if not ref in ref2SeqDnDsInfo:
-                # TODO:  check what happens if window length is not divisible by 3
-                ref_codon_len = ref2nuclen[ref]/NUC_PER_CODON
-                ref2SeqDnDsInfo[ref] = SeqDnDsInfo(ref_codon_len)
+            for ref in refs:
+                if not ref in ref2SeqDnDsInfo:
+                    # TODO:  check what happens if window length is not divisible by 3
+                    ref_codon_len = ref2nuclen[ref]/NUC_PER_CODON
+                    ref2SeqDnDsInfo[ref] = SeqDnDsInfo(ref_codon_len)
 
-            # TestSample-RT_S17.HIV1B-vif.remap.msa.14_114.dnds.tsv
-            # NB:  the *dnds.tsv file names use 1-based nucleotide position numbering
-            # Window starts at this 1-based nucleotide position with respect to the reference
-            win_start_nuc_pos_1based_wrt_ref = int(dnds_tsv_filename.split('.dnds.tsv')[0].split('.')[-1].split('_')[0])
-            # Window starts at this 0-based codon position with respect to the reference
-            win_start_codon_idx_0based_wrt_ref = (win_start_nuc_pos_1based_wrt_ref - 1)/NUC_PER_CODON
+                # TestSample-RT_S17.HIV1B-vif.remap.msa.14_114.dnds.tsv
+                # NB:  the *dnds.tsv file names use 1-based nucleotide position numbering
+                # Window starts at this 1-based nucleotide position with respect to the reference
+                win_start_nuc_pos_1based_wrt_ref = int(dnds_tsv_filename.split('.dnds.tsv')[0].split('.')[-1].split('_')[0])
+                # Window starts at this 0-based codon position with respect to the reference
+                win_start_codon_idx_0based_wrt_ref = (win_start_nuc_pos_1based_wrt_ref - 1)/NUC_PER_CODON
 
-            reader = csv.DictReader(dnds_fh, delimiter='\t',)
-            for offset_0based, codon_row in enumerate(reader):    # Every codon site is a row in the *.dnds.tsv file
-                pval = float(codon_row[HYPHY_TSV_PROB_FULLSEQ_NS])
-                if pval <= pvalue_thresh:
-                    ref_codon_idx_0based = win_start_codon_idx_0based_wrt_ref + offset_0based
+                reader = csv.DictReader(dnds_fh, delimiter='\t',)
+                for offset_0based, codon_row in enumerate(reader):    # Every codon site is a row in the *.dnds.tsv file
+                    pval = float(codon_row[HYPHY_TSV_PROB_FULLSEQ_NS])
+                    if pval <= pvalue_thresh:
+                        ref_codon_idx_0based = win_start_codon_idx_0based_wrt_ref + offset_0based
 
-                    # Dict  {ref1:SeqDnDsInfo, ref2: SeqDnDsInfo}
-                    dnds = float(codon_row[HYPHY_TSV_SCALED_DNDS_COL])
-                    ref2SeqDnDsInfo[ref].add_site_dnds(ref_codon_idx_0based, dnds)
+                        # Dict  {ref1:SeqDnDsInfo, ref2: SeqDnDsInfo}
+                        dnds = float(codon_row[HYPHY_TSV_SCALED_DNDS_COL])
+                        ref2SeqDnDsInfo[ref].add_site_dnds(ref_codon_idx_0based, dnds)
 
         return ref2SeqDnDsInfo
 
