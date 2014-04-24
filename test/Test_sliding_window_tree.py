@@ -14,9 +14,10 @@ import subprocess
 
 SAM_FILENAME = "./simulations/data/sample_genomes.grinder-reads.rename.sam"
 MAPQ_CUTOFF = 0  # alignment quality cutoff
-MAX_PROP_N = 0  # maximum proportion of N bases in MSA-aligned sequence
+MAX_PROP_N = 0.2  # maximum proportion of N bases in MSA-aligned sequence
 READ_QUAL_CUTOFF = 20   # Phred quality score cutoff [0,40]
 REFERENCE_FASTA = "./simulations/data/sample_genomes.consensus.fas"
+OUT_DIR = "./simulations/data/out"
 
 GAMMA_DNDS_LOOKUP_FILENAME = "./simulations/data/sample_genomes.rates"
 GAMMA_DNDS_LOOKUP_COL_INTERVAL = "Interval"
@@ -99,6 +100,7 @@ class TestSlidingWindowTree(unittest.TestCase):
 
             ref2SeqDnDsInfo = sliding_window_tree.process_windows(sam_filename=SAM_FILENAME,
                                                                 ref_fasta_filename=REFERENCE_FASTA,
+                                                                out_dir=OUT_DIR,
                                                                 mapping_cutoff=MAPQ_CUTOFF,
                                                                 read_qual_cutoff=READ_QUAL_CUTOFF,
                                                                 max_prop_N=MAX_PROP_N,
