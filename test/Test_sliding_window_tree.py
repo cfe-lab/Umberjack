@@ -4,6 +4,7 @@ import sys, os
 import array
 import csv
 import subprocess
+import Test_slice_miseq
 
 # For now, use a *.remap.sam file (paired end reads aligned to a consensus sequence with indels removed).
 # SAM_FILENAME = "./data/TestSample-RT_S17.HIV1B-vif.remap.sam"
@@ -43,24 +44,6 @@ BOWTIE_BUILD_EXE=""
 
 
 class TestSlidingWindowTree(unittest.TestCase):
-
-    def __get_expected_dnds(self, dnds_lookup_filename):
-        """
-        Look dn/ds from sample_genomes.rates file.
-        :rtype array of float: array where each element is a site dn/ds value.
-        :param indelible_rates_filename str: full file path to indelible rates output file.
-        :param scaling.factor int: the amount the the branch lengths are scaled
-        """
-
-        with open(dnds_lookup_filename, 'r') as lookup_fh:
-            site0based_to_dnds = array.array('f')
-            for row in csv.DictReader(lookup_fh, delimiter=','):
-                site = row[GAMMA_DNDS_LOOKUP_COL_SITE]
-                dnds = row[GAMMA_DNDS_LOOKUP_COL_DNDS]
-                site0based_to_dnds.append(float(dnds))
-
-            return site0based_to_dnds
-
 
     # def __align(self, ref_fasta_filename, logfilename, threads, query_fastq_filename):
     #     query_filename_prefix = os.path.splitext(query_fastq_filename)[0]
