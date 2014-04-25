@@ -4,7 +4,8 @@ import sys, os
 import array
 import csv
 import subprocess
-import Test_slice_miseq
+
+
 
 # For now, use a *.remap.sam file (paired end reads aligned to a consensus sequence with indels removed).
 # SAM_FILENAME = "./data/TestSample-RT_S17.HIV1B-vif.remap.sam"
@@ -41,10 +42,29 @@ BWA_EXE = "/home/thuy/programs/bwa/bwa-0.7.8/bwa"  # TODO:  do not hardcode
 BOWTIE_EXE = ""
 BOWTIE_BUILD_EXE=""
 
+THREADS = 11
+
 
 
 class TestSlidingWindowTree(unittest.TestCase):
 
+    @staticmethod
+    def expected_dnds(dnds_lookup_filename):
+        """
+        Look dn/ds from sample_genomes.rates file.
+        :rtype array of float: array where each element is a site dn/ds value.
+        :param indelible_rates_filename str: full file path to indelible rates output file.
+        :param scaling.factor int: the amount the the branch lengths are scaled
+        """
+
+        with open(dnds_lookup_filename, 'r') as lookup_fh:
+            site0based_to_dnds = array.array('f')
+            for row in csv.DictReader(lookup_fh, delimiter=','):
+                site = row[GAMMA_DNDS_LOOKUP_COL_SITE]
+                dnds = row[GAMMA_DNDS_LOOKUP_COL_DNDS]
+                site0based_to_dnds.append(float(dnds))
+
+            return site0based_to_dnds
     # def __align(self, ref_fasta_filename, logfilename, threads, query_fastq_filename):
     #     query_filename_prefix = os.path.splitext(query_fastq_filename)[0]
     #     sai_filename = query_filename_prefix + ".sai"   # bwa aln output file
@@ -79,7 +99,7 @@ class TestSlidingWindowTree(unittest.TestCase):
         actual_dnds_filename = './simulations/data/actual_dnds.tsv'
         with open(actual_dnds_filename, 'w') as dnds_fh:
             dnds_fh.write("ref\tsite\tdnds")
-            expected_site_2_dnds = self.__get_expected_dnds(GAMMA_DNDS_LOOKUP_FILENAME)
+            expected_site_2_dnds = TestSlidingWindowTree.expected_dnds(GAMMA_DNDS_LOOKUP_FILENAME)
 
             ref2SeqDnDsInfo = sliding_window_tree.process_windows(sam_filename=SAM_FILENAME,
                                                                 ref_fasta_filename=REFERENCE_FASTA,
@@ -88,7 +108,8 @@ class TestSlidingWindowTree(unittest.TestCase):
                                                                 read_qual_cutoff=READ_QUAL_CUTOFF,
                                                                 max_prop_N=MAX_PROP_N,
                                                                 window_breadth_thresh=MIN_WINDOW_BREADTH_COV_FRACTION,
-                                                                window_depth_thresh=MIN_WINDOW_DEPTH_COV)
+                                                                window_depth_thresh=MIN_WINDOW_DEPTH_COV,
+                                                                threads=THREADS)
 
             for ref in ref2SeqDnDsInfo:
                 for site in range(ref2SeqDnDsInfo[ref].get_seq_len()):

@@ -13,7 +13,7 @@ HYPHY_EXE = "/home/thuy/programs/hyphy/hyphy-2.2/HYPHYMP"
 HYPHY_LIBDIR = "/home/thuy/programs/hyphy/hyphy-2.2/res/TemplateBatchFiles/"
 HYPHY_BASEDIR = "/home/thuy/programs/hyphy/hyphy-2.2/"
 
-FASTTREE_EXE = "/home/thuy/programs/fasttree/FastTree"
+FASTTREE_EXE = "/home/thuy/programs/fasttree/FastTreeMP"
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
@@ -26,7 +26,7 @@ NUC_PER_CODON = 3
         
 
 def process_windows(ref_fasta_filename, sam_filename, out_dir, mapping_cutoff, read_qual_cutoff, max_prop_N,
-                    window_depth_thresh, window_breadth_thresh):
+                    window_depth_thresh, window_breadth_thresh, threads=1):
     """
     Slides window along genome.
     Creates the multiple sequence aligned fasta files for the window.
@@ -38,7 +38,7 @@ def process_windows(ref_fasta_filename, sam_filename, out_dir, mapping_cutoff, r
     # TODO:  do not hyphy from PATH
 
     # keep track of reference contig/chromosome and its length
-    ref_to_nuclen = Utility.get_fasta_headers(fasta_filename=ref_fasta_filename)
+    ref_to_nuclen = Utility.get_seq2len(fasta_filename=ref_fasta_filename)
 
     # For every reference contig/chromosome, find the ave dnds by codon site
     for ref in ref_to_nuclen:
@@ -51,11 +51,12 @@ def process_windows(ref_fasta_filename, sam_filename, out_dir, mapping_cutoff, r
         sam_filename_prefix = os.path.splitext(sam_filename_nopath)[0]
         msa_filename_prefix = ref_out_dir + os.sep + sam_filename_prefix + "." + ref + ".msa"
         msa_fasta_filename = msa_filename_prefix + ".fasta"
-        LOGGER.debug("Start Full MSA-Fasta from SAM for ref " + ref)
-        sam_handler.create_msa_fasta_from_sam(sam_filename=sam_filename, ref=ref, ref_len=ref_to_nuclen[ref],
-                                              out_fasta_filename=msa_fasta_filename, mapping_cutoff=mapping_cutoff,
-                                              read_qual_cutoff=read_qual_cutoff, max_prop_N=max_prop_N)
-        LOGGER.debug("Done Full MSA-Fasta from SAM for ref " + ref)
+        # TODO:  uncomment me
+        # LOGGER.debug("Start Full MSA-Fasta from SAM for ref " + ref)
+        # sam_handler.create_msa_fasta_from_sam(sam_filename=sam_filename, ref=ref, ref_len=ref_to_nuclen[ref],
+        #                                       out_fasta_filename=msa_fasta_filename, mapping_cutoff=mapping_cutoff,
+        #                                       read_qual_cutoff=read_qual_cutoff, max_prop_N=max_prop_N)
+        # LOGGER.debug("Done Full MSA-Fasta from SAM for ref " + ref)
 
 
         #  Get the best window size
@@ -94,11 +95,13 @@ def process_windows(ref_fasta_filename, sam_filename, out_dir, mapping_cutoff, r
                 fastree_logfilename = msa_window_filename_prefix + ".fasttree.log"
                 fastree_treefilename = msa_window_filename_prefix + ".tree"
                 fasttree_stdouterr_filename = msa_window_filename_prefix + ".fasttree.stdouterr.txt"
+                os.environ['OMP_NUM_THREADS'] = str(threads)
                 with open(fasttree_stdouterr_filename, 'w') as fasttree_stdouterr_fh:
                     subprocess.check_call([FASTTREE_EXE, '-gtr', '-nt', '-nosupport',
                                            '-log', fastree_logfilename, '-out', fastree_treefilename,
                                            msa_window_fasta_filename],
-                                          stdout=fasttree_stdouterr_fh, stderr=fasttree_stdouterr_fh, shell=False)
+                                          stdout=fasttree_stdouterr_fh, stderr=fasttree_stdouterr_fh, shell=False,
+                                          env=os.environ)
                 LOGGER.debug("Done Fasttree for window " + str(start_nucpos) + "-" + str(end_nucpos) + " for ref " + ref)
 
                 LOGGER.debug("Start HyPhy for window " + str(start_nucpos) + "-" + str(end_nucpos) + " for ref " + ref)
@@ -126,7 +129,7 @@ def process_windows(ref_fasta_filename, sam_filename, out_dir, mapping_cutoff, r
                 # Feed window tree into hyphy to find dnds for the window
                 hyphy_log = msa_window_filename_prefix + ".hyphy.log"
                 with open(hyphy_log, 'w') as hyphy_log_fh:
-                    hyphy_cmd = [HYPHY_EXE, "BASEPATH="+HYPHY_BASEDIR, SELECTION_BF]
+                    hyphy_cmd = [HYPHY_EXE, "BASEPATH="+HYPHY_BASEDIR, "CPU=" + str(threads), SELECTION_BF]
                     hyphy_proc = subprocess.Popen(hyphy_cmd,
                                                   stdin=subprocess.PIPE, stdout=hyphy_log_fh, stderr=hyphy_log_fh, shell=False)
                     hyphy_proc.communicate(hyphy_input_str)
