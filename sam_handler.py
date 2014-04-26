@@ -3,7 +3,7 @@ import os
 import subprocess
 import logging
 import Utility
-from enum import IntEnum
+#from enum import IntEnum
 
 # Matches 1+ occurrences of a number, followed by a letter from {MIDNSHPX=}
 CIGAR_RE = re.compile('[0-9]+[MIDNSHPX=]')
@@ -14,7 +14,7 @@ NUCL_RE = re.compile('[^nN\-]')
 LOGGER = logging.getLogger(__name__)
 
 
-class SamFlag (IntEnum):
+class SamFlag:
     IS_PAIRED =                0x001
     IS_MAPPED_IN_PROPER_PAIR = 0x002
     IS_UNMAPPED =              0x004
@@ -238,7 +238,7 @@ def create_msa_fasta_from_sam(sam_filename, ref, ref_len, out_fasta_filename, ma
             # From SAM specs:
             # "For a unmapped paired-end or mate-pair read whose mate is mapped, the unmapped read
             #   should have RNAME and POS identical to its mate"
-            if (SamFlag.IS_UNMAPPED.value & int(flag) or SamFlag.IS_SECONDARY_ALIGNMENT & int(flag) or
+            if (SamFlag.IS_UNMAPPED & int(flag) or SamFlag.IS_SECONDARY_ALIGNMENT & int(flag) or
                     refname == '*' or cigar == '*' or int(pos) == 0 or int(mapq) < mapping_cutoff):
                 continue
 
