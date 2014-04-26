@@ -77,3 +77,12 @@ def get_longest_seq_size_from_fasta(fasta_filename):
         longest_seq_len = max(seq_len, longest_seq_len)
 
     return longest_seq_len
+
+
+def get_total_seq_from_fasta(fasta_filename):
+    count = 0
+    with open(fasta_filename) as fh:
+        for line in enumerate(fh):
+            if line[0] == '>':
+                count += 1
+    return count
