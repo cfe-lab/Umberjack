@@ -21,13 +21,13 @@ head(actual_dnds)
 ```
 
 ```
-##         Ref Site  dNdS
-## 1 consensus    1 78.41
-## 2 consensus    2 37.36
-## 3 consensus    3 12.05
-## 4 consensus    4 10.78
-## 5 consensus    5 18.60
-## 6 consensus    6  5.78
+##         Ref Site     dNdS
+## 1 consensus    1 4.213074
+## 2 consensus    2 0.008495
+## 3 consensus    3 0.013434
+## 4 consensus    4 0.113133
+## 5 consensus    5 0.206868
+## 6 consensus    6 0.128783
 ```
 
 ```r
@@ -52,7 +52,7 @@ str(actual_dnds)
 ## 'data.frame':	3000 obs. of  3 variables:
 ##  $ Ref : Factor w/ 1 level "consensus": 1 1 1 1 1 1 1 1 1 1 ...
 ##  $ Site: int  1 2 3 4 5 6 7 8 9 10 ...
-##  $ dNdS: num  78.4 37.4 12.1 10.8 18.6 ...
+##  $ dNdS: num  4.21307 0.00849 0.01343 0.11313 0.20687 ...
 ```
 
 ```r
@@ -61,13 +61,13 @@ summary(actual_dnds)
 
 ```
 ##         Ref            Site           dNdS     
-##  consensus:3000   Min.   :   1   Min.   :-4.5  
+##  consensus:3000   Min.   :   1   Min.   :-0.1  
 ##                   1st Qu.: 751   1st Qu.: 0.0  
-##                   Median :1500   Median : 1.0  
-##                   Mean   :1500   Mean   : 2.2  
-##                   3rd Qu.:2250   3rd Qu.: 2.8  
-##                   Max.   :3000   Max.   :78.4  
-##                                  NA's   :2624
+##                   Median :1500   Median : 0.0  
+##                   Mean   :1500   Mean   : 0.0  
+##                   3rd Qu.:2250   3rd Qu.: 0.0  
+##                   Max.   :3000   Max.   : 4.2  
+##                                  NA's   :2446
 ```
 
 ```r
@@ -143,13 +143,13 @@ print(htest)
 ## 	Wilcoxon signed rank test
 ## 
 ## data:  actual_dnds$dNdS and expected_dnds$Omega
-## V = 52223, p-value = 3.063e-16
+## V = 749, p-value < 2.2e-16
 ## alternative hypothesis: true location shift is not equal to 0
 ## 95 percent confidence interval:
-##  0.6889 1.1957
+##  -0.4476 -0.3933
 ## sample estimates:
 ## (pseudo)median 
-##         0.9287
+##        -0.4062
 ```
 
 
@@ -163,13 +163,13 @@ ggplot(fullDat, aes(x = actual, y = expected)) + geom_smooth(method = lm)
 ```
 
 ```
-## Warning: Removed 2624 rows containing missing values (stat_smooth).
+## Warning: Removed 2446 rows containing missing values (stat_smooth).
 ```
 
 ![plot of chunk unnamed-chunk-3](figure/unnamed-chunk-3.png) 
 
 
-Scatterplot the dn/ds across the genome
+**Scatterplot the dn-ds across the genome**
 
 
 ```r
@@ -179,13 +179,13 @@ head(fullDatBySource)
 ```
 
 ```
-##   site source  dnds
-## 1    1 actual 78.41
-## 2    2 actual 37.36
-## 3    3 actual 12.05
-## 4    4 actual 10.78
-## 5    5 actual 18.60
-## 6    6 actual  5.78
+##   site source     dnds
+## 1    1 actual 4.213074
+## 2    2 actual 0.008495
+## 3    3 actual 0.013434
+## 4    4 actual 0.113133
+## 5    5 actual 0.206868
+## 6    6 actual 0.128783
 ```
 
 ```r
@@ -207,10 +207,10 @@ str(fullDatBySource)
 ```
 
 ```
-## 'data.frame':	3376 obs. of  3 variables:
+## 'data.frame':	3554 obs. of  3 variables:
 ##  $ site  : int  1 2 3 4 5 6 7 8 9 10 ...
 ##  $ source: Factor w/ 2 levels "actual","expected": 1 1 1 1 1 1 1 1 1 1 ...
-##  $ dnds  : num  78.4 37.4 12.1 10.8 18.6 ...
+##  $ dnds  : num  4.21307 0.00849 0.01343 0.11313 0.20687 ...
 ```
 
 ```r
@@ -218,19 +218,19 @@ summary(fullDatBySource)
 ```
 
 ```
-##       site           source          dnds      
-##  Min.   :   1   actual  : 376   Min.   :-4.47  
-##  1st Qu.: 469   expected:3000   1st Qu.: 0.15  
-##  Median :1312                   Median : 0.45  
-##  Mean   :1355                   Mean   : 0.69  
-##  3rd Qu.:2156                   3rd Qu.: 0.75  
-##  Max.   :3000                   Max.   :78.41
+##       site           source          dnds       
+##  Min.   :   1   actual  : 554   Min.   :-0.072  
+##  1st Qu.: 446   expected:3000   1st Qu.: 0.150  
+##  Median :1224                   Median : 0.350  
+##  Mean   :1313                   Mean   : 0.420  
+##  3rd Qu.:2112                   3rd Qu.: 0.550  
+##  Max.   :3000                   Max.   : 4.213
 ```
 
 ```r
-ggplot(fullDatBySource[fullDatBySource$site < 400, ], aes(x = site, y = dnds, 
-    color = source)) + geom_point(main = "Regression of dnds by site", xlab = "Codon Site Along Genome", 
-    ylab = "dN/dS")
+ggplot(fullDatBySource[fullDatBySource$site < 500, ], aes(x = site, y = dnds, 
+    color = source)) + geom_point() + xlab("Codon Site Along Genome") + ylab("Normalized dN-dS") + 
+    ggtitle("dn-ds by site")
 ```
 
 ![plot of chunk unnamed-chunk-4](figure/unnamed-chunk-4.png) 
@@ -242,7 +242,7 @@ print(dnds_cor)
 ```
 
 ```
-## [1] 0.003907
+## [1] 0.02211
 ```
 
 

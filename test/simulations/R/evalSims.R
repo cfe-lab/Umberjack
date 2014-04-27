@@ -28,14 +28,16 @@ fullDat <- data.frame(site=expected_dnds$Site,
                       expected=expected_dnds$Omega)
 ggplot(fullDat, aes(x=actual, y=expected)) + geom_smooth(method=lm)
 
-#' Scatterplot the dn/ds across the genome
+#' **Scatterplot the dn-ds across the genome**
 fullDatBySource <- reshape2:::melt.data.frame(data=fullDat, na.rm = TRUE, id.vars="site", variable.name="source", value.name="dnds")
 head(fullDatBySource)
 tail(fullDatBySource)
 str(fullDatBySource)
 summary(fullDatBySource)
-ggplot(fullDatBySource[fullDatBySource$site < 400,], aes(x=site, y=dnds, color=source)) + 
-  geom_point(main="Regression of dnds by site", xlab="Codon Site Along Genome", ylab="dN/dS")
+ggplot(fullDatBySource[fullDatBySource$site < 500,], aes(x=site, y=dnds, color=source) ) + geom_point() + 
+  xlab("Codon Site Along Genome") + 
+  ylab("Normalized dN-dS") + 
+  ggtitle("dn-ds by site")
 
 #+ **Find how correlated the actual vs expected dnds are**
 dnds_cor <- cor(actual_dnds$dNdS, expected_dnds$Omega, method="spearman", use="pairwise.complete.obs")
