@@ -6,14 +6,6 @@ import csv
 import subprocess
 
 
-
-# For now, use a *.remap.sam file (paired end reads aligned to a consensus sequence with indels removed).
-# SAM_FILENAME = "./data/TestSample-RT_S17.HIV1B-vif.remap.sam"
-# MAPQ_CUTOFF = 0  # alignment quality cutoff
-# MAX_PROP_N = 0  # maximum proportion of N bases in MSA-aligned sequence
-# READ_QUAL_CUTOFF = 20   # Phred quality score cutoff [0,40]
-# REFERENCE_FASTA = "./data/TestSample-RT_S17.HIV1B-vif.10.conseq"
-
 SAM_FILENAME = "./simulations/data/sample_genomes.grinder-reads.rename.sam"
 MAPQ_CUTOFF = 10  # alignment quality cutoff
 MAX_PROP_N = 0.1  # maximum proportion of N bases in MSA-aligned sequence
@@ -22,6 +14,7 @@ REFERENCE_FASTA = "./simulations/data/sample_genomes.consensus.fas"
 REF = "consensus"
 REF_LEN = 9000
 OUT_DIR = "./simulations/data/out" + os.sep + REF
+ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + 'ave_dnds_by_site.tsv'
 
 GAMMA_DNDS_LOOKUP_FILENAME = "./simulations/data/sample_genomes.rates"
 GAMMA_DNDS_LOOKUP_COL_INTERVAL = "Interval"
@@ -64,35 +57,7 @@ class TestSlidingWindowTree(unittest.TestCase):
                 site0based_to_dnds.append(float(dnds))
 
             return site0based_to_dnds
-    # def __align(self, ref_fasta_filename, logfilename, threads, query_fastq_filename):
-    #     query_filename_prefix = os.path.splitext(query_fastq_filename)[0]
-    #     sai_filename = query_filename_prefix + ".sai"   # bwa aln output file
-    #     with open(logfilename, 'w') as logfile_fh, open(sai_filename, 'w') as sai_fh:
-    #         subprocess.check_call([BWA_EXE, 'index', ref_fasta_filename], stderr=logfile_fh, stdout=logfile_fh)
-    #         subprocess.check_call([BWA_EXE, 'aln', '-t', threads, ref_fasta_filename, query_fastq_filename],
-    #                               stderr=logfile_fh, stdout=sai_fh)
-    #
-    #         # TODO:  call this for pair 1 and pair 2
-    #         subprocess.check_call([BWA_EXE, 'aln', '-t', threads, ref_fasta_filename, query_fastq_filename],
-    #                               stderr=logfile_fh, stdout=sai_fh)
-    #
-    #         subprocess.check_call([BWA_EXE, 'sampe', '-P', ref_fasta_filename, ])
-    #         sampe 	bwa sampe [-a maxInsSize] [-o maxOcc] [-n maxHitPaired] [-N maxHitDis] [-P] <in.db.fasta> <in1.sai> <in2.sai> <in1.fq> <in2.fq> > <out.sam>
-    #
-    # def __align(self, ref_fasta_filename, logfilename, threads, query_fq_1_filename, query_fq_2_filename):
-    #     MEAN_FRAG_LEN = 500
-    #     MAX_FRAG_LEN = MEAN_FRAG_LEN * 0,25
-    #     sam_filename_prefix = os.path.splitext(logfilename)[0]
-    #
-    #     subprocess.check_call(BOWTIE_BUILD_EXE, ref_fasta_filename)
-    #     subprocess.check_call(BOWTIE_EXE, '--local', '-p', threads,
-    #                           '-X', MAX_FRAG_LEN,
-    #                           '-x', ref_fasta_filename,
-    #                           '-1', query_fq_1_filename,
-    #                           '-2', query_fq_2_filename,
-    #                           '-S', sam_filename_prefix)
-    #
-    #
+
     # def test_process_windows(self):
     #
     #     startpos = sys.argv[1]
@@ -119,9 +84,9 @@ class TestSlidingWindowTree(unittest.TestCase):
 
 
     def test_eval_windows_async(self):
-        actual_dnds_filename = './simulations/data/out/consensus/actual_dnds.tsv'
-        with open(actual_dnds_filename, 'w') as dnds_fh:
-            dnds_fh.write("ref\tsite\tdnds")
+
+        with open(ACTUAL_DNDS_FILENAME, 'w') as dnds_fh:
+            dnds_fh.write("Ref\tSite\tdNdS")
             expected_site_2_dnds = TestSlidingWindowTree.expected_dnds(GAMMA_DNDS_LOOKUP_FILENAME)
 
             seq_dnds_info = sliding_window_tree.eval_windows_async(sam_filename=SAM_FILENAME,

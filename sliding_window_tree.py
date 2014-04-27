@@ -219,8 +219,14 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir,
     while len(process_results):
         process_result = process_results[0]
         if process_result.ready():
-            process_result.get()
-        process_results.pop(0)
+            try:
+                process_result.get()
+            except Exception, e:
+                LOGGER.error("Error in one of child processes:\n" + e.message)
+                raise e
+            process_results.pop(0)
+
+
         time.sleep(1)
     LOGGER.debug("Done waiting for window queue.  About to tabulate dn/ds results.")
 
