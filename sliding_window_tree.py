@@ -48,18 +48,26 @@ def create_full_msa_fasta(sam_filename, out_dir, ref, ref_len, mapping_cutoff, r
     return msa_fasta_filename
 
 
-def tabulate_dnds(dnds_tsv_dir, ref, ref_len, pvalue_thresh):
-    LOGGER.debug("Start Ave Dn/DS for all windows for ref " + ref)
-    ref2SeqDnDsInfo = slice_miseq.get_seq_dnds_info(dnds_tsv_dir=dnds_tsv_dir, pvalue_thresh=pvalue_thresh, ref=ref,
-                                                    ref_codon_len=ref_len/NUC_PER_CODON)
-    LOGGER.debug("Done Ave Dn/DS for all windows  for ref " + ref)
+def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_dnds_tsv_filename, comments):
+    LOGGER.debug("Start Ave Dn/DS for all windows for ref " + ref + " " + output_dnds_tsv_filename)
+    seq_dnds_info = slice_miseq.get_seq_dnds_info(dnds_tsv_dir=dnds_tsv_dir, pvalue_thresh=pvalue_thresh, ref=ref,
+                                                    ref_codon_len=ref_nuc_len/NUC_PER_CODON)
+    with open(output_dnds_tsv_filename, 'w') as dnds_fh:
+        dnds_fh.write("# " + comments + "\n")
+        dnds_fh.write("Ref\tSite\tdNdS\n")
+        for site in range(seq_dnds_info.get_seq_len()):
+            site_dnds = seq_dnds_info.get_site_ave_dnds(site)
+            dnds_fh.write(ref + "\t" + str(site) + "\t" + str(site_dnds) + "\n")
+
+    LOGGER.debug("Done Ave Dn/DS for all windows  for ref " + ref + ".  Wrote to " + output_dnds_tsv_filename)
+    return seq_dnds_info
 
 
-def eval_windows(ref, ref_len, sam_filename, out_dir,
+def eval_windows(ref, ref_len, sam_filename, out_dir, output_dnds_tsv_filename,
                  mapping_cutoff, read_qual_cutoff, max_prop_N,
                  start_nucpos, end_nucpos,
                  window_depth_thresh, window_breadth_thresh, windowsize=300,
-                 pvalue=0.05, threads=1):
+                 pvalue=0.05, threads=1, ):
     """
     Slides window along genome.
     Creates the multiple sequence aligned fasta files for the window.
@@ -87,9 +95,20 @@ def eval_windows(ref, ref_len, sam_filename, out_dir,
                     ref=ref, ref_len=ref_len,
                     pvalue=pvalue, threads=threads)
 
-    tabulate_dnds(dnds_tsv_dir=out_dir, pvalue_thresh=pvalue, ref=ref, ref_len=ref_len)
-    seq_dnds_info = slice_miseq.get_seq_dnds_info(dnds_tsv_dir=out_dir, pvalue_thresh=pvalue,
-                                                                ref=ref, ref_codon_len=ref_len)
+    dnds_tsv_comments = ("ref=" + ref + ","
+                         "ref_len=" + str(ref_len) + "," +
+                         "sam=" + sam_filename + "," +
+                         "mapping qual cutoff=" + str(mapping_cutoff) + "," +
+                         "read qual cutoff=" + str(read_qual_cutoff) + "," +
+                         "max fraction N=" + str(max_prop_N) + "," +
+                         "start nuc pos=" + str(start_nucpos) + "," +
+                         "end nuc pos=" + str(end_nucpos) + "," +
+                         "windowsize=" + str(windowsize) + "," +
+                         "window depth thresh=" + str(window_depth_thresh) + "," +
+                         "window breadth fraction=" + str(window_breadth_thresh) + "," +
+                         "pvalue=" + str(pvalue))
+    seq_dnds_info = tabulate_dnds(dnds_tsv_dir=out_dir, pvalue_thresh=pvalue, ref=ref, ref_nuc_len=ref_len,
+                                  comments=dnds_tsv_comments, output_dnds_tsv_filename=output_dnds_tsv_filename)
     return seq_dnds_info
 
 
@@ -113,7 +132,7 @@ def eval_window(msa_fasta_filename, window_depth_thresh, window_breadth_thresh, 
     msa_fasta_filename_prefix = os.path.splitext(msa_fasta_filename)[0]
     msa_window_filename_prefix = msa_fasta_filename_prefix + "." + str(start_nucpos) + "_" + str(end_nucpos)
     msa_window_fasta_filename = msa_window_filename_prefix + ".fasta"
-    total_slice_seq = 0
+    total_slice_seq = -1
     LOGGER.debug("Start Create Sliced MSA-Fasta " + msa_window_fasta_filename)
     if not os.path.exists(msa_window_fasta_filename) or os.path.getsize(msa_window_fasta_filename) <= 0:
         total_slice_seq = slice_miseq.create_slice_msa_fasta(fasta_filename=msa_fasta_filename,
@@ -124,13 +143,6 @@ def eval_window(msa_fasta_filename, window_depth_thresh, window_breadth_thresh, 
                      ".  Wrote " + str(total_slice_seq) + " to file")
     else:
         LOGGER.warn("Found existing Sliced MSA-Fasta " + msa_window_fasta_filename + ". Not regenerating.")
-        total_slice_seq = Utility.get_total_seq_from_fasta(msa_window_fasta_filename)
-
-    if total_slice_seq < window_depth_thresh:
-        LOGGER.warn("MSA Window " + msa_window_fasta_filename + " does not satisfy window depth constraints")
-    else:
-        # Feed window fasta into fasttree to make a tree
-        LOGGER.debug("MSA Window " + msa_window_fasta_filename + " satisfies window depth constraints")
 
 
         fastree_logfilename = msa_window_filename_prefix + ".fasttree.log"
@@ -138,6 +150,15 @@ def eval_window(msa_fasta_filename, window_depth_thresh, window_breadth_thresh, 
         fasttree_stdouterr_filename = msa_window_filename_prefix + ".fasttree.stdouterr.txt"
         LOGGER.debug("Start Fasttree for window " + fastree_treefilename)
         if not os.path.exists(fastree_treefilename) or os.path.getsize(fastree_treefilename) <= 0:
+            # Check whether the msa sliced fasta has enough reads to make a good tree
+            if total_slice_seq < 0:
+                total_slice_seq = Utility.get_total_seq_from_fasta(msa_window_fasta_filename)
+            if total_slice_seq < window_depth_thresh:
+                LOGGER.warn("MSA Window " + msa_window_fasta_filename + " does not satisfy window depth constraints")
+            else:
+                LOGGER.debug("MSA Window " + msa_window_fasta_filename + " satisfies window depth constraints")
+
+            # Feed window fasta into fasttree to make a tree
             os.environ[ENV_OMP_NUM_THREADS] = str(threads)
             with open(fasttree_stdouterr_filename, 'w') as fasttree_stdouterr_fh:
                 subprocess.check_call([FASTTREE_EXE, '-gtr', '-nt', '-nosupport',
@@ -189,7 +210,7 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir,
                        mapping_cutoff, read_qual_cutoff, max_prop_N,
                        start_nucpos, end_nucpos,
                        windowsize, window_depth_thresh, window_breadth_thresh,
-                       pvalue, threads_per_window, concurrent_windows):
+                       pvalue, threads_per_window, concurrent_windows, output_dnds_tsv_filename):
     """
     Launch a separate process to analyze each window.
     Each window can use up to <threads_per_window> threads.
@@ -230,20 +251,19 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir,
         time.sleep(1)
     LOGGER.debug("Done waiting for window queue.  About to tabulate dn/ds results.")
 
-    tabulate_dnds(dnds_tsv_dir=out_dir, pvalue_thresh=pvalue, ref=ref, ref_len=ref_len)
-    seq_dnds_info = slice_miseq.get_seq_dnds_info(dnds_tsv_dir=out_dir, pvalue_thresh=pvalue,
-                                                                ref=ref, ref_codon_len=ref_len)
+    dnds_tsv_comments = ("ref=" + ref + ","
+                         "ref_len=" + str(ref_len) + "," +
+                         "sam=" + sam_filename + "," +
+                         "mapping qual cutoff=" + str(mapping_cutoff) + "," +
+                         "read qual cutoff=" + str(read_qual_cutoff) + "," +
+                         "max fraction N=" + str(max_prop_N) + "," +
+                         "start nuc pos=" + str(start_nucpos) + "," +
+                         "end nuc pos=" + str(end_nucpos) + "," +
+                         "windowsize=" + str(windowsize) + "," +
+                         "window depth thresh=" + str(window_depth_thresh) + "," +
+                         "window breadth fraction=" + str(window_breadth_thresh) + "," +
+                         "pvalue=" + str(pvalue))
+    seq_dnds_info = tabulate_dnds(dnds_tsv_dir=out_dir, pvalue_thresh=pvalue, ref=ref, ref_nuc_len=ref_len,
+                                  comments=dnds_tsv_comments, output_dnds_tsv_filename=output_dnds_tsv_filename)
     return seq_dnds_info
-
-
-# if __name__ == '__main__':
-#     (ref, ref_len, sam_filename, out_dir,
-#      mapping_cutoff, read_qual_cutoff, max_prop_N, start_nucpos, end_nucpos,
-#      windowsize, window_depth_thresh, window_breadth_thresh,
-#      pvalue, threads_per_window, concurrent_windows) = sys.argv[1:]
-#
-#     eval_windows_async(ref, ref_len, sam_filename, out_dir,
-#                        mapping_cutoff, read_qual_cutoff, max_prop_N, start_nucpos, end_nucpos,
-#                        windowsize, window_depth_thresh, window_breadth_thresh,
-#                        pvalue, threads_per_window, concurrent_windows)
 

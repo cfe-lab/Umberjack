@@ -35,7 +35,7 @@ PVALUE = 0.05
 THREADS_PER_WINDOW = 3
 WINDOW_PROCS = 5
 START_NUCPOS = 1
-END_NUCPOS = 9000
+END_NUCPOS = REF_LEN
 
 
 class TestSlidingWindowTree(unittest.TestCase):
@@ -84,30 +84,26 @@ class TestSlidingWindowTree(unittest.TestCase):
 
 
     def test_eval_windows_async(self):
+        expected_site_2_dnds = TestSlidingWindowTree.expected_dnds(GAMMA_DNDS_LOOKUP_FILENAME)
 
-        with open(ACTUAL_DNDS_FILENAME, 'w') as dnds_fh:
-            dnds_fh.write("Ref\tSite\tdNdS")
-            expected_site_2_dnds = TestSlidingWindowTree.expected_dnds(GAMMA_DNDS_LOOKUP_FILENAME)
+        seq_dnds_info = sliding_window_tree.eval_windows_async(sam_filename=SAM_FILENAME,
+                                                               ref=REF,
+                                                               ref_len=REF_LEN,
+                                                               out_dir=OUT_DIR,
+                                                               mapping_cutoff=MAPQ_CUTOFF,
+                                                               read_qual_cutoff=READ_QUAL_CUTOFF,
+                                                               max_prop_N=MAX_PROP_N,
+                                                               windowsize=300,
+                                                               window_breadth_thresh=MIN_WINDOW_BREADTH_COV_FRACTION,
+                                                               window_depth_thresh=MIN_WINDOW_DEPTH_COV,
+                                                               start_nucpos=START_NUCPOS,
+                                                               end_nucpos=END_NUCPOS,
+                                                               pvalue=PVALUE,
+                                                               threads_per_window=THREADS_PER_WINDOW,
+                                                               concurrent_windows=WINDOW_PROCS,
+                                                               output_dnds_tsv_filename=ACTUAL_DNDS_FILENAME)
 
-            seq_dnds_info = sliding_window_tree.eval_windows_async(sam_filename=SAM_FILENAME,
-                                                                   ref=REF,
-                                                                   ref_len=REF_LEN,
-                                                                   out_dir=OUT_DIR,
-                                                                   mapping_cutoff=MAPQ_CUTOFF,
-                                                                   read_qual_cutoff=READ_QUAL_CUTOFF,
-                                                                   max_prop_N=MAX_PROP_N,
-                                                                   windowsize=300,
-                                                                   window_breadth_thresh=MIN_WINDOW_BREADTH_COV_FRACTION,
-                                                                   window_depth_thresh=MIN_WINDOW_DEPTH_COV,
-                                                                   start_nucpos=START_NUCPOS,
-                                                                   end_nucpos=END_NUCPOS,
-                                                                   pvalue=PVALUE,
-                                                                   threads_per_window=THREADS_PER_WINDOW,
-                                                                   concurrent_windows=WINDOW_PROCS)
 
-            for site in range(seq_dnds_info.get_seq_len()):
-                site_dnds = seq_dnds_info.get_site_ave_dnds(site)
-                dnds_fh.write(REF + "\t" + str(site) + "\t" + str(site_dnds) + "\n")
 
 
 if __name__ == '__main__':
