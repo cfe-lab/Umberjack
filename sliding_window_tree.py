@@ -4,18 +4,8 @@ import os, sys
 import subprocess
 import Utility
 import logging
-import errno
-import multiprocessing
-import time
-
-# TODO:  do not hardcode these
-# SELECTION_BF = "../hyphy/getDnDs.bf"
-SELECTION_BF = "res/TemplateBatchFiles/QuickSelectionDetection.bf"
-HYPHY_EXE = "/home/thuy/gitrepo/hyphy/HYPHYMP"
-HYPHY_LIBDIR = "/home/thuy/gitrepo/hyphy/res/TemplateBatchFiles/"
-HYPHY_BASEDIR = "/home/thuy/gitrepo/hyphy/"
-
-FASTTREE_EXE = "/home/thuy/programs/fasttree/FastTreeMP"
+import argparse
+import pool_traceback
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
@@ -24,8 +14,36 @@ formatter = logging.Formatter('%(asctime)s - [%(levelname)s] [%(name)s] [%(proce
 console_handler.setFormatter(formatter)
 LOGGER.addHandler(console_handler)
 
-NUC_PER_CODON = 3
+SELECTION_BF = "QuickSelectionDetection.bf"
+HYPHY_EXE = "HYPHYMP"
+HYPHY_BASEDIR = "/usr/local/lib/hyphy/TemplateBatchFiles/"
+
+FASTTREE_EXE = "FastTreeMP"
 ENV_OMP_NUM_THREADS = 'OMP_NUM_THREADS'
+
+NUC_PER_CODON = 3
+
+CMDLINE_OPTIONS = [
+    "sam=",
+    "ref=",
+    "ref_len=",
+    "out_dir=",
+    "map_q_thresh=",
+    "read_q_thresh=",
+    "max_N_thresh=",
+    "window_size=",
+    "window_breadth_thresh=",
+    "window_depth_thresh=",
+    "start_nucpos=",
+    "end_nucpos=",
+    "pvalue=",
+    "threads_per_window=",
+    "concurrent_windows=",
+    "dnds_tsv=",
+    "hyphy_exe",
+    "hyphy_basedir",
+    "fastree_exe"]
+
 
 
 def create_full_msa_fasta(sam_filename, out_dir, ref, ref_len, mapping_cutoff, read_qual_cutoff, max_prop_N):
@@ -112,13 +130,15 @@ def eval_windows(ref, ref_len, sam_filename, out_dir, output_dnds_tsv_filename,
     return seq_dnds_info
 
 
-def eval_window(msa_fasta_filename, window_depth_thresh, window_breadth_thresh, start_nucpos, end_nucpos, pvalue, threads):
+def eval_window(msa_fasta_filename, window_depth_thresh, window_breadth_thresh, start_nucpos, end_nucpos, pvalue, threads,
+                hyphy_exe=HYPHY_EXE, hyphy_basedir=HYPHY_BASEDIR, fastree_exe=FASTTREE_EXE):
     """
     Slides window along genome.
     Creates the multiple sequence aligned fasta files for the window.
     Feeds the multiple-sequence aligned fasta files to fasttree2 to create a tree.
     Feeds the tree into HyPhy to obtain dn/ds values.
     """
+
     LOGGER.debug("msa_fasta_filename=" + msa_fasta_filename + "\n" +
                  "window_depth_thresh=" + str(window_depth_thresh) + "\n" +
                  "window_breadth_thresh=" + str(window_breadth_thresh) + "\n" +
@@ -144,79 +164,79 @@ def eval_window(msa_fasta_filename, window_depth_thresh, window_breadth_thresh, 
     else:
         LOGGER.warn("Found existing Sliced MSA-Fasta " + msa_window_fasta_filename + ". Not regenerating.")
 
-
-        fastree_logfilename = msa_window_filename_prefix + ".fasttree.log"
-        fastree_treefilename = msa_window_filename_prefix + ".tree"
-        fasttree_stdouterr_filename = msa_window_filename_prefix + ".fasttree.stdouterr.txt"
-        LOGGER.debug("Start Fasttree for window " + fastree_treefilename)
-        if not os.path.exists(fastree_treefilename) or os.path.getsize(fastree_treefilename) <= 0:
-            # Check whether the msa sliced fasta has enough reads to make a good tree
-            if total_slice_seq < 0:
-                total_slice_seq = Utility.get_total_seq_from_fasta(msa_window_fasta_filename)
-            if total_slice_seq < window_depth_thresh:
-                LOGGER.warn("MSA Window " + msa_window_fasta_filename + " does not satisfy window depth constraints")
-            else:
-                LOGGER.debug("MSA Window " + msa_window_fasta_filename + " satisfies window depth constraints")
-
-            # Feed window fasta into fasttree to make a tree
-            os.environ[ENV_OMP_NUM_THREADS] = str(threads)
-            with open(fasttree_stdouterr_filename, 'w') as fasttree_stdouterr_fh:
-                subprocess.check_call([FASTTREE_EXE, '-gtr', '-nt', '-nosupport',
-                                       '-log', fastree_logfilename, '-out', fastree_treefilename,
-                                       msa_window_fasta_filename],
-                                      stdout=fasttree_stdouterr_fh, stderr=fasttree_stdouterr_fh, shell=False,
-                                      env=os.environ)
-            LOGGER.debug("Done Fasttree for window " + fastree_treefilename)
+    fastree_logfilename = msa_window_filename_prefix + ".fasttree.log"
+    fastree_treefilename = msa_window_filename_prefix + ".tree"
+    fasttree_stdouterr_filename = msa_window_filename_prefix + ".fasttree.stdouterr.txt"
+    LOGGER.debug("Start Fasttree for window " + fastree_treefilename)
+    if not os.path.exists(fastree_treefilename) or os.path.getsize(fastree_treefilename) <= 0:
+        # Check whether the msa sliced fasta has enough reads to make a good tree
+        if total_slice_seq < 0:
+            total_slice_seq = Utility.get_total_seq_from_fasta(msa_window_fasta_filename)
+        if total_slice_seq < window_depth_thresh:
+            LOGGER.warn("MSA Window " + msa_window_fasta_filename + " does not satisfy window depth constraints")
         else:
-            LOGGER.debug("Found existing Fasttree for window " + fastree_treefilename + ". Not regenerating")
+            LOGGER.debug("MSA Window " + msa_window_fasta_filename + " satisfies window depth constraints")
 
-        hyphy_modelfit_filename = msa_window_filename_prefix + ".nucmodelfit"
-        hyphy_dnds_tsv_filename = msa_window_filename_prefix + ".dnds.tsv"
-        LOGGER.debug("Start HyPhy for window " + hyphy_dnds_tsv_filename)
-        if not os.path.exists(hyphy_dnds_tsv_filename) or os.path.getsize(hyphy_dnds_tsv_filename) <= 0:
-            hyphy_input_str = "\n".join(["1",   # Universal
-                                        "1",    # New analysis
-                                        os.path.abspath(msa_window_fasta_filename), # codon fasta
-                                        "1",    # Substitution Model - Use HK85 and MG94xHKY85
-                                        os.path.abspath(fastree_treefilename),      # tree file
-                                        os.path.abspath(hyphy_modelfit_filename),   # model fit output file
-                                        "1",    # Neutral dN/dS = 1
-                                        "1",    # Single Acnestor Counting
-                                        "-1",   # Approximate
-                                        "1",    # Full tree
-                                        "1",    # Averaged
-                                        "1",    # Approximate extended binomial distro
-                                        str(pvalue), # pvalue threshold
-                                        "2",    # Export to file
-                                        os.path.abspath(hyphy_dnds_tsv_filename),   # dN/dS tsv output file
-                                        "2\n"]) # Count approximate numbers of dN, dS rate classes supported by data
+        # Feed window fasta into fasttree to make a tree
+        os.environ[ENV_OMP_NUM_THREADS] = str(threads)
+        with open(fasttree_stdouterr_filename, 'w') as fasttree_stdouterr_fh:
+            subprocess.check_call([fastree_exe, '-gtr', '-nt', '-nosupport',
+                                   '-log', fastree_logfilename, '-out', fastree_treefilename,
+                                   msa_window_fasta_filename],
+                                  stdout=fasttree_stdouterr_fh, stderr=fasttree_stdouterr_fh, shell=False,
+                                  env=os.environ)
+        LOGGER.debug("Done Fasttree for window " + fastree_treefilename)
+    else:
+        LOGGER.debug("Found existing Fasttree for window " + fastree_treefilename + ". Not regenerating")
 
-            # Feed window tree into hyphy to find dnds for the window
-            hyphy_log = msa_window_filename_prefix + ".hyphy.log"
-            with open(hyphy_log, 'w') as hyphy_log_fh:
-                hyphy_cmd = [HYPHY_EXE, "BASEPATH="+HYPHY_BASEDIR, "CPU=" + str(threads), SELECTION_BF]
-                hyphy_proc = subprocess.Popen(hyphy_cmd,
-                                              stdin=subprocess.PIPE, stdout=hyphy_log_fh, stderr=hyphy_log_fh, shell=False)
-                hyphy_proc.communicate(hyphy_input_str)
+    hyphy_modelfit_filename = msa_window_filename_prefix + ".nucmodelfit"
+    hyphy_dnds_tsv_filename = msa_window_filename_prefix + ".dnds.tsv"
+    LOGGER.debug("Start HyPhy for window " + hyphy_dnds_tsv_filename)
+    if not os.path.exists(hyphy_dnds_tsv_filename) or os.path.getsize(hyphy_dnds_tsv_filename) <= 0:
+        hyphy_input_str = "\n".join(["1",   # Universal
+                                    "1",    # New analysis
+                                    os.path.abspath(msa_window_fasta_filename), # codon fasta
+                                    "1",    # Substitution Model - Use HK85 and MG94xHKY85
+                                    os.path.abspath(fastree_treefilename),      # tree file
+                                    os.path.abspath(hyphy_modelfit_filename),   # model fit output file
+                                    "1",    # Neutral dN/dS = 1
+                                    "1",    # Single Acnestor Counting
+                                    "-1",   # Approximate
+                                    "1",    # Full tree
+                                    "1",    # Averaged
+                                    "1",    # Approximate extended binomial distro
+                                    str(pvalue), # pvalue threshold
+                                    "2",    # Export to file
+                                    os.path.abspath(hyphy_dnds_tsv_filename),   # dN/dS tsv output file
+                                    "2\n"]) # Count approximate numbers of dN, dS rate classes supported by data
 
-                if hyphy_proc.returncode:
-                    raise subprocess.CalledProcessError(cmd=hyphy_cmd, returncode=hyphy_proc.returncode)
-            LOGGER.debug("Done HyPhy for window " + hyphy_dnds_tsv_filename)
-        else:
-            LOGGER.debug("Found existing HyPhy for window " + hyphy_dnds_tsv_filename + ". Not regenerating")
+        # Feed window tree into hyphy to find dnds for the window
+        hyphy_log = msa_window_filename_prefix + ".hyphy.log"
+        with open(hyphy_log, 'w') as hyphy_log_fh:
+            hyphy_cmd = [hyphy_exe, "BASEPATH="+hyphy_basedir, "CPU=" + str(threads), SELECTION_BF]
+            hyphy_proc = subprocess.Popen(hyphy_cmd,
+                                          stdin=subprocess.PIPE, stdout=hyphy_log_fh, stderr=hyphy_log_fh, shell=False)
+            hyphy_proc.communicate(hyphy_input_str)
+
+            if hyphy_proc.returncode:
+                raise subprocess.CalledProcessError(cmd=hyphy_cmd, returncode=hyphy_proc.returncode)
+        LOGGER.debug("Done HyPhy for window " + hyphy_dnds_tsv_filename)
+    else:
+        LOGGER.debug("Found existing HyPhy for window " + hyphy_dnds_tsv_filename + ". Not regenerating")
 
 
 def eval_windows_async(ref, ref_len, sam_filename, out_dir,
                        mapping_cutoff, read_qual_cutoff, max_prop_N,
                        start_nucpos, end_nucpos,
                        windowsize, window_depth_thresh, window_breadth_thresh,
-                       pvalue, threads_per_window, concurrent_windows, output_dnds_tsv_filename):
+                       pvalue, threads_per_window, concurrent_windows, output_dnds_tsv_filename,
+                       hyphy_exe, hyphy_basedir, fastree_exe):
     """
     Launch a separate process to analyze each window.
     Each window can use up to <threads_per_window> threads.
     """
 
-    pool = multiprocessing.Pool(processes=concurrent_windows)
+    pool = pool_traceback.LoggingPool(processes=concurrent_windows)
 
     # Create a pseudo multiple-sequence aligned fasta file
     # TODO:  handle indels in multiple sequence align file
@@ -230,25 +250,21 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir,
     for start_window_nucpos in range(start_nucpos, last_window_start_nucpos+1, NUC_PER_CODON):
         end_window_nucpos = start_window_nucpos + windowsize
         process_args = (msa_fasta_filename, window_depth_thresh, window_breadth_thresh,
-                        start_window_nucpos, end_window_nucpos, pvalue, threads_per_window)
+                        start_window_nucpos, end_window_nucpos, pvalue, threads_per_window,
+                        hyphy_exe, hyphy_basedir, fastree_exe)
         process_result = pool.apply_async(func=eval_window, args=process_args)
         process_results.append(process_result)
 
     pool.close()
-
     LOGGER.debug("Done launching window queue.  Wait for them to finish.")
-    while len(process_results):
-        process_result = process_results[0]
-        if process_result.ready():
-            try:
-                process_result.get()
-            except Exception, e:
-                LOGGER.error("Error in one of child processes:\n" + e.message)
-                raise e
-            process_results.pop(0)
+    pool.join()
 
+    for process_result in process_results:
+        try:
+            process_result.get()
+        except Exception, e:
+            LOGGER.error("Error in one of child processes:\n" + e.message)
 
-        time.sleep(1)
     LOGGER.debug("Done waiting for window queue.  About to tabulate dn/ds results.")
 
     dnds_tsv_comments = ("ref=" + ref + ","
@@ -267,3 +283,51 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir,
                                   comments=dnds_tsv_comments, output_dnds_tsv_filename=output_dnds_tsv_filename)
     return seq_dnds_info
 
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--sam")
+    parser.add_argument("--ref")
+    parser.add_argument("--ref_len", type=int)
+    parser.add_argument("--out_dir")
+    parser.add_argument("--map_q_thresh", type=int)
+    parser.add_argument("--read_q_thresh", type=int)
+    parser.add_argument("--max_N_thresh", type=float)
+    parser.add_argument("--window_size", type=int)
+    parser.add_argument("--window_breadth_thresh", type=float)
+    parser.add_argument("--window_depth_thresh", type=int)
+    parser.add_argument("--start_nucpos", type=int)
+    parser.add_argument("--end_nucpos", type=int)
+    parser.add_argument("--pvalue", type=float)
+    parser.add_argument("--threads_per_window", type=int)
+    parser.add_argument("--concurrent_windows", type=int)
+    parser.add_argument("--dnds_tsv")
+    parser.add_argument("--hyphy_exe")
+    parser.add_argument("--hyphy_basedir")
+    parser.add_argument("--fastree_exe")
+
+    args = parser.parse_args()
+    print args
+
+    seq_dnds_info = eval_windows_async(sam_filename=args.sam,
+                                       ref=args.ref,
+                                       ref_len=args.ref_len,
+                                       out_dir=args.out_dir,
+                                       mapping_cutoff=args.map_q_thresh,
+                                       read_qual_cutoff=args.read_q_thresh,
+                                       max_prop_N=args.max_N_thresh,
+                                       windowsize=args.window_size,
+                                       window_breadth_thresh=args.window_breadth_thresh,
+                                       window_depth_thresh=args.window_depth_thresh,
+                                       start_nucpos=args.start_nucpos,
+                                       end_nucpos=args.end_nucpos,
+                                       pvalue=args.pvalue,
+                                       threads_per_window=args.threads_per_window,
+                                       concurrent_windows=args.concurrent_windows,
+                                       output_dnds_tsv_filename=args.dnds_tsv,
+                                       hyphy_exe=args.hyphy_exe,
+                                       hyphy_basedir=args.hyphy_basedir,
+                                       fastree_exe=args.fastree_exe)
+
+if __name__ == '__main__':
+    main()
