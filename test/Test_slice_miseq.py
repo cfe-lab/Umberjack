@@ -15,10 +15,10 @@ REFERENCE_FASTA = "./simulations/data/sample_genomes.consensus.fas"
 REF = "consensus"
 REF_LEN = 9000
 DNDS_DIR = "./simulations/data/out" + os.sep + REF
-PVALUE = 0.95
+PVALUE = 0.05
 BREADTH_THRESH = 0.5
 
-AVE_DNDS_BY_SITE_FILENAME = './simulations/data/out/consensus/ave_dnds_by_site.tsv'
+AVE_DNDS_BY_SITE_FILENAME = './simulations/data/out/consensus/actual_dnds_by_site.tsv'
 GAMMA_DNDS_LOOKUP_FILENAME = "./simulations/data/sample_genomes.rates"
 GAMMA_DNDS_LOOKUP_COL_INTERVAL = "Interval"
 GAMMA_DNDS_LOOKUP_COL_SITE = "Site"

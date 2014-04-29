@@ -1,6 +1,4 @@
-# ref=consensus,ref_len=9000,sam=/home/thuy/gitrepo/SlidingWindow/test/simulations/data/sample_genomes.grinder-reads.rename.sam,mapping qual cutoff=10,read qual cutoff=10,max fraction N=0.1,start nuc pos=1,end nuc pos=9000,windowsize=300,window depth thresh=50,window breadth fraction=0.75,pvalue=0.05
 Ref	Site	dNdS
-consensus	0	None
 consensus	1	None
 consensus	2	None
 consensus	3	None
@@ -3000,3 +2998,4 @@ consensus	2996	None
 consensus	2997	None
 consensus	2998	None
 consensus	2999	None
+consensus	3000	None
