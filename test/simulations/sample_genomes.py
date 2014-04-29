@@ -8,7 +8,7 @@ import collections
 
 
 BASES_PER_CODON = 3
-INDELIBLE_SITE_INFO_START = 11  # The line that the site information actually starts on.  Sites are 1-based
+INDELIBLE_SITE_INFO_START = 10  # The line that the site information actually starts on.  Sites are 1-based
 
 root = './data/'
 
