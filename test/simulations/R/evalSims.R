@@ -3,8 +3,9 @@ library(ggplot2)
 library(reshape2)
 
 INDELIBLE_RATES_OUTPUT_COMMENT_LINES <- 10
+ACTUAL_DNDS_COMMENT_LINES <- 1
 
-actual_dnds <- read.table("../data/out/consensus/ave_dnds_by_site.tsv", header=TRUE, na.strings="None")
+actual_dnds <- read.table("../data/out/consensus/actual_dnds_by_site.tsv", header=TRUE, na.strings="None", skip=ACTUAL_DNDS_COMMENT_LINES)
 dim(actual_dnds)
 head(actual_dnds)
 tail(actual_dnds)
@@ -18,9 +19,9 @@ str(expected_dnds)
 summary(expected_dnds)
 
 #' **Paired test without assumption of normalcy**
-htest <-  wilcox.test(actual_dnds$dNdS, expected_dnds$Omega, paired=TRUE, exact=TRUE, 
-                      conf.int=TRUE, conf.level=0.95, na.action="na.exclude")
-print (htest)
+# htest <-  wilcox.test(actual_dnds$dNdS, expected_dnds$Omega, paired=TRUE, exact=TRUE, 
+#                       conf.int=TRUE, conf.level=0.95, na.action="na.exclude")
+# print (htest)
 
 #' **Scatterplot actual vs expected dn ds together**
 fullDat <- data.frame(site=expected_dnds$Site,
@@ -34,7 +35,7 @@ head(fullDatBySource)
 tail(fullDatBySource)
 str(fullDatBySource)
 summary(fullDatBySource)
-ggplot(fullDatBySource[fullDatBySource$site < 500,], aes(x=site, y=dnds, color=source) ) + geom_point() + 
+ggplot(fullDatBySource, aes(x=site, y=dnds, color=source) ) + geom_point() + 
   xlab("Codon Site Along Genome") + 
   ylab("Normalized dN-dS") + 
   ggtitle("dn-ds by site")

@@ -6,9 +6,10 @@ library(ggplot2)
 library(reshape2)
 
 INDELIBLE_RATES_OUTPUT_COMMENT_LINES <- 10
+ACTUAL_DNDS_COMMENT_LINES <- 1
 
-actual_dnds <- read.table("../data/out/consensus/ave_dnds_by_site.tsv", header = TRUE, 
-    na.strings = "None")
+actual_dnds <- read.table("../data/out/consensus/actual_dnds_by_site.tsv", header = TRUE, 
+    na.strings = "None", skip = ACTUAL_DNDS_COMMENT_LINES)
 dim(actual_dnds)
 ```
 
@@ -21,13 +22,13 @@ head(actual_dnds)
 ```
 
 ```
-##         Ref Site     dNdS
-## 1 consensus    1 4.213074
-## 2 consensus    2 0.008495
-## 3 consensus    3 0.013434
-## 4 consensus    4 0.113133
-## 5 consensus    5 0.206868
-## 6 consensus    6 0.128783
+##         Ref Site dNdS
+## 1 consensus    0   NA
+## 2 consensus    1   NA
+## 3 consensus    2   NA
+## 4 consensus    3   NA
+## 5 consensus    4   NA
+## 6 consensus    5   NA
 ```
 
 ```r
@@ -36,12 +37,12 @@ tail(actual_dnds)
 
 ```
 ##            Ref Site dNdS
-## 2995 consensus 2995   NA
-## 2996 consensus 2996   NA
-## 2997 consensus 2997   NA
-## 2998 consensus 2998   NA
-## 2999 consensus 2999   NA
-## 3000 consensus 3000   NA
+## 2995 consensus 2994   NA
+## 2996 consensus 2995   NA
+## 2997 consensus 2996   NA
+## 2998 consensus 2997   NA
+## 2999 consensus 2998   NA
+## 3000 consensus 2999   NA
 ```
 
 ```r
@@ -51,8 +52,8 @@ str(actual_dnds)
 ```
 ## 'data.frame':	3000 obs. of  3 variables:
 ##  $ Ref : Factor w/ 1 level "consensus": 1 1 1 1 1 1 1 1 1 1 ...
-##  $ Site: int  1 2 3 4 5 6 7 8 9 10 ...
-##  $ dNdS: num  4.21307 0.00849 0.01343 0.11313 0.20687 ...
+##  $ Site: int  0 1 2 3 4 5 6 7 8 9 ...
+##  $ dNdS: num  NA NA NA NA NA NA NA NA NA NA ...
 ```
 
 ```r
@@ -60,14 +61,14 @@ summary(actual_dnds)
 ```
 
 ```
-##         Ref            Site           dNdS     
-##  consensus:3000   Min.   :   1   Min.   :-0.1  
-##                   1st Qu.: 751   1st Qu.: 0.0  
-##                   Median :1500   Median : 0.0  
-##                   Mean   :1500   Mean   : 0.0  
-##                   3rd Qu.:2250   3rd Qu.: 0.0  
-##                   Max.   :3000   Max.   : 4.2  
-##                                  NA's   :2446
+##         Ref            Site           dNdS    
+##  consensus:3000   Min.   :   0   Min.   :0    
+##                   1st Qu.: 750   1st Qu.:0    
+##                   Median :1500   Median :0    
+##                   Mean   :1500   Mean   :0    
+##                   3rd Qu.:2249   3rd Qu.:0    
+##                   Max.   :2999   Max.   :3    
+##                                  NA's   :943
 ```
 
 ```r
@@ -133,23 +134,9 @@ summary(expected_dnds)
 
 
 ```r
-htest <- wilcox.test(actual_dnds$dNdS, expected_dnds$Omega, paired = TRUE, exact = TRUE, 
-    conf.int = TRUE, conf.level = 0.95, na.action = "na.exclude")
-print(htest)
-```
-
-```
-## 
-## 	Wilcoxon signed rank test
-## 
-## data:  actual_dnds$dNdS and expected_dnds$Omega
-## V = 749, p-value < 2.2e-16
-## alternative hypothesis: true location shift is not equal to 0
-## 95 percent confidence interval:
-##  -0.4476 -0.3933
-## sample estimates:
-## (pseudo)median 
-##        -0.4062
+# htest <- wilcox.test(actual_dnds$dNdS, expected_dnds$Omega, paired=TRUE,
+# exact=TRUE, conf.int=TRUE, conf.level=0.95, na.action='na.exclude') print
+# (htest)
 ```
 
 
@@ -163,7 +150,7 @@ ggplot(fullDat, aes(x = actual, y = expected)) + geom_smooth(method = lm)
 ```
 
 ```
-## Warning: Removed 2446 rows containing missing values (stat_smooth).
+## Warning: Removed 943 rows containing missing values (stat_smooth).
 ```
 
 ![plot of chunk unnamed-chunk-3](figure/unnamed-chunk-3.png) 
@@ -179,13 +166,13 @@ head(fullDatBySource)
 ```
 
 ```
-##   site source     dnds
-## 1    1 actual 4.213074
-## 2    2 actual 0.008495
-## 3    3 actual 0.013434
-## 4    4 actual 0.113133
-## 5    5 actual 0.206868
-## 6    6 actual 0.128783
+##    site source    dnds
+## 30   30 actual 0.02818
+## 34   34 actual 0.02116
+## 46   46 actual 0.01558
+## 47   47 actual 0.32697
+## 50   50 actual 0.02248
+## 54   54 actual 0.02144
 ```
 
 ```r
@@ -207,10 +194,10 @@ str(fullDatBySource)
 ```
 
 ```
-## 'data.frame':	3554 obs. of  3 variables:
-##  $ site  : int  1 2 3 4 5 6 7 8 9 10 ...
+## 'data.frame':	5057 obs. of  3 variables:
+##  $ site  : int  30 34 46 47 50 54 58 60 61 62 ...
 ##  $ source: Factor w/ 2 levels "actual","expected": 1 1 1 1 1 1 1 1 1 1 ...
-##  $ dnds  : num  4.21307 0.00849 0.01343 0.11313 0.20687 ...
+##  $ dnds  : num  0.0282 0.0212 0.0156 0.327 0.0225 ...
 ```
 
 ```r
@@ -219,18 +206,17 @@ summary(fullDatBySource)
 
 ```
 ##       site           source          dnds       
-##  Min.   :   1   actual  : 554   Min.   :-0.072  
-##  1st Qu.: 446   expected:3000   1st Qu.: 0.150  
-##  Median :1224                   Median : 0.350  
-##  Mean   :1313                   Mean   : 0.420  
-##  3rd Qu.:2112                   3rd Qu.: 0.550  
-##  Max.   :3000                   Max.   : 4.213
+##  Min.   :   1   actual  :2057   Min.   :0.0001  
+##  1st Qu.: 740   expected:3000   1st Qu.:0.0070  
+##  Median :1478                   Median :0.1500  
+##  Mean   :1485                   Mean   :0.3030  
+##  3rd Qu.:2244                   3rd Qu.:0.4500  
+##  Max.   :3000                   Max.   :3.0157
 ```
 
 ```r
-ggplot(fullDatBySource[fullDatBySource$site < 500, ], aes(x = site, y = dnds, 
-    color = source)) + geom_point() + xlab("Codon Site Along Genome") + ylab("Normalized dN-dS") + 
-    ggtitle("dn-ds by site")
+ggplot(fullDatBySource, aes(x = site, y = dnds, color = source)) + geom_point() + 
+    xlab("Codon Site Along Genome") + ylab("Normalized dN-dS") + ggtitle("dn-ds by site")
 ```
 
 ![plot of chunk unnamed-chunk-4](figure/unnamed-chunk-4.png) 
@@ -242,7 +228,7 @@ print(dnds_cor)
 ```
 
 ```
-## [1] 0.02211
+## [1] -0.04267
 ```
 
 
