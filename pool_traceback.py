@@ -32,7 +32,7 @@ class LogExceptions(object):
             error(traceback.format_exc())
             # Re-raise the original exception so the Pool worker can
             # clean up
-            raise
+            raise Exception
 
         # It was fine, give a normal answer
         return result
