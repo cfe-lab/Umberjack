@@ -1,6 +1,7 @@
 import os
 import errno
 
+NUC_PER_CODON = 3
 
 def create_dir_check(new_dir):
     """
@@ -78,7 +79,6 @@ def get_longest_seq_size_from_fasta(fasta_filename):
 
     return longest_seq_len
 
-
 def get_total_seq_from_fasta(fasta_filename):
     count = 0
     with open(fasta_filename) as fh:
@@ -86,3 +86,51 @@ def get_total_seq_from_fasta(fasta_filename):
             if line[0] == '>':
                 count += 1
     return count
+
+
+
+def get_total_codons_by_pos(msa_fasta_filename):
+    """
+     Gets List of  total number of sequences with an unambiguous codon for every codon position.
+     ASSUME that fasta sequences start at ORF start.
+     ASSUME that fasta sequences are multiple sequence aligned
+
+    :rtype : list of codon counts for each position
+    :param str msa_fasta_filename:  full filepath to nucleotide fasta
+    """
+    longest_seq = get_longest_seq_size_from_fasta(msa_fasta_filename)
+    total_unambig_codon_by_pos = [0] * (longest_seq/NUC_PER_CODON)
+    with open(msa_fasta_filename, 'r') as fh:
+        seq = ""
+        for line in fh:
+            line = line.rstrip()
+            if line[0] == '>':
+                if len(seq) >= 2:
+                    for nuc_pos in range(0, len(seq), 3):
+                        codon_1st_nuc = seq[nuc_pos].upper()
+                        if len(seq) > nuc_pos+1:
+                            codon_2nd_nuc = seq[nuc_pos + 1].upper()
+                        else:
+                            codon_2nd_nuc = "-"
+                        if not (codon_1st_nuc == 'N' or codon_1st_nuc == '-' or codon_2nd_nuc == 'N' or codon_2nd_nuc == '-'):
+                            codon_pos = nuc_pos/NUC_PER_CODON
+                            if codon_pos >= len(total_unambig_codon_by_pos):
+                                print "here"
+                            total_unambig_codon_by_pos[codon_pos] += 1
+
+                seq = ""
+            else:
+                seq += line
+
+        if len(seq) >= 2:
+            for nuc_pos in range(0, len(seq), 3):
+                codon_1st_nuc = seq[nuc_pos].upper()
+                if len(seq) > nuc_pos+1:
+                    codon_2nd_nuc = seq[nuc_pos + 1].upper()
+                else:
+                    codon_2nd_nuc = "-"
+                if not (codon_1st_nuc == 'N' or codon_1st_nuc == '-' or codon_2nd_nuc == 'N' or codon_2nd_nuc == '-'):
+                    codon_pos = nuc_pos/NUC_PER_CODON
+                    total_unambig_codon_by_pos[codon_pos] += 1
+
+    return total_unambig_codon_by_pos
