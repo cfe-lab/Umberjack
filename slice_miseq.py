@@ -21,10 +21,16 @@ class SiteDnDsInfo:
     def __init__(self):
         self.accum_win_dnds = 0.0
         self.total_win_cover_site = 0
+        self.total_syn_subs = 0
+        self.total_nonsyn_subs = 0
+        self.total_reads = 0
 
-    def add_dnds(self, dnds):
+    def add_dnds(self, dnds, reads, syn_subs, nonsyn_subs):
         self.total_win_cover_site += 1
         self.accum_win_dnds += dnds
+        self.total_reads += reads
+        self.total_syn_subs += syn_subs
+        self.total_nonsyn_subs += nonsyn_subs
 
     def get_ave_dnds(self):
         if not self.total_win_cover_site:
@@ -32,6 +38,32 @@ class SiteDnDsInfo:
         else:
             return self.accum_win_dnds / self.total_win_cover_site
 
+    def get_window_coverage(self):
+        return self.total_win_cover_site
+
+    def get_ave_read_coverage(self):
+        if not self.total_win_cover_site:
+            return None
+        else:
+            return float(self.total_reads)/self.total_win_cover_site
+
+    def get_ave_syn_subs(self):
+        if not self.total_win_cover_site:
+            return None
+        else:
+            return float(self.total_syn_subs)/self.total_win_cover_site
+
+    def get_ave_nonsyn_subs(self):
+        if not self.total_win_cover_site:
+            return None
+        else:
+            return float(self.total_nonsyn_subs)/self.total_win_cover_site
+
+    def get_ave_subs(self):
+        if not self.total_win_cover_site:
+            return None
+        else:
+            return float(self.total_nonsyn_subs + self.total_syn_subs)/self.total_win_cover_site
 
 class SeqDnDsInfo:
     """
@@ -46,13 +78,13 @@ class SeqDnDsInfo:
         """
         self.dnds_seq = [SiteDnDsInfo() for i in range(seq_len)]
 
-    def add_site_dnds(self, site_1based, dnds):
+    def add_site_dnds(self, site_1based, dnds, reads, syn_subs, nonsyn_subs):
         """
         Keep track of dn/ds from a window containing this site.
         :param site_1based: 1-based codon site
         :param dnds: dn/ds for this codon site as determined from a window fed into hyphy
         """
-        self.dnds_seq[site_1based-1].add_dnds(dnds)
+        self.dnds_seq[site_1based-1].add_dnds(dnds=dnds, reads=reads, syn_subs=syn_subs, nonsyn_subs=nonsyn_subs)
 
     def get_site_ave_dnds(self, site_1based):
         return self.dnds_seq[site_1based-1].get_ave_dnds()
@@ -60,6 +92,20 @@ class SeqDnDsInfo:
     def get_seq_len(self):
         return len(self.dnds_seq)
 
+    def get_site_window_cov(self, site_1based):
+        return self.dnds_seq[site_1based-1].get_window_coverage()
+
+    def get_site_ave_read_cov(self, site_1based):
+        return self.dnds_seq[site_1based-1].get_ave_read_coverage()
+
+    def get_site_ave_syn_subs(self, site_1based):
+        return self.dnds_seq[site_1based-1].get_ave_syn_subs()
+
+    def get_site_ave_nonsyn_subs(self, site_1based):
+        return self.dnds_seq[site_1based-1].get_ave_nonsyn_subs()
+
+    def get_site_ave_subs(self, site_1based):
+        return self.dnds_seq[site_1based-1].get_ave_subs()
 
 
 
@@ -400,19 +446,22 @@ def get_seq_dnds_info(dnds_tsv_dir, pvalue_thresh, ref, ref_codon_len):
             # Window starts at this 1-based codon position with respect to the reference
             win_start_codon_1based_wrt_ref = win_start_nuc_pos_1based_wrt_ref/NUC_PER_CODON + 1
 
+            msa_slice_fasta_filename = dnds_tsv_fileprefix + ".fasta"
+            codons_by_window_pos = Utility.get_total_codons_by_pos(msa_fasta_filename=msa_slice_fasta_filename)
+
             reader = csv.DictReader(dnds_fh, delimiter='\t',)
             for offset, codon_row in enumerate(reader):    # Every codon site is a row in the *.dnds.tsv file
                 pval = float(codon_row[HYPHY_TSV_PROB_FULLSEQ_NS])
-                if pval <= pvalue_thresh:
-                    ref_codon_1based = win_start_codon_1based_wrt_ref + offset
-                    if ref_codon_1based == 29:
-                        print "here"
-
+                dS = float(codon_row[HYPHY_TSV_DS_COL])
+                if pval <= pvalue_thresh and not dS == 0:
                     dN = float(codon_row[HYPHY_TSV_DN_COL])
-                    dS = float(codon_row[HYPHY_TSV_DS_COL])
-                    if not dS == 0:
-                        dnds = dN/dS
-                        seq_dnds_info.add_site_dnds(site_1based=ref_codon_1based, dnds=dnds)
+                    syn_subs = float(codon_row[HYPHY_TSV_S_COL])
+                    nonsyn_subs = float(codon_row[HYPHY_TSV_N_COL])
+
+                    ref_codon_1based = win_start_codon_1based_wrt_ref + offset
+                    codons = codons_by_window_pos[offset]
+                    dnds = dN/dS
+                    seq_dnds_info.add_site_dnds(site_1based=ref_codon_1based, dnds=dnds, reads=codons, syn_subs=syn_subs, nonsyn_subs=nonsyn_subs)
 
     return seq_dnds_info
 

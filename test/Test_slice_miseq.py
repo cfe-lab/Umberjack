@@ -107,12 +107,18 @@ class TestSliceMiSeq(unittest.TestCase):
         # TODO: check multiple ref contigs
         seq_dnds_info = slice_miseq.get_seq_dnds_info(dnds_tsv_dir=DNDS_DIR, pvalue_thresh=PVALUE, ref=REF, ref_codon_len=REF_LEN/NUC_PER_CODON)
         with open(ACTUAL_DNDS_FILENAME, 'w') as dnds_fh:
-            dnds_fh.write("Ref\tSite\tdNdS\n")
+            dnds_fh.write("Ref\tSite\tdNdS\tWindows\tCodons\tNonSyn\tSyn\tSubst\n")
             expected_site_2_dnds = TestSliceMiSeq.expected_dnds(GAMMA_DNDS_LOOKUP_FILENAME)
 
             for site in range(1, seq_dnds_info.get_seq_len() + 1):  # 1based codon sites
-                site_dnds = seq_dnds_info.get_site_ave_dnds(site)
-                dnds_fh.write(REF + "\t" + str(site) + "\t" + str(site_dnds) + "\n")
+                site_dnds = seq_dnds_info.get_site_ave_dnds(site_1based=site)
+                window = seq_dnds_info.get_site_window_cov(site_1based=site)
+                reads = seq_dnds_info.get_site_ave_read_cov(site_1based=site)
+                nonsyn = seq_dnds_info.get_site_ave_nonsyn_subs(site_1based=site)
+                syn = seq_dnds_info.get_site_ave_syn_subs(site_1based=site)
+                subs = seq_dnds_info.get_site_ave_subs(site_1based=site)
+                line = "\t".join((REF, str(site), str(site_dnds), str(window), str(reads),  str(nonsyn), str(syn), str(subs)))
+                dnds_fh.write(line + "\n")
 
 
 if __name__ == '__main__':

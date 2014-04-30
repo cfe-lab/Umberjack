@@ -11,7 +11,12 @@ head(actual_dnds)
 tail(actual_dnds)
 str(actual_dnds)
 summary(actual_dnds)
-
+# Convert NA Codons to zero
+actual_dnds$Codons[is.na(actual_dnds$Codons)] <- 0
+actual_dnds$NonSyn[is.na(actual_dnds$NonSyn)] <- 0
+actual_dnds$Syn[is.na(actual_dnds$Syn)] <- 0
+actual_dnds$Subst[is.na(actual_dnds$Subst)] <- 0
+summary(actual_dnds)
 
 expected_dnds <- read.table("../data/sample_genomes.rates", header=TRUE, sep=',')
 dim(expected_dnds)
@@ -33,36 +38,72 @@ htest <-  wilcox.test(actual_dnds$dNdS, expected_dnds$Omega, paired=TRUE, exact=
 print (htest)
 
 #' **Scatterplot actual vs expected dn ds together**
+#+ fig.width=24
 fullDat <- data.frame(site=expected_dnds$Site,
                       actual=actual_dnds$dNdS, 
                       expected=expected_dnds$Omega)
 head(fullDat[!is.na(fullDat$actual),])
 ggplot(fullDat, aes(x=actual, y=expected)) + geom_smooth(method=lm)
 
-#' **Scatterplot the dn-ds across the genome**
-#+ fig.width=16
+#' **Scatterplot the dn/ds across the genome**
+#+ fig.width=28
 fullDatBySource <- reshape2:::melt.data.frame(data=fullDat, na.rm = TRUE, id.vars="site", variable.name="source", value.name="dnds")
 head(fullDatBySource)
 tail(fullDatBySource)
 str(fullDatBySource)
 summary(fullDatBySource)
-ggplot(fullDatBySource, aes(x=site, y=dnds, color=source) ) + geom_point() + 
+ggplot(fullDatBySource, aes(x=site, y=dnds, color=source) ) + geom_smooth() + 
   xlab("Codon Site Along Genome") + 
   ylab("dN/dS") + 
   ggtitle("dn/ds by site")
 
-# 
-#' **Plot the mutation rate across the genome**
-#+ fig.width=16
-ggplot(expected_dnds, aes(x=Site, y=Scaling_factor) ) + geom_point() + 
+
+
+#' **Plot the unambiguous codon depth across genome**
+#+ fig.width=24
+ggplot(actual_dnds, aes(x=Site, y=Codons) ) + geom_line() + 
+  xlab("Codon Site Along Genome") + 
+  ylab("Sequences with Unambiguous Codons") + 
+  ggtitle("Population Unambiguous Codons Across Genome")
+
+
+#' **Plot the nonsynonymous substitutions across genome**
+#+ fig.width=24
+ggplot(actual_dnds, aes(x=Site, y=NonSyn) ) + geom_line() + 
+  xlab("Codon Site Along Genome") + 
+  ylab("Nonsynonymous Substitutions") + 
+  ggtitle("Population Nonsynonymous Substitutions Across Genome")
+
+
+#' **Plot the synonymous substitutions across genome**
+#+ fig.width=24
+ggplot(actual_dnds, aes(x=Site, y=Syn) ) + geom_line() + 
+  xlab("Codon Site Along Genome") + 
+  ylab("Synonymous Substitutions") + 
+  ggtitle("Population Synonymous Substitutions Across Genome")
+
+
+#' **Plot the substitutions across genome**
+#+ fig.width=24
+ggplot(actual_dnds, aes(x=Site, y=Subst) ) + geom_line() + 
+  xlab("Codon Site Along Genome") + 
+  ylab("Substitutions") + 
+  ggtitle("Population Substitutions Across Genome")
+
+
+
+#' **Plot the expected mutation rate across the genome**
+#+ fig.width=24
+ggplot(expected_dnds, aes(x=Site, y=Scaling_factor) ) + geom_line() + 
   xlab("Codon Site Along Genome") + 
   ylab("Mutation Rate Scaling Factor") + 
   ggtitle("Mutation Along Genome")
 
-# 
+
+
 #' **Plot the Expected Omega rate across the genome**
-#+ fig.width=16
-ggplot(expected_dnds, aes(x=Site, y=Omega) ) + geom_point() + 
+#+ fig.width=24
+ggplot(expected_dnds, aes(x=Site, y=Omega) ) + geom_line() + 
   xlab("Codon Site Along Genome") + 
   ylab("dn/dS Expected") + 
   ggtitle("Expected Selection Along Genome")

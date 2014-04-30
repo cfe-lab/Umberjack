@@ -14,7 +14,7 @@ dim(actual_dnds)
 ```
 
 ```
-## [1] 3000    3
+## [1] 3000    8
 ```
 
 ```r
@@ -22,13 +22,13 @@ head(actual_dnds)
 ```
 
 ```
-##         Ref Site dNdS
-## 1 consensus    1   NA
-## 2 consensus    2   NA
-## 3 consensus    3   NA
-## 4 consensus    4   NA
-## 5 consensus    5   NA
-## 6 consensus    6   NA
+##         Ref Site dNdS Windows Codons NonSyn Syn Subst
+## 1 consensus    1   NA       0     NA     NA  NA    NA
+## 2 consensus    2   NA       0     NA     NA  NA    NA
+## 3 consensus    3   NA       0     NA     NA  NA    NA
+## 4 consensus    4   NA       0     NA     NA  NA    NA
+## 5 consensus    5   NA       0     NA     NA  NA    NA
+## 6 consensus    6   NA       0     NA     NA  NA    NA
 ```
 
 ```r
@@ -36,13 +36,13 @@ tail(actual_dnds)
 ```
 
 ```
-##            Ref Site dNdS
-## 2995 consensus 2995   NA
-## 2996 consensus 2996   NA
-## 2997 consensus 2997   NA
-## 2998 consensus 2998   NA
-## 2999 consensus 2999   NA
-## 3000 consensus 3000   NA
+##            Ref Site dNdS Windows Codons NonSyn Syn Subst
+## 2995 consensus 2995   NA       0     NA     NA  NA    NA
+## 2996 consensus 2996   NA       0     NA     NA  NA    NA
+## 2997 consensus 2997   NA       0     NA     NA  NA    NA
+## 2998 consensus 2998   NA       0     NA     NA  NA    NA
+## 2999 consensus 2999   NA       0     NA     NA  NA    NA
+## 3000 consensus 3000   NA       0     NA     NA  NA    NA
 ```
 
 ```r
@@ -50,10 +50,15 @@ str(actual_dnds)
 ```
 
 ```
-## 'data.frame':	3000 obs. of  3 variables:
-##  $ Ref : Factor w/ 1 level "consensus": 1 1 1 1 1 1 1 1 1 1 ...
-##  $ Site: int  1 2 3 4 5 6 7 8 9 10 ...
-##  $ dNdS: num  NA NA NA NA NA NA NA NA NA NA ...
+## 'data.frame':	3000 obs. of  8 variables:
+##  $ Ref    : Factor w/ 1 level "consensus": 1 1 1 1 1 1 1 1 1 1 ...
+##  $ Site   : int  1 2 3 4 5 6 7 8 9 10 ...
+##  $ dNdS   : num  NA NA NA NA NA NA NA NA NA NA ...
+##  $ Windows: int  0 0 0 0 0 0 0 0 0 0 ...
+##  $ Codons : num  NA NA NA NA NA NA NA NA NA NA ...
+##  $ NonSyn : num  NA NA NA NA NA NA NA NA NA NA ...
+##  $ Syn    : num  NA NA NA NA NA NA NA NA NA NA ...
+##  $ Subst  : num  NA NA NA NA NA NA NA NA NA NA ...
 ```
 
 ```r
@@ -61,25 +66,60 @@ summary(actual_dnds)
 ```
 
 ```
-##         Ref            Site           dNdS     
-##  consensus:3000   Min.   :   1   Min.   : 1.0  
-##                   1st Qu.: 751   1st Qu.: 1.3  
-##                   Median :1500   Median : 1.4  
-##                   Mean   :1500   Mean   : 1.6  
-##                   3rd Qu.:2250   3rd Qu.: 1.6  
-##                   Max.   :3000   Max.   :14.1  
-##                                  NA's   :943
+##         Ref            Site           dNdS         Windows     
+##  consensus:3000   Min.   :   1   Min.   : 1.0   Min.   : 0.00  
+##                   1st Qu.: 751   1st Qu.: 1.3   1st Qu.: 0.00  
+##                   Median :1500   Median : 1.4   Median : 1.00  
+##                   Mean   :1500   Mean   : 1.6   Mean   : 2.03  
+##                   3rd Qu.:2250   3rd Qu.: 1.6   3rd Qu.: 3.00  
+##                   Max.   :3000   Max.   :14.1   Max.   :25.00  
+##                                  NA's   :943                   
+##      Codons        NonSyn          Syn            Subst       
+##  Min.   :277   Min.   :  16   Min.   :  0.4   Min.   :  16.3  
+##  1st Qu.:386   1st Qu.: 230   1st Qu.: 58.8   1st Qu.: 287.8  
+##  Median :814   Median : 310   Median : 93.2   Median : 404.1  
+##  Mean   :685   Mean   : 320   Mean   : 95.2   Mean   : 414.9  
+##  3rd Qu.:860   3rd Qu.: 388   3rd Qu.:126.3   3rd Qu.: 509.2  
+##  Max.   :929   Max.   :2064   Max.   :618.7   Max.   :2508.2  
+##  NA's   :943   NA's   :943    NA's   :943     NA's   :943
 ```
 
 ```r
+# Convert NA Codons to zero
+actual_dnds$Codons[is.na(actual_dnds$Codons)] <- 0
+actual_dnds$NonSyn[is.na(actual_dnds$NonSyn)] <- 0
+actual_dnds$Syn[is.na(actual_dnds$Syn)] <- 0
+actual_dnds$Subst[is.na(actual_dnds$Subst)] <- 0
+summary(actual_dnds)
+```
 
+```
+##         Ref            Site           dNdS         Windows     
+##  consensus:3000   Min.   :   1   Min.   : 1.0   Min.   : 0.00  
+##                   1st Qu.: 751   1st Qu.: 1.3   1st Qu.: 0.00  
+##                   Median :1500   Median : 1.4   Median : 1.00  
+##                   Mean   :1500   Mean   : 1.6   Mean   : 2.03  
+##                   3rd Qu.:2250   3rd Qu.: 1.6   3rd Qu.: 3.00  
+##                   Max.   :3000   Max.   :14.1   Max.   :25.00  
+##                                  NA's   :943                   
+##      Codons        NonSyn          Syn            Subst     
+##  Min.   :  0   Min.   :   0   Min.   :  0.0   Min.   :   0  
+##  1st Qu.:  0   1st Qu.:   0   1st Qu.:  0.0   1st Qu.:   0  
+##  Median :394   Median : 237   Median : 61.9   Median : 301  
+##  Mean   :470   Mean   : 219   Mean   : 65.3   Mean   : 284  
+##  3rd Qu.:840   3rd Qu.: 348   3rd Qu.:109.3   3rd Qu.: 457  
+##  Max.   :929   Max.   :2064   Max.   :618.7   Max.   :2508  
+## 
+```
+
+```r
 
 expected_dnds <- read.table("../data/sample_genomes.rates", header = TRUE, sep = ",")
 dim(expected_dnds)
 ```
 
 ```
-## [1] 3000    5
+## [1] 3000    6
 ```
 
 ```r
@@ -87,13 +127,13 @@ head(expected_dnds)
 ```
 
 ```
-##   Site Interval Scaling_factor Rate_class Omega
-## 1    1        0              1          1  0.15
-## 2    2        0              1          3  0.35
-## 3    3        0              1          4  0.45
-## 4    4        0              1          4  0.45
-## 5    5        0              1          7  0.75
-## 6    6        0              1          0  0.05
+##   Site OldSite Interval Scaling_factor Rate_class Omega
+## 1    1       1        0              1          1  0.15
+## 2    2       2        0              1          3  0.35
+## 3    3       3        0              1          4  0.45
+## 4    4       4        0              1          4  0.45
+## 5    5       5        0              1          7  0.75
+## 6    6       6        0              1          0  0.05
 ```
 
 ```r
@@ -101,8 +141,9 @@ str(expected_dnds)
 ```
 
 ```
-## 'data.frame':	3000 obs. of  5 variables:
+## 'data.frame':	3000 obs. of  6 variables:
 ##  $ Site          : int  1 2 3 4 5 6 7 8 9 10 ...
+##  $ OldSite       : int  1 2 3 4 5 6 7 8 9 10 ...
 ##  $ Interval      : int  0 0 0 0 0 0 0 0 0 0 ...
 ##  $ Scaling_factor: num  1 1 1 1 1 1 1 1 1 1 ...
 ##  $ Rate_class    : int  1 3 4 4 7 0 3 7 2 3 ...
@@ -114,13 +155,13 @@ summary(expected_dnds)
 ```
 
 ```
-##       Site         Interval Scaling_factor    Rate_class   
-##  Min.   :   1   Min.   :0   Min.   :  1.0   Min.   : 0.00  
-##  1st Qu.: 751   1st Qu.:3   1st Qu.:  5.0   1st Qu.: 1.00  
-##  Median :1500   Median :4   Median : 10.0   Median : 3.00  
-##  Mean   :1500   Mean   :4   Mean   : 37.7   Mean   : 4.43  
-##  3rd Qu.:2250   3rd Qu.:5   3rd Qu.:100.0   3rd Qu.: 6.00  
-##  Max.   :3000   Max.   :8   Max.   :100.0   Max.   :27.00  
+##       Site         OldSite        Interval Scaling_factor    Rate_class   
+##  Min.   :   1   Min.   :   1   Min.   :0   Min.   :  1.0   Min.   : 0.00  
+##  1st Qu.: 751   1st Qu.: 751   1st Qu.:3   1st Qu.:  5.0   1st Qu.: 1.00  
+##  Median :1500   Median :1500   Median :4   Median : 10.0   Median : 3.00  
+##  Mean   :1500   Mean   :1500   Mean   :4   Mean   : 37.7   Mean   : 4.43  
+##  3rd Qu.:2250   3rd Qu.:2250   3rd Qu.:5   3rd Qu.:100.0   3rd Qu.: 6.00  
+##  Max.   :3000   Max.   :3000   Max.   :8   Max.   :100.0   Max.   :27.00  
 ##      Omega      
 ##  Min.   :0.050  
 ##  1st Qu.:0.150  
@@ -189,7 +230,7 @@ ggplot(fullDat, aes(x = actual, y = expected)) + geom_smooth(method = lm)
 ![plot of chunk unnamed-chunk-3](figure/unnamed-chunk-3.png) 
 
 
-**Scatterplot the dn-ds across the genome**
+**Scatterplot the dn/ds across the genome**
 
 
 ```r
@@ -248,43 +289,81 @@ summary(fullDatBySource)
 ```
 
 ```r
-ggplot(fullDatBySource, aes(x = site, y = dnds, color = source)) + geom_point() + 
+ggplot(fullDatBySource, aes(x = site, y = dnds, color = source)) + geom_smooth() + 
     xlab("Codon Site Along Genome") + ylab("dN/dS") + ggtitle("dn/ds by site")
+```
+
+```
+## geom_smooth: method="auto" and size of largest group is >=1000, so using gam with formula: y ~ s(x, bs = "cs"). Use 'method = x' to change the smoothing method.
 ```
 
 ![plot of chunk unnamed-chunk-4](figure/unnamed-chunk-4.png) 
 
-```r
 
-# 
-```
-
-
-**Plot the mutation rate across the genome**
+**Plot the unambiguous codon depth across genome**
 
 
 ```r
-ggplot(expected_dnds, aes(x = Site, y = Scaling_factor)) + geom_point() + xlab("Codon Site Along Genome") + 
-    ylab("Mutation Rate Scaling Factor") + ggtitle("Mutation Along Genome")
+ggplot(actual_dnds, aes(x = Site, y = Codons)) + geom_line() + xlab("Codon Site Along Genome") + 
+    ylab("Sequences with Unambiguous Codons") + ggtitle("Population Unambiguous Codons Across Genome")
 ```
 
 ![plot of chunk unnamed-chunk-5](figure/unnamed-chunk-5.png) 
 
-```r
 
-# 
+**Plot the nonsynonymous substitutions across genome**
+
+
+```r
+ggplot(actual_dnds, aes(x = Site, y = NonSyn)) + geom_line() + xlab("Codon Site Along Genome") + 
+    ylab("Nonsynonymous Substitutions") + ggtitle("Population Nonsynonymous Substitutions Across Genome")
 ```
+
+![plot of chunk unnamed-chunk-6](figure/unnamed-chunk-6.png) 
+
+
+**Plot the synonymous substitutions across genome**
+
+
+```r
+ggplot(actual_dnds, aes(x = Site, y = Syn)) + geom_line() + xlab("Codon Site Along Genome") + 
+    ylab("Synonymous Substitutions") + ggtitle("Population Synonymous Substitutions Across Genome")
+```
+
+![plot of chunk unnamed-chunk-7](figure/unnamed-chunk-7.png) 
+
+
+**Plot the substitutions across genome**
+
+
+```r
+ggplot(actual_dnds, aes(x = Site, y = Subst)) + geom_line() + xlab("Codon Site Along Genome") + 
+    ylab("Substitutions") + ggtitle("Population Substitutions Across Genome")
+```
+
+![plot of chunk unnamed-chunk-8](figure/unnamed-chunk-8.png) 
+
+
+**Plot the expected mutation rate across the genome**
+
+
+```r
+ggplot(expected_dnds, aes(x = Site, y = Scaling_factor)) + geom_line() + xlab("Codon Site Along Genome") + 
+    ylab("Mutation Rate Scaling Factor") + ggtitle("Mutation Along Genome")
+```
+
+![plot of chunk unnamed-chunk-9](figure/unnamed-chunk-9.png) 
 
 
 **Plot the Expected Omega rate across the genome**
 
 
 ```r
-ggplot(expected_dnds, aes(x = Site, y = Omega)) + geom_point() + xlab("Codon Site Along Genome") + 
+ggplot(expected_dnds, aes(x = Site, y = Omega)) + geom_line() + xlab("Codon Site Along Genome") + 
     ylab("dn/dS Expected") + ggtitle("Expected Selection Along Genome")
 ```
 
-![plot of chunk unnamed-chunk-6](figure/unnamed-chunk-6.png) 
+![plot of chunk unnamed-chunk-10](figure/unnamed-chunk-10.png) 
 
 ```r
 # dnds_cor <- cor(log(actual_dnds$dNdS), expected_dnds$Omega,
