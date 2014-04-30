@@ -7,7 +7,10 @@ import csv
 import glob
 
 
-
+HYPHY_TSV_DN_COL = 'dN'
+HYPHY_TSV_DS_COL = 'dS'
+HYPHY_TSV_S_COL = 'Observed S Changes'
+HYPHY_TSV_N_COL = 'Observed NS Changes'
 HYPHY_TSV_SCALED_DNDS_COL = 'Scaled dN-dS'
 HYPHY_TSV_PROB_FULLSEQ_NS = 'P{S leq. observed}'
 
@@ -368,20 +371,20 @@ def get_seq_dnds_info(dnds_tsv_dir, pvalue_thresh, ref, ref_codon_len):
     :param int ref_codon_len:  length of the reference in codons
 
     Assumes these are the columns in the HyPhy DN/DS TSV output:
-    Observed S Changes
-    Observed NS Changes
-    E[S Sites]: proportion of random one-nucleotide substitutions that are expected to be synonymous
-    E[NS Sites]: roportion of random one-nucleotide substitutions that are expected to be non-synonymous
-    Observed S. Prop.
-    P{S}:  proportion of substitutions expected to be synonymous under neutral evolution
-    dS
-    dN
-    dN-dS
-    P{S leq. observed}:  binomial distro pvalue.  Probability of getting less than the observed synynomous substitutions
+    - Observed S Changes
+    - Observed NS Changes
+    - E[S Sites]: proportion of random one-nucleotide substitutions that are expected to be synonymous
+    - E[NS Sites]: proportion of random one-nucleotide substitutions that are expected to be non-synonymous
+    - Observed S. Prop.: observed proportion of synomymous substitutions
+    - P{S}:  proportion of substitutions expected to be synonymous under neutral evolution = E[S Sites]/(E[S Sites] + E[NS Sites])
+    - dS: observed synonymous substitutions / expected proportion synonymous substitutions = Observed S Changes / E[S Sites]
+    - dN: observed non synonymous substitutions / expected proportion nonsynonymous substitutions = Observed NS Changes / E[NS Sites]
+    - dN-dS:  difference between dS and dN
+    - P{S leq. observed}:  binomial distro pvalue.  Probability of getting less than the observed synynomous substitutions
         under the binomial distribution where probability of 1 synonymous codon = P{S}
-    P{S geq. observed}: 1-pvalue.  Probability of getting more than the observed synynomous substitutions
+    - P{S geq. observed}: 1-pvalue.  Probability of getting more than the observed synynomous substitutions
         under the binomial distribution where probability of 1 synonymous codon = P{S}
-    Scaled dN-dS:  dN-dS normalized by the total length of the tree.
+    - Scaled dN-dS:  dN-dS normalized by the total length of the tree.
 
     We only want significant Dn/Ds.  Use the normalized value so that dn/ds can be compared from every window.
     """
@@ -402,9 +405,14 @@ def get_seq_dnds_info(dnds_tsv_dir, pvalue_thresh, ref, ref_codon_len):
                 pval = float(codon_row[HYPHY_TSV_PROB_FULLSEQ_NS])
                 if pval <= pvalue_thresh:
                     ref_codon_1based = win_start_codon_1based_wrt_ref + offset
+                    if ref_codon_1based == 29:
+                        print "here"
 
-                    dnds = float(codon_row[HYPHY_TSV_SCALED_DNDS_COL])
-                    seq_dnds_info.add_site_dnds(site_1based=ref_codon_1based, dnds=dnds)
+                    dN = float(codon_row[HYPHY_TSV_DN_COL])
+                    dS = float(codon_row[HYPHY_TSV_DS_COL])
+                    if not dS == 0:
+                        dnds = dN/dS
+                        seq_dnds_info.add_site_dnds(site_1based=ref_codon_1based, dnds=dnds)
 
     return seq_dnds_info
 

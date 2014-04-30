@@ -12,6 +12,7 @@ tail(actual_dnds)
 str(actual_dnds)
 summary(actual_dnds)
 
+
 expected_dnds <- read.table("../data/sample_genomes.rates", header=TRUE, sep=',')
 dim(expected_dnds)
 head(expected_dnds)
@@ -28,14 +29,14 @@ summary(expected_dnds)
 # sum(orig_dnds$omega == expected_dnds$Omega)
 
 #' **Paired test without assumption of normalcy**
-# htest <-  wilcox.test(actual_dnds$dNdS, expected_dnds$Omega, paired=TRUE, exact=TRUE, 
-#                       conf.int=TRUE, conf.level=0.95, na.action="na.exclude")
-# print (htest)
+htest <-  wilcox.test(actual_dnds$dNdS, expected_dnds$Omega, paired=TRUE, exact=TRUE, na.action="na.exclude")
+print (htest)
 
 #' **Scatterplot actual vs expected dn ds together**
 fullDat <- data.frame(site=expected_dnds$Site,
                       actual=actual_dnds$dNdS, 
                       expected=expected_dnds$Omega)
+head(fullDat[!is.na(fullDat$actual),])
 ggplot(fullDat, aes(x=actual, y=expected)) + geom_smooth(method=lm)
 
 #' **Scatterplot the dn-ds across the genome**
@@ -47,9 +48,26 @@ str(fullDatBySource)
 summary(fullDatBySource)
 ggplot(fullDatBySource, aes(x=site, y=dnds, color=source) ) + geom_point() + 
   xlab("Codon Site Along Genome") + 
-  ylab("Normalized dN-dS") + 
-  ggtitle("dn-ds by site")
+  ylab("dN/dS") + 
+  ggtitle("dn/ds by site")
+
+# 
+#' **Plot the mutation rate across the genome**
+#+ fig.width=16
+ggplot(expected_dnds, aes(x=Site, y=Scaling_factor) ) + geom_point() + 
+  xlab("Codon Site Along Genome") + 
+  ylab("Mutation Rate Scaling Factor") + 
+  ggtitle("Mutation Along Genome")
+
+# 
+#' **Plot the Expected Omega rate across the genome**
+#+ fig.width=16
+ggplot(expected_dnds, aes(x=Site, y=Omega) ) + geom_point() + 
+  xlab("Codon Site Along Genome") + 
+  ylab("dn/dS Expected") + 
+  ggtitle("Expected Selection Along Genome")
 
 #+ **Find how correlated the actual vs expected dnds are**
-dnds_cor <- cor(actual_dnds$dNdS, expected_dnds$Omega, method="spearman", use="pairwise.complete.obs")
+#dnds_cor <- cor(log(actual_dnds$dNdS), expected_dnds$Omega, method="spearman", use="pairwise.complete.obs")
+dnds_cor <- cor(actual_dnds$dNdS, expected_dnds$Omega, method="spearman", use="complete.obs")
 print(dnds_cor)

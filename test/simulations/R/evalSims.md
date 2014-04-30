@@ -61,17 +61,18 @@ summary(actual_dnds)
 ```
 
 ```
-##         Ref            Site           dNdS    
-##  consensus:3000   Min.   :   1   Min.   :0    
-##                   1st Qu.: 751   1st Qu.:0    
-##                   Median :1500   Median :0    
-##                   Mean   :1500   Mean   :0    
-##                   3rd Qu.:2250   3rd Qu.:0    
-##                   Max.   :3000   Max.   :3    
+##         Ref            Site           dNdS     
+##  consensus:3000   Min.   :   1   Min.   : 1.0  
+##                   1st Qu.: 751   1st Qu.: 1.3  
+##                   Median :1500   Median : 1.4  
+##                   Mean   :1500   Mean   : 1.6  
+##                   3rd Qu.:2250   3rd Qu.: 1.6  
+##                   Max.   :3000   Max.   :14.1  
 ##                                  NA's   :943
 ```
 
 ```r
+
 
 expected_dnds <- read.table("../data/sample_genomes.rates", header = TRUE, sep = ",")
 dim(expected_dnds)
@@ -143,9 +144,18 @@ summary(expected_dnds)
 
 
 ```r
-# htest <- wilcox.test(actual_dnds$dNdS, expected_dnds$Omega, paired=TRUE,
-# exact=TRUE, conf.int=TRUE, conf.level=0.95, na.action='na.exclude') print
-# (htest)
+htest <- wilcox.test(actual_dnds$dNdS, expected_dnds$Omega, paired = TRUE, exact = TRUE, 
+    na.action = "na.exclude")
+print(htest)
+```
+
+```
+## 
+## 	Wilcoxon signed rank test
+## 
+## data:  actual_dnds$dNdS and expected_dnds$Omega
+## V = 2098252, p-value < 2.2e-16
+## alternative hypothesis: true location shift is not equal to 0
 ```
 
 
@@ -155,6 +165,20 @@ summary(expected_dnds)
 ```r
 fullDat <- data.frame(site = expected_dnds$Site, actual = actual_dnds$dNdS, 
     expected = expected_dnds$Omega)
+head(fullDat[!is.na(fullDat$actual), ])
+```
+
+```
+##    site actual expected
+## 29   29 14.071     0.25
+## 33   33  5.493     0.15
+## 45   45  4.713     0.25
+## 46   46  2.991     0.35
+## 49   49  3.379     0.55
+## 53   53  6.331     0.65
+```
+
+```r
 ggplot(fullDat, aes(x = actual, y = expected)) + geom_smooth(method = lm)
 ```
 
@@ -175,13 +199,13 @@ head(fullDatBySource)
 ```
 
 ```
-##    site source    dnds
-## 29   29 actual 0.02818
-## 33   33 actual 0.02116
-## 45   45 actual 0.01558
-## 46   46 actual 0.32697
-## 49   49 actual 0.02248
-## 53   53 actual 0.02144
+##    site source   dnds
+## 29   29 actual 14.071
+## 33   33 actual  5.493
+## 45   45 actual  4.713
+## 46   46 actual  2.991
+## 49   49 actual  3.379
+## 53   53 actual  6.331
 ```
 
 ```r
@@ -206,7 +230,7 @@ str(fullDatBySource)
 ## 'data.frame':	5057 obs. of  3 variables:
 ##  $ site  : int  29 33 45 46 49 53 57 59 60 61 ...
 ##  $ source: Factor w/ 2 levels "actual","expected": 1 1 1 1 1 1 1 1 1 1 ...
-##  $ dnds  : num  0.0282 0.0212 0.0156 0.327 0.0225 ...
+##  $ dnds  : num  14.07 5.49 4.71 2.99 3.38 ...
 ```
 
 ```r
@@ -215,29 +239,63 @@ summary(fullDatBySource)
 
 ```
 ##       site           source          dnds       
-##  Min.   :   1   actual  :2057   Min.   :0.0001  
-##  1st Qu.: 740   expected:3000   1st Qu.:0.0070  
-##  Median :1478                   Median :0.1500  
-##  Mean   :1484                   Mean   :0.3026  
-##  3rd Qu.:2244                   3rd Qu.:0.4500  
-##  Max.   :3000                   Max.   :3.0157
+##  Min.   :   1   actual  :2057   Min.   : 0.050  
+##  1st Qu.: 740   expected:3000   1st Qu.: 0.350  
+##  Median :1478                   Median : 0.850  
+##  Mean   :1484                   Mean   : 0.927  
+##  3rd Qu.:2244                   3rd Qu.: 1.408  
+##  Max.   :3000                   Max.   :14.071
 ```
 
 ```r
 ggplot(fullDatBySource, aes(x = site, y = dnds, color = source)) + geom_point() + 
-    xlab("Codon Site Along Genome") + ylab("Normalized dN-dS") + ggtitle("dn-ds by site")
+    xlab("Codon Site Along Genome") + ylab("dN/dS") + ggtitle("dn/ds by site")
 ```
 
 ![plot of chunk unnamed-chunk-4](figure/unnamed-chunk-4.png) 
 
 ```r
+
+# 
+```
+
+
+**Plot the mutation rate across the genome**
+
+
+```r
+ggplot(expected_dnds, aes(x = Site, y = Scaling_factor)) + geom_point() + xlab("Codon Site Along Genome") + 
+    ylab("Mutation Rate Scaling Factor") + ggtitle("Mutation Along Genome")
+```
+
+![plot of chunk unnamed-chunk-5](figure/unnamed-chunk-5.png) 
+
+```r
+
+# 
+```
+
+
+**Plot the Expected Omega rate across the genome**
+
+
+```r
+ggplot(expected_dnds, aes(x = Site, y = Omega)) + geom_point() + xlab("Codon Site Along Genome") + 
+    ylab("dn/dS Expected") + ggtitle("Expected Selection Along Genome")
+```
+
+![plot of chunk unnamed-chunk-6](figure/unnamed-chunk-6.png) 
+
+```r
+# dnds_cor <- cor(log(actual_dnds$dNdS), expected_dnds$Omega,
+# method='spearman', use='pairwise.complete.obs')
 dnds_cor <- cor(actual_dnds$dNdS, expected_dnds$Omega, method = "spearman", 
-    use = "pairwise.complete.obs")
+    use = "complete.obs")
 print(dnds_cor)
 ```
 
 ```
-## [1] -0.03475
+## [1] 0.0169
 ```
 
 

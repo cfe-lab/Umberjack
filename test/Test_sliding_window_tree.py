@@ -14,7 +14,7 @@ REFERENCE_FASTA = "./simulations/data/sample_genomes.consensus.fas"
 REF = "consensus"
 REF_LEN = 9000
 OUT_DIR = "./simulations/data/out" + os.sep + REF
-ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + 'ave_dnds_by_site.tsv'
+ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + 'actual_dnds_by_site.tsv'
 
 GAMMA_DNDS_LOOKUP_FILENAME = "./simulations/data/sample_genomes.rates"
 GAMMA_DNDS_LOOKUP_COL_INTERVAL = "Interval"
@@ -33,7 +33,7 @@ BOWTIE_BUILD_EXE=""
 
 PVALUE = 0.05
 THREADS_PER_WINDOW = 3
-WINDOW_PROCS = 5
+WINDOW_PROCS = 4
 START_NUCPOS = 1
 END_NUCPOS = REF_LEN
 

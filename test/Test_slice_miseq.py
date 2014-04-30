@@ -8,17 +8,17 @@ import array
 # For now, use a *.remap.sam file (paired end reads aligned to a consensus sequence with indels removed).
 SAM_FILENAME = "./simulations/data/sample_genomes.grinder-reads.rename.sam"
 MSA_FASTA_FILENAME = "./simulations/data/out/sample_genomes.grinder-reads.rename.msa.fasta"
-MAPQ_CUTOFF = 0  # alignment quality cutoff
-MAX_PROP_N = 0  # maximum proportion of N bases in MSA-aligned sequence
-READ_QUAL_CUTOFF = 20   # Phred quality score cutoff [0,40]
+MAPQ_CUTOFF = 10  # alignment quality cutoff
+MAX_PROP_N = 0.25  # maximum proportion of N bases in MSA-aligned sequence
+READ_QUAL_CUTOFF = 10   # Phred quality score cutoff [0,40]
 REFERENCE_FASTA = "./simulations/data/sample_genomes.consensus.fas"
 REF = "consensus"
 REF_LEN = 9000
 DNDS_DIR = "./simulations/data/out" + os.sep + REF
 PVALUE = 0.05
-BREADTH_THRESH = 0.5
+BREADTH_THRESH = 0.75
 
-AVE_DNDS_BY_SITE_FILENAME = './simulations/data/out/consensus/actual_dnds_by_site.tsv'
+ACTUAL_DNDS_FILENAME = DNDS_DIR + os.sep + 'actual_dnds_by_site.tsv'
 GAMMA_DNDS_LOOKUP_FILENAME = "./simulations/data/sample_genomes.rates"
 GAMMA_DNDS_LOOKUP_COL_INTERVAL = "Interval"
 GAMMA_DNDS_LOOKUP_COL_SITE = "Site"
@@ -106,7 +106,7 @@ class TestSliceMiSeq(unittest.TestCase):
         # TODO:  automate check output
         # TODO: check multiple ref contigs
         seq_dnds_info = slice_miseq.get_seq_dnds_info(dnds_tsv_dir=DNDS_DIR, pvalue_thresh=PVALUE, ref=REF, ref_codon_len=REF_LEN/NUC_PER_CODON)
-        with open(AVE_DNDS_BY_SITE_FILENAME, 'w') as dnds_fh:
+        with open(ACTUAL_DNDS_FILENAME, 'w') as dnds_fh:
             dnds_fh.write("Ref\tSite\tdNdS\n")
             expected_site_2_dnds = TestSliceMiSeq.expected_dnds(GAMMA_DNDS_LOOKUP_FILENAME)
 
