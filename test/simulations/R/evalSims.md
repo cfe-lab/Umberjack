@@ -6,18 +6,25 @@ library(ggplot2)
 library(reshape2)
 
 INDELIBLE_RATES_OUTPUT_COMMENT_LINES <- 10
-ACTUAL_DNDS_COMMENT_LINES <- 0
+ACTUAL_DNDS_COMMENT_LINES <- 1
+
+
+
+dnds_file <- file("../data/out/consensus/windowsize360_art/actual_dnds_by_site.tsv", 
+    open = "rt")
+comments <- readLines(dnds_file, 1)  # Read one line 
 ```
 
 
-**Windowsize = 400, ref=consensus,ref_len=9000,sam=./simulations/data/sample_genomes.grinder-reads.rename.sam,mapping qual cutoff=10,read qual cutoff=10,max fraction N=0.25,start nuc pos=1,end nuc pos=9000,window depth=50**
+**# ref=consensus,ref_len=9000,sam=/global/scratch/thunguye/data/sample_genomes.artreads.consensus.sam,mapping qual cutoff=20,read qual cutoff=20,max fraction N=0.05,start nuc pos=1,end nuc pos=9000,windowsize=360,window depth thresh=50,window breadth fraction=0.95,pvalue=0.05**
 -----------------------------
 
 
 
+
 ```r
-actual_dnds <- read.table("../data/out/consensus/bugaboo/actual_dnds_by_site.tsv", 
-    header = TRUE, na.strings = "None", skip = ACTUAL_DNDS_COMMENT_LINES)
+actual_dnds <- read.table("../data/out/consensus/windowsize360_art/actual_dnds_by_site.tsv", 
+    header = TRUE, na.strings = "None", comment.char = "#")
 dim(actual_dnds)
 ```
 
@@ -61,12 +68,12 @@ str(actual_dnds)
 ## 'data.frame':	3000 obs. of  8 variables:
 ##  $ Ref    : Factor w/ 1 level "consensus": 1 1 1 1 1 1 1 1 1 1 ...
 ##  $ Site   : int  1 2 3 4 5 6 7 8 9 10 ...
-##  $ dNdS   : num  NA NA NA NA NA NA NA NA NA NA ...
-##  $ Windows: int  0 0 0 0 0 0 0 0 0 0 ...
-##  $ Codons : num  NA NA NA NA NA NA NA NA NA NA ...
-##  $ NonSyn : num  NA NA NA NA NA NA NA NA NA NA ...
-##  $ Syn    : num  NA NA NA NA NA NA NA NA NA NA ...
-##  $ Subst  : num  NA NA NA NA NA NA NA NA NA NA ...
+##  $ dNdS   : num  NA NA NA NA NA ...
+##  $ Windows: int  0 0 0 0 0 0 0 0 1 0 ...
+##  $ Codons : num  NA NA NA NA NA NA NA NA 190 NA ...
+##  $ NonSyn : num  NA NA NA NA NA ...
+##  $ Syn    : num  NA NA NA NA NA ...
+##  $ Subst  : num  NA NA NA NA NA ...
 ```
 
 ```r
@@ -74,22 +81,22 @@ summary(actual_dnds)
 ```
 
 ```
-##         Ref            Site           dNdS          Windows    
-##  consensus:3000   Min.   :   1   Min.   :  1.2   Min.   : 0.0  
-##                   1st Qu.: 751   1st Qu.:  1.4   1st Qu.: 1.0  
-##                   Median :1500   Median :  1.6   Median : 3.0  
-##                   Mean   :1500   Mean   :  2.8   Mean   : 4.1  
-##                   3rd Qu.:2250   3rd Qu.:  2.2   3rd Qu.: 5.0  
-##                   Max.   :3000   Max.   :444.2   Max.   :33.0  
-##                                  NA's   :479                   
-##      Codons        NonSyn           Syn            Subst       
-##  Min.   :204   Min.   : 12.3   Min.   :  0.0   Min.   :  13.3  
-##  1st Qu.:341   1st Qu.:131.4   1st Qu.: 31.2   1st Qu.: 163.6  
-##  Median :606   Median :216.7   Median : 63.2   Median : 280.7  
-##  Mean   :535   Mean   :226.9   Mean   : 68.3   Mean   : 295.1  
-##  3rd Qu.:668   3rd Qu.:315.6   3rd Qu.: 98.8   3rd Qu.: 414.1  
-##  Max.   :802   Max.   :767.4   Max.   :291.6   Max.   :1008.9  
-##  NA's   :479   NA's   :479     NA's   :479     NA's   :479
+##         Ref            Site           dNdS          Windows     
+##  consensus:3000   Min.   :   1   Min.   :    2   Min.   : 0.00  
+##                   1st Qu.: 751   1st Qu.:    2   1st Qu.: 0.00  
+##                   Median :1500   Median :    3   Median : 1.00  
+##                   Mean   :1500   Mean   :  153   Mean   : 3.17  
+##                   3rd Qu.:2250   3rd Qu.:   10   3rd Qu.: 4.00  
+##                   Max.   :3000   Max.   :77608   Max.   :64.00  
+##                                  NA's   :1483                   
+##      Codons         NonSyn          Syn           Subst      
+##  Min.   :133    Min.   : 3.6   Min.   : 0.0   Min.   :  3.6  
+##  1st Qu.:194    1st Qu.:14.9   1st Qu.: 1.1   1st Qu.: 16.1  
+##  Median :237    Median :33.9   Median : 5.8   Median : 40.9  
+##  Mean   :293    Mean   :33.2   Mean   : 7.0   Mean   : 40.2  
+##  3rd Qu.:407    3rd Qu.:48.1   3rd Qu.:12.2   3rd Qu.: 59.9  
+##  Max.   :500    Max.   :89.5   Max.   :28.8   Max.   :109.0  
+##  NA's   :1483   NA's   :1483   NA's   :1483   NA's   :1483
 ```
 
 ```r
@@ -102,21 +109,21 @@ summary(actual_dnds)
 ```
 
 ```
-##         Ref            Site           dNdS          Windows    
-##  consensus:3000   Min.   :   1   Min.   :  1.2   Min.   : 0.0  
-##                   1st Qu.: 751   1st Qu.:  1.4   1st Qu.: 1.0  
-##                   Median :1500   Median :  1.6   Median : 3.0  
-##                   Mean   :1500   Mean   :  2.8   Mean   : 4.1  
-##                   3rd Qu.:2250   3rd Qu.:  2.2   3rd Qu.: 5.0  
-##                   Max.   :3000   Max.   :444.2   Max.   :33.0  
-##                                  NA's   :479                   
-##      Codons        NonSyn           Syn            Subst       
-##  Min.   :  0   Min.   :  0.0   Min.   :  0.0   Min.   :   0.0  
-##  1st Qu.:306   1st Qu.: 74.2   1st Qu.: 15.0   1st Qu.:  89.2  
-##  Median :559   Median :183.5   Median : 51.2   Median : 234.9  
-##  Mean   :450   Mean   :190.6   Mean   : 57.4   Mean   : 248.0  
-##  3rd Qu.:659   3rd Qu.:296.3   3rd Qu.: 92.1   3rd Qu.: 388.6  
-##  Max.   :802   Max.   :767.4   Max.   :291.6   Max.   :1008.9  
+##         Ref            Site           dNdS          Windows     
+##  consensus:3000   Min.   :   1   Min.   :    2   Min.   : 0.00  
+##                   1st Qu.: 751   1st Qu.:    2   1st Qu.: 0.00  
+##                   Median :1500   Median :    3   Median : 1.00  
+##                   Mean   :1500   Mean   :  153   Mean   : 3.17  
+##                   3rd Qu.:2250   3rd Qu.:   10   3rd Qu.: 4.00  
+##                   Max.   :3000   Max.   :77608   Max.   :64.00  
+##                                  NA's   :1483                   
+##      Codons        NonSyn           Syn             Subst       
+##  Min.   :  0   Min.   : 0.00   Min.   : 0.000   Min.   :  0.00  
+##  1st Qu.:  0   1st Qu.: 0.00   1st Qu.: 0.000   1st Qu.:  0.00  
+##  Median :160   Median : 7.24   Median : 0.005   Median :  7.57  
+##  Mean   :148   Mean   :16.77   Mean   : 3.543   Mean   : 20.31  
+##  3rd Qu.:242   3rd Qu.:34.34   3rd Qu.: 6.064   3rd Qu.: 41.32  
+##  Max.   :500   Max.   :89.48   Max.   :28.835   Max.   :108.96  
 ## 
 ```
 
@@ -202,7 +209,7 @@ print(htest)
 ## 	Wilcoxon signed rank test
 ## 
 ## data:  actual_dnds$dNdS and expected_dnds$Omega
-## V = 3169110, p-value < 2.2e-16
+## V = 1151268, p-value < 2.2e-16
 ## alternative hypothesis: true location shift is not equal to 0
 ```
 
@@ -217,13 +224,13 @@ head(fullDat[!is.na(fullDat$actual), ])
 ```
 
 ```
-##    site actual expected
-## 33   33  5.626     0.15
-## 42   42  4.558     0.55
-## 44   44  5.388     0.05
-## 45   45  4.315     0.25
-## 46   46  3.225     0.35
-## 48   48  4.173     0.55
+##    site  actual expected
+## 9     9   3.457     0.25
+## 30   30 288.035     0.35
+## 33   33   5.620     0.15
+## 34   34  13.509     0.65
+## 38   38   6.703     0.35
+## 43   43   6.591     0.15
 ```
 
 ```r
@@ -231,7 +238,7 @@ ggplot(fullDat, aes(x = actual, y = expected)) + geom_smooth(method = lm)
 ```
 
 ```
-## Warning: Removed 479 rows containing missing values (stat_smooth).
+## Warning: Removed 1483 rows containing missing values (stat_smooth).
 ```
 
 ![plot of chunk unnamed-chunk-4](figure/unnamed-chunk-4.png) 
@@ -247,13 +254,13 @@ head(fullDatBySource)
 ```
 
 ```
-##    site source  dnds
-## 33   33 actual 5.626
-## 42   42 actual 4.558
-## 44   44 actual 5.388
-## 45   45 actual 4.315
-## 46   46 actual 3.225
-## 48   48 actual 4.173
+##    site source    dnds
+## 9     9 actual   3.457
+## 30   30 actual 288.035
+## 33   33 actual   5.620
+## 34   34 actual  13.509
+## 38   38 actual   6.703
+## 43   43 actual   6.591
 ```
 
 ```r
@@ -275,10 +282,10 @@ str(fullDatBySource)
 ```
 
 ```
-## 'data.frame':	5521 obs. of  3 variables:
-##  $ site  : int  33 42 44 45 46 48 49 50 53 57 ...
+## 'data.frame':	4517 obs. of  3 variables:
+##  $ site  : int  9 30 33 34 38 43 49 53 57 59 ...
 ##  $ source: Factor w/ 2 levels "actual","expected": 1 1 1 1 1 1 1 1 1 1 ...
-##  $ dnds  : num  5.63 4.56 5.39 4.31 3.23 ...
+##  $ dnds  : num  3.46 288.04 5.62 13.51 6.7 ...
 ```
 
 ```r
@@ -287,12 +294,12 @@ summary(fullDatBySource)
 
 ```
 ##       site           source          dnds      
-##  Min.   :   1   actual  :2521   Min.   :  0.0  
-##  1st Qu.: 767   expected:3000   1st Qu.:  0.4  
-##  Median :1482                   Median :  1.1  
-##  Mean   :1486                   Mean   :  1.5  
-##  3rd Qu.:2212                   3rd Qu.:  1.6  
-##  Max.   :3000                   Max.   :444.2
+##  Min.   :   1   actual  :1517   Min.   :    0  
+##  1st Qu.: 852   expected:3000   1st Qu.:    0  
+##  Median :1515                   Median :    1  
+##  Mean   :1512                   Mean   :   52  
+##  3rd Qu.:2177                   3rd Qu.:    2  
+##  Max.   :3000                   Max.   :77608
 ```
 
 ```r
@@ -302,6 +309,11 @@ ggplot(fullDatBySource, aes(x = site, y = dnds, color = source)) + geom_smooth()
 
 ```
 ## geom_smooth: method="auto" and size of largest group is >=1000, so using gam with formula: y ~ s(x, bs = "cs"). Use 'method = x' to change the smoothing method.
+```
+
+```
+## Warning: closing unused connection 6
+## (../data/out/consensus/windowsize360_art/actual_dnds_by_site.tsv)
 ```
 
 ![plot of chunk unnamed-chunk-5](figure/unnamed-chunk-5.png) 
@@ -351,6 +363,17 @@ ggplot(actual_dnds, aes(x = Site, y = Subst)) + geom_line() + xlab("Codon Site A
 ![plot of chunk unnamed-chunk-9](figure/unnamed-chunk-9.png) 
 
 
+**Plot the Windows across genome**
+
+
+```r
+ggplot(actual_dnds, aes(x = Site, y = Windows)) + geom_line() + xlab("Codon Site Along Genome") + 
+    ylab("Windows") + ggtitle("Windows Across Genome")
+```
+
+![plot of chunk unnamed-chunk-10](figure/unnamed-chunk-10.png) 
+
+
 **Plot the expected mutation rate across the genome**
 
 
@@ -359,7 +382,7 @@ ggplot(expected_dnds, aes(x = Site, y = Scaling_factor)) + geom_line() + xlab("C
     ylab("Mutation Rate Scaling Factor") + ggtitle("Mutation Along Genome")
 ```
 
-![plot of chunk unnamed-chunk-10](figure/unnamed-chunk-10.png) 
+![plot of chunk unnamed-chunk-11](figure/unnamed-chunk-11.png) 
 
 
 **Plot the Expected Omega rate across the genome**
@@ -370,7 +393,7 @@ ggplot(expected_dnds, aes(x = Site, y = Omega)) + geom_line() + xlab("Codon Site
     ylab("dn/dS Expected") + ggtitle("Expected Selection Along Genome")
 ```
 
-![plot of chunk unnamed-chunk-11](figure/unnamed-chunk-11.png) 
+![plot of chunk unnamed-chunk-12](figure/unnamed-chunk-12.png) 
 
 ```r
 # dnds_cor <- cor(log(actual_dnds$dNdS), expected_dnds$Omega,
@@ -381,7 +404,7 @@ print(dnds_cor)
 ```
 
 ```
-## [1] 0.04211
+## [1] 0.04574
 ```
 
 

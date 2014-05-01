@@ -3,13 +3,18 @@ library(ggplot2)
 library(reshape2)
 
 INDELIBLE_RATES_OUTPUT_COMMENT_LINES <- 10
-ACTUAL_DNDS_COMMENT_LINES <- 0
+ACTUAL_DNDS_COMMENT_LINES <- 1
 
-#' **Windowsize = 400, ref=consensus,ref_len=9000,sam=./simulations/data/sample_genomes.grinder-reads.rename.sam,mapping qual cutoff=10,read qual cutoff=10,max fraction N=0.25,start nuc pos=1,end nuc pos=9000,window depth=50**
+
+
+dnds_file <- file("../data/out/consensus/windowsize360_art/actual_dnds_by_site.tsv", open="rt")
+comments <- readLines(dnds_file, 1) # Read one line 
+
+#' **`r comments`**
 #' -----------------------------
 #' 
-
-actual_dnds <- read.table("../data/out/consensus/bugaboo/actual_dnds_by_site.tsv", header=TRUE, na.strings="None", skip=ACTUAL_DNDS_COMMENT_LINES)
+#' 
+actual_dnds <- read.table("../data/out/consensus/windowsize360_art/actual_dnds_by_site.tsv", header=TRUE, na.strings="None", comment.char = "#")
 dim(actual_dnds)
 head(actual_dnds)
 tail(actual_dnds)
@@ -94,7 +99,12 @@ ggplot(actual_dnds, aes(x=Site, y=Subst) ) + geom_line() +
   ylab("Substitutions") + 
   ggtitle("Population Substitutions Across Genome")
 
-
+#' **Plot the Windows across genome**
+#+ fig.width=24
+ggplot(actual_dnds, aes(x=Site, y=Windows) ) + geom_line() + 
+  xlab("Codon Site Along Genome") + 
+  ylab("Windows") + 
+  ggtitle("Windows Across Genome")
 
 #' **Plot the expected mutation rate across the genome**
 #+ fig.width=24
