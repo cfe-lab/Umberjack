@@ -104,7 +104,7 @@ def eval_windows(ref, ref_len, sam_filename, out_dir, output_dnds_tsv_filename,
     # All nucleotide positions are 1-based
     last_window_start_nucpos = end_nucpos - windowsize
     for start_window_nucpos in range(start_nucpos, last_window_start_nucpos+1, NUC_PER_CODON):
-        end_window_nucpos = start_window_nucpos + windowsize
+        end_window_nucpos = start_window_nucpos + windowsize - 1
 
         eval_window(msa_fasta_filename=msa_fasta_filename, out_dir=out_dir,
                     mapping_cutoff=mapping_cutoff, read_qual_cutoff=read_qual_cutoff, max_prop_N=max_prop_N,
@@ -248,7 +248,7 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir,
     total_windows = (last_window_start_nucpos - start_nucpos + 1)/NUC_PER_CODON
     process_results = []
     for start_window_nucpos in range(start_nucpos, last_window_start_nucpos+1, NUC_PER_CODON):
-        end_window_nucpos = start_window_nucpos + windowsize
+        end_window_nucpos = start_window_nucpos + windowsize - 1
         process_args = (msa_fasta_filename, window_depth_thresh, window_breadth_thresh,
                         start_window_nucpos, end_window_nucpos, pvalue, threads_per_window,
                         hyphy_exe, hyphy_basedir, fastree_exe)
