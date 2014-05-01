@@ -17,7 +17,16 @@ REF = "consensus"
 REF_LEN = 9000
 DNDS_DIR = "./simulations/data/out" + os.sep + REF
 PVALUE = 0.05
-BREADTH_THRESH = 0.75
+
+MIN_WINDOW_BREADTH_COV_FRACTION = 0.75
+MIN_WINDOW_DEPTH_COV = 50
+
+WINDOWSIZE=300
+THREADS_PER_WINDOW = 3
+WINDOW_PROCS = 4
+START_NUCPOS = 1
+END_NUCPOS = REF_LEN
+
 
 ACTUAL_DNDS_FILENAME = DNDS_DIR + os.sep + 'actual_dnds_by_site.tsv'
 GAMMA_DNDS_LOOKUP_FILENAME = "./simulations/data/sample_genomes.rates"
@@ -105,21 +114,24 @@ class TestSliceMiSeq(unittest.TestCase):
 
     def test_get_seq_dnds(self):
         # TODO:  automate check output
-        # TODO: check multiple ref contigs
-        seq_dnds_info = slice_miseq.get_seq_dnds_info(dnds_tsv_dir=DNDS_DIR, pvalue_thresh=PVALUE, ref=REF, ref_codon_len=REF_LEN/NUC_PER_CODON)
+
         with open(ACTUAL_DNDS_FILENAME, 'w') as dnds_fh:
-            dnds_fh.write("Ref\tSite\tdNdS\tWindows\tCodons\tNonSyn\tSyn\tSubst\n")
+            dnds_tsv_comments = ("ref=" + REF + "," +
+                                 "ref_len=" + str(REF_LEN) + "," +
+                                 "sam=" + SAM_FILENAME + "," +
+                                 "mapping qual cutoff=" + str(MAPQ_CUTOFF) + "," +
+                                 "read qual cutoff=" + str(READ_QUAL_CUTOFF) + "," +
+                                 "max fraction N=" + str(MAX_PROP_N) + "," +
+                                 "start nuc pos=" + str(START_NUCPOS) + "," +
+                                 "end nuc pos=" + str(END_NUCPOS) + "," +
+                                 "windowsize=" + str(WINDOWSIZE) + "," +
+                                 "window depth thresh=" + str(MIN_WINDOW_DEPTH_COV) + "," +
+                                 "window breadth fraction=" + str(MIN_WINDOW_BREADTH_COV_FRACTION) + "," +
+                                 "pvalue=" + str(PVALUE))
+            slice_miseq.tabulate_dnds(dnds_tsv_dir=DNDS_DIR, pvalue_thresh=PVALUE, ref=REF, ref_nuc_len=REF_LEN,
+                                  comments=dnds_tsv_comments, output_dnds_tsv_filename=ACTUAL_DNDS_FILENAME)
             expected_site_2_dnds = TestSliceMiSeq.expected_dnds(GAMMA_DNDS_LOOKUP_FILENAME)
 
-            for site in range(1, seq_dnds_info.get_seq_len() + 1):  # 1based codon sites
-                site_dnds = seq_dnds_info.get_site_ave_dnds(site_1based=site)
-                window = seq_dnds_info.get_site_window_cov(site_1based=site)
-                reads = seq_dnds_info.get_site_ave_read_cov(site_1based=site)
-                nonsyn = seq_dnds_info.get_site_ave_nonsyn_subs(site_1based=site)
-                syn = seq_dnds_info.get_site_ave_syn_subs(site_1based=site)
-                subs = seq_dnds_info.get_site_ave_subs(site_1based=site)
-                line = "\t".join((REF, str(site), str(site_dnds), str(window), str(reads),  str(nonsyn), str(syn), str(subs)))
-                dnds_fh.write(line + "\n")
 
 
 if __name__ == '__main__':

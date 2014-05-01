@@ -65,28 +65,6 @@ def create_full_msa_fasta(sam_filename, out_dir, ref, ref_len, mapping_cutoff, r
 
     return msa_fasta_filename
 
-
-def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_dnds_tsv_filename, comments):
-    LOGGER.debug("Start Ave Dn/DS for all windows for ref " + ref + " " + output_dnds_tsv_filename)
-    seq_dnds_info = slice_miseq.get_seq_dnds_info(dnds_tsv_dir=dnds_tsv_dir, pvalue_thresh=pvalue_thresh, ref=ref,
-                                                    ref_codon_len=ref_nuc_len/NUC_PER_CODON)
-    with open(output_dnds_tsv_filename, 'w') as dnds_fh:
-        dnds_fh.write("# " + comments + "\n")
-        dnds_fh.write("Ref\tSite\tdNdS\tWindows\tCodons\tNonSyn\tSyn\tSubst\n")
-        for site in range(1, seq_dnds_info.get_seq_len() + 1):
-            site_dnds = seq_dnds_info.get_site_ave_dnds(site_1based=site)
-            window = seq_dnds_info.get_site_window_cov(site_1based=site)
-            reads = seq_dnds_info.get_site_ave_read_cov(site_1based=site)
-            nonsyn = seq_dnds_info.get_site_ave_nonsyn_subs(site_1based=site)
-            syn = seq_dnds_info.get_site_ave_syn_subs(site_1based=site)
-            subs = seq_dnds_info.get_site_ave_subs(site_1based=site)
-            line = "\t".join((ref, str(site), str(site_dnds), str(window), str(reads),  str(nonsyn), str(syn), str(subs)))
-            dnds_fh.write(line + "\n")
-
-    LOGGER.debug("Done Ave Dn/DS for all windows  for ref " + ref + ".  Wrote to " + output_dnds_tsv_filename)
-    return seq_dnds_info
-
-
 def eval_windows(ref, ref_len, sam_filename, out_dir, output_dnds_tsv_filename,
                  mapping_cutoff, read_qual_cutoff, max_prop_N,
                  start_nucpos, end_nucpos,
@@ -131,8 +109,10 @@ def eval_windows(ref, ref_len, sam_filename, out_dir, output_dnds_tsv_filename,
                          "window depth thresh=" + str(window_depth_thresh) + "," +
                          "window breadth fraction=" + str(window_breadth_thresh) + "," +
                          "pvalue=" + str(pvalue))
+    LOGGER.debug("Start Ave Dn/DS for all windows for ref " + ref + " " + output_dnds_tsv_filename)
     seq_dnds_info = tabulate_dnds(dnds_tsv_dir=out_dir, pvalue_thresh=pvalue, ref=ref, ref_nuc_len=ref_len,
                                   comments=dnds_tsv_comments, output_dnds_tsv_filename=output_dnds_tsv_filename)
+    LOGGER.debug("Done Ave Dn/DS for all windows  for ref " + ref + ".  Wrote to " + output_dnds_tsv_filename)
     return seq_dnds_info
 
 
@@ -285,8 +265,11 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir,
                          "window depth thresh=" + str(window_depth_thresh) + "," +
                          "window breadth fraction=" + str(window_breadth_thresh) + "," +
                          "pvalue=" + str(pvalue))
-    seq_dnds_info = tabulate_dnds(dnds_tsv_dir=out_dir, pvalue_thresh=pvalue, ref=ref, ref_nuc_len=ref_len,
+    LOGGER.debug("Start Ave Dn/DS for all windows for ref " + ref + " " + output_dnds_tsv_filename)
+    seq_dnds_info = slice_miseq.tabulate_dnds(dnds_tsv_dir=out_dir, pvalue_thresh=pvalue, ref=ref, ref_nuc_len=ref_len,
                                   comments=dnds_tsv_comments, output_dnds_tsv_filename=output_dnds_tsv_filename)
+    LOGGER.debug("Done Ave Dn/DS for all windows  for ref " + ref + ".  Wrote to " + output_dnds_tsv_filename)
+
     return seq_dnds_info
 
 
