@@ -6,8 +6,14 @@ library(reshape2)
 
 INDELIBLE_RATES_OUTPUT_COMMENT_LINES <- 10
 ACTUAL_DNDS_COMMENT_LINES <- 0
+```
 
-actual_dnds <- read.table("../data/out/consensus/actual_dnds_by_site.tsv", header=TRUE, na.strings="None", skip=ACTUAL_DNDS_COMMENT_LINES)
+**Windowsize = 400, ref=consensus,ref_len=9000,sam=./simulations/data/sample_genomes.grinder-reads.rename.sam,mapping qual cutoff=10,read qual cutoff=10,max fraction N=0.25,start nuc pos=1,end nuc pos=9000,window depth=50**
+-----------------------------
+
+
+```{r }
+actual_dnds <- read.table("../data/out/consensus/bugaboo/actual_dnds_by_site.tsv", header=TRUE, na.strings="None", skip=ACTUAL_DNDS_COMMENT_LINES)
 dim(actual_dnds)
 head(actual_dnds)
 tail(actual_dnds)
