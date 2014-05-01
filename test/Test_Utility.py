@@ -14,7 +14,10 @@ class MyTestCase(unittest.TestCase):
             fh.write(">test2\n")
             # --- GG- -G- --N --A
             fh.write("---GG--G---N--A\n")
-        expected_total_codons_by_pos = [1, 2, 0, 0, 0]
+            fh.write(">test3\n")
+            # --- GG- -G- --N --A AA
+            fh.write("---GG--G---N--AAA\n")
+        expected_total_codons_by_pos = [1, 3, 0, 0, 0, 1]
         total_codons_by_pos = Utility.get_total_codons_by_pos(msa_fasta_filename=msa_fasta_filename)
 
         self.assertEqual(0, cmp(total_codons_by_pos, expected_total_codons_by_pos),

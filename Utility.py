@@ -99,7 +99,7 @@ def get_total_codons_by_pos(msa_fasta_filename):
     :param str msa_fasta_filename:  full filepath to nucleotide fasta
     """
     longest_seq = get_longest_seq_size_from_fasta(msa_fasta_filename)
-    total_unambig_codon_by_pos = [0] * (longest_seq/NUC_PER_CODON)
+    total_unambig_codon_by_pos = [0] * ((longest_seq/NUC_PER_CODON) + 1)
     with open(msa_fasta_filename, 'r') as fh:
         seq = ""
         for line in fh:
@@ -114,8 +114,6 @@ def get_total_codons_by_pos(msa_fasta_filename):
                             codon_2nd_nuc = "-"
                         if not (codon_1st_nuc == 'N' or codon_1st_nuc == '-' or codon_2nd_nuc == 'N' or codon_2nd_nuc == '-'):
                             codon_pos = nuc_pos/NUC_PER_CODON
-                            if codon_pos >= len(total_unambig_codon_by_pos):
-                                print "here"
                             total_unambig_codon_by_pos[codon_pos] += 1
 
                 seq = ""
