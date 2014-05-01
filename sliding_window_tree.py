@@ -72,10 +72,16 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_dnds_tsv
                                                     ref_codon_len=ref_nuc_len/NUC_PER_CODON)
     with open(output_dnds_tsv_filename, 'w') as dnds_fh:
         dnds_fh.write("# " + comments + "\n")
-        dnds_fh.write("Ref\tSite\tdNdS\n")
-        for site in range(seq_dnds_info.get_seq_len()):
-            site_dnds = seq_dnds_info.get_site_ave_dnds(site)
-            dnds_fh.write(ref + "\t" + str(site) + "\t" + str(site_dnds) + "\n")
+        dnds_fh.write("Ref\tSite\tdNdS\tWindows\tCodons\tNonSyn\tSyn\tSubst\n")
+        for site in range(1, seq_dnds_info.get_seq_len() + 1):
+            site_dnds = seq_dnds_info.get_site_ave_dnds(site_1based=site)
+            window = seq_dnds_info.get_site_window_cov(site_1based=site)
+            reads = seq_dnds_info.get_site_ave_read_cov(site_1based=site)
+            nonsyn = seq_dnds_info.get_site_ave_nonsyn_subs(site_1based=site)
+            syn = seq_dnds_info.get_site_ave_syn_subs(site_1based=site)
+            subs = seq_dnds_info.get_site_ave_subs(site_1based=site)
+            line = "\t".join((ref, str(site), str(site_dnds), str(window), str(reads),  str(nonsyn), str(syn), str(subs)))
+            dnds_fh.write(line + "\n")
 
     LOGGER.debug("Done Ave Dn/DS for all windows  for ref " + ref + ".  Wrote to " + output_dnds_tsv_filename)
     return seq_dnds_info
