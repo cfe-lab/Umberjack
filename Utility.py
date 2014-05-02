@@ -132,3 +132,65 @@ def get_total_codons_by_pos(msa_fasta_filename):
                     total_unambig_codon_by_pos[codon_pos] += 1
 
     return total_unambig_codon_by_pos
+
+
+class Consensus:
+
+    __base_count = {'A':0, 'C':0, 'T':0, 'G':0}
+    def __init__(self):
+        self.seq = []
+
+
+    def add_base(self, base, pos_0based):
+        base = base.upper()
+        if pos_0based >= len(self.seq):
+            for i in range(pos_0based - len(self.seq) + 1):
+                self.seq.append(Consensus.__base_count.copy())
+
+        if self.seq[pos_0based].has_key(base):
+            self.seq[pos_0based][base] += 1
+
+    def get_consensus(self):
+        consensus = ""
+        for base_count in self.seq:
+            max_base = max(base_count, key=base_count.get)
+            consensus += max_base
+        return consensus
+
+    def print_stats(self):
+        for base_count in self.seq:
+            print base_count
+            if base_count['A'] == base_count['C'] and base_count['G'] == base_count['T'] and base_count['A'] == base_count['T']:
+                print " TIE!"
+            else:
+                print "NARP"
+            print "\n"
+
+
+
+def get_consensus_from_msa(msa_fasta_filename, consensus_fasta_filename):
+    """
+    Gets the consensus from a multiple sequence aligned fasta
+    """
+    consensus = ""
+    with open(msa_fasta_filename, 'r') as in_fh, open(consensus_fasta_filename, 'w') as out_fh:
+        seq = ""
+        consensus = Consensus()
+        for line in in_fh:
+            line = line.rstrip()
+            if line[0] == '>':
+                for pos_0based, base in enumerate(seq):
+                    consensus.add_base(base, pos_0based=pos_0based)
+                seq = ""
+            else:
+                seq += line
+
+        for pos_0based, base in enumerate(seq):
+            consensus.add_base(base, pos_0based=pos_0based)
+
+        consensus_seq = consensus.get_consensus()
+        out_fh.write(">consensus " + msa_fasta_filename + "\n")
+        out_fh.write(consensus_seq + "\n")
+
+        consensus.print_stats()
+
