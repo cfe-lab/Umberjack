@@ -33,15 +33,28 @@ n_sites = 3000 # target size of genome in codons
 # 500, 500, 1000, 500, 500 codons
 
 Interval = collections.namedtuple(typename='Interval', field_names=['scaling_factor', 'num_codons'], verbose=True)
-intervals = [Interval(scaling_factor=1.0, num_codons=100),
-             Interval(scaling_factor=2.0, num_codons=200),
-             Interval(scaling_factor=5.0, num_codons=200),
-             Interval(scaling_factor=10.0, num_codons=500),
-             Interval(scaling_factor=100.0, num_codons=1000),
-             Interval(scaling_factor=10.0, num_codons=500),
-             Interval(scaling_factor=5.0, num_codons=200),
-             Interval(scaling_factor=2.0, num_codons=200),
-             Interval(scaling_factor=1.0, num_codons=100)]
+# intervals = [Interval(scaling_factor=1.0, num_codons=100),
+#              Interval(scaling_factor=2.0, num_codons=200),
+#              Interval(scaling_factor=5.0, num_codons=200),
+#              Interval(scaling_factor=10.0, num_codons=500),
+#              Interval(scaling_factor=100.0, num_codons=1000),
+#              Interval(scaling_factor=10.0, num_codons=500),
+#              Interval(scaling_factor=5.0, num_codons=200),
+#              Interval(scaling_factor=2.0, num_codons=200),
+#              Interval(scaling_factor=1.0, num_codons=100)]
+intervals = [Interval(scaling_factor=1.0, num_codons=50),
+             Interval(scaling_factor=2.0, num_codons=50),
+             Interval(scaling_factor=5.0, num_codons=50),
+             Interval(scaling_factor=10.0, num_codons=50),
+             Interval(scaling_factor=20.0, num_codons=50),
+             Interval(scaling_factor=50.0, num_codons=500),
+             Interval(scaling_factor=100.0, num_codons=1500),
+             Interval(scaling_factor=50.0, num_codons=500),
+             Interval(scaling_factor=20.0, num_codons=50),
+             Interval(scaling_factor=10.0, num_codons=50),
+             Interval(scaling_factor=5.0, num_codons=50),
+             Interval(scaling_factor=2.0, num_codons=50),
+             Interval(scaling_factor=1.0, num_codons=50)]
 #scaling_factors = [1.0, 2.0, 5.0, 10.0, 100.0, 10.0, 5.0, 2.0, 1.0]
 #codon_interval_lengths = [100, 200, 200, 500, 1000, 500, 200, 200, 100]  # codons
 
@@ -49,7 +62,7 @@ start_codon_0based = 0  # gets updated with each interval
 new_codon_site_0based = 0
 new_fasta = {}
 
-ratefile = open(root + 'sample_genomes.rates', 'w')  # keep track of each codon site omega
+ratefile = open(root + 'sample_genomes.rates.highest.csv', 'w')  # keep track of each codon site omega
 ratefile.write('Site,Interval,Scaling_factor,Rate_class,Omega\n')
 
 for interval_idx, interval in enumerate(intervals):
@@ -84,7 +97,7 @@ for interval_idx, interval in enumerate(intervals):
     
 
 # output            
-outfile = open(root+'sample_genomes.fas', 'w')
+outfile = open(root+'sample_genomes.highest.fasta', 'w')
 
 for h in new_fasta.iterkeys():
     outfile.write('>%s\n%s\n' % (h, new_fasta[h]))
