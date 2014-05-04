@@ -7,14 +7,14 @@ ACTUAL_DNDS_COMMENT_LINES <- 1
 
 
 
-dnds_file <- file("../data/out/consensus/windowsize360_art/actual_dnds_by_site.tsv", open="rt")
+dnds_file <- file("../data/out/consensus/actual_dnds_by_site.tsv", open="rt")
 comments <- readLines(dnds_file, 1) # Read one line 
 
 #' **`r comments`**
 #' -----------------------------
 #' 
 #' 
-actual_dnds <- read.table("../data/out/consensus/windowsize360_art/actual_dnds_by_site.tsv", header=TRUE, na.strings="None", comment.char = "#")
+actual_dnds <- read.table("../data/out/consensus/actual_dnds_by_site.tsv", header=TRUE, na.strings="None", comment.char = "#")
 dim(actual_dnds)
 head(actual_dnds)
 tail(actual_dnds)
@@ -48,15 +48,17 @@ print (htest)
 
 #' **Scatterplot actual vs expected dn ds together**
 #+ fig.width=24
-fullDat <- data.frame(site=expected_dnds$Site,
-                      actual=actual_dnds$dNdS, 
-                      expected=expected_dnds$Omega)
+fullDat <- data.frame(expected_site=expected_dnds$Site,
+                      expected=expected_dnds$Omega,
+                      actual_site=actual_dnds$Site,
+                      actual=actual_dnds$dNdS)
 head(fullDat[!is.na(fullDat$actual),])
 ggplot(fullDat, aes(x=actual, y=expected)) + geom_smooth(method=lm)
 
 #' **Scatterplot the dn/ds across the genome**
 #+ fig.width=28
-fullDatBySource <- reshape2:::melt.data.frame(data=fullDat, na.rm = TRUE, id.vars="site", variable.name="source", value.name="dnds")
+fullDatBySource <- reshape2:::melt.data.frame(data=fullDat, na.rm = FALSE, id.vars="actual_site", measure.vars=c("expected", "actual"),
+                                              variable.name="source", value.name="dnds")
 head(fullDatBySource)
 tail(fullDatBySource)
 str(fullDatBySource)
@@ -66,6 +68,16 @@ ggplot(fullDatBySource, aes(x=site, y=dnds, color=source) ) + geom_smooth() +
   ylab("dN/dS") + 
   ggtitle("dn/ds by site")
 
+ggplot(fullDatBySource, aes(x=actual_site, y=dnds, color=source) ) + geom_line() + 
+  xlab("Codon Site Along Genome") + 
+  ylab("dN/dS") + 
+  ggtitle("dn/ds by site")
+
+
+ggplot(fullDatBySource, aes(x=actual_site, y=dnds, color=source) ) + geom_point() + 
+  xlab("Codon Site Along Genome") + 
+  ylab("dN/dS") + 
+  ggtitle("dn/ds by site")
 
 
 #' **Plot the unambiguous codon depth across genome**
@@ -122,7 +134,12 @@ ggplot(expected_dnds, aes(x=Site, y=Omega) ) + geom_line() +
   ylab("dn/dS Expected") + 
   ggtitle("Expected Selection Along Genome")
 
-#+ **Find how correlated the actual vs expected dnds are**
+#+ **Find how correlated the actual vs expected dn/ds are**
 #dnds_cor <- cor(log(actual_dnds$dNdS), expected_dnds$Omega, method="spearman", use="pairwise.complete.obs")
 dnds_cor <- cor(actual_dnds$dNdS, expected_dnds$Omega, method="spearman", use="complete.obs")
 print(dnds_cor)
+
+#+ **Find how correlated the actual dn-ds vs expected dn/ds are**
+dnds_dnMinusds_cor <- cor(actual_dnds$dN_minus_dS, expected_dnds$Omega, method="spearman", use="complete.obs")
+print(dnds_dnMinusds_cor)
+
