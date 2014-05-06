@@ -40,16 +40,26 @@ def apply_cigar (cigar, seq, qual):
     Output: sequence with CIGAR incorporated + new quality string
     """
 
+
     newseq = ''
     newqual = ''
     tokens = CIGAR_RE.findall(cigar)
     if len(tokens) == 0:
-        return None, None
+        return None, None, None
 
-
+    # We include soft-clipped sequence, but SAM pos field refers to the position of the first match
+    # If the seq starts with soft-clipped bases, we need to shift the starting pos specified by SAM to the left
     left = 0
+    shift_pos = 0
+    first_token = tokens[0]
+    length_first_tok = int(first_token[:-1])
+    cigar_chr = first_token[1]
+    if cigar_chr == 'S' and length_first_tok:
+        shift_pos = length_first_tok
+
     for token in tokens:
         length = int(token[:-1])
+
 
         # Matching sequence: carry it over
         if token[-1] == 'M' or token[-1] == 'S':
@@ -60,7 +70,7 @@ def apply_cigar (cigar, seq, qual):
         # Deletion relative to reference: pad with gaps
         elif token[-1] == 'D':
             newseq += '-'*length
-            newqual += ' '*length 		# Assign fake placeholder score (Q=-1)
+            newqual += '!'*length 		# Assign fake placeholder score (Q=-1)
 
         # Insertion relative to reference:
         elif token[-1] == 'I':
@@ -73,7 +83,7 @@ def apply_cigar (cigar, seq, qual):
         else:
             raise Exception("Unable to handle CIGAR token: {} - quitting".format(token))
 
-    return newseq, newqual
+    return shift_pos, newseq, newqual
 
 
 # TODO:  handle reverse complemented reads
@@ -163,10 +173,10 @@ def get_padded_seq_from_cigar(pos, cigar, seq, qual, flag, rname, ref_len):
 
     """
 
-    formatted_seq, formatted_qual = apply_cigar(cigar, seq, qual)
+    shift_pos, formatted_seq, formatted_qual = apply_cigar(cigar, seq, qual)
 
 
-    left_pad_len = pos - 1
+    left_pad_len = pos  - shift_pos - 1
     right_pad_len = ref_len - left_pad_len - len(formatted_seq)
     # TODO:  hack - We hard cut sequences if they extend past the reference boundaries.  Don't do this.
     # This hack is in place so that we don't have to worry about MSA alignments
