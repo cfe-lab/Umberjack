@@ -51,18 +51,16 @@ def apply_cigar (cigar, seq, qual):
     # If the seq starts with soft-clipped bases, we need to shift the starting pos specified by SAM to the left
     left = 0
     shift_pos = 0
-    first_token = tokens[0]
-    length_first_tok = int(first_token[:-1])
-    cigar_chr = first_token[1]
-    if cigar_chr == 'S' and length_first_tok:
-        shift_pos = length_first_tok
 
     for token in tokens:
         length = int(token[:-1])
 
 
+        if token[-1] == 'S':
+            left += length
+
         # Matching sequence: carry it over
-        if token[-1] == 'M' or token[-1] == 'S':
+        elif token[-1] == 'M':
             newseq += seq[left:(left+length)]
             newqual += qual[left:(left+length)]
             left += length
@@ -84,6 +82,62 @@ def apply_cigar (cigar, seq, qual):
             raise Exception("Unable to handle CIGAR token: {} - quitting".format(token))
 
     return shift_pos, newseq, newqual
+
+
+# def apply_cigar (cigar, seq, qual):
+#     """
+#     Parse SAM CIGAR and apply to the SAM nucleotide sequence.
+#     Do not remove soft clipped sequences in case they contain valid polymorphisms.
+#     If the bases have low quality, they can be removed using merge_pairs()
+#
+#     Input: cigar, sequence, and quality string from SAM.
+#     Output: sequence with CIGAR incorporated + new quality string
+#     """
+#
+#
+#     newseq = ''
+#     newqual = ''
+#     tokens = CIGAR_RE.findall(cigar)
+#     if len(tokens) == 0:
+#         return None, None, None
+#
+#     # We include soft-clipped sequence, but SAM pos field refers to the position of the first match
+#     # If the seq starts with soft-clipped bases, we need to shift the starting pos specified by SAM to the left
+#     left = 0
+#     shift_pos = 0
+#     first_token = tokens[0]
+#     length_first_tok = int(first_token[:-1])
+#     cigar_chr = first_token[1]
+#     if cigar_chr == 'S' and length_first_tok:
+#         shift_pos = length_first_tok
+#
+#     for token in tokens:
+#         length = int(token[:-1])
+#
+#
+#         # Matching sequence: carry it over
+#         if token[-1] == 'M' or token[-1] == 'S':
+#             newseq += seq[left:(left+length)]
+#             newqual += qual[left:(left+length)]
+#             left += length
+#
+#         # Deletion relative to reference: pad with gaps
+#         elif token[-1] == 'D':
+#             newseq += '-'*length
+#             newqual += '!'*length 		# Assign fake placeholder score (Q=-1)
+#
+#         # Insertion relative to reference:
+#         elif token[-1] == 'I':
+#             # TODO:  handle inserts
+#             # newseq += seq[left:(left+length)]
+#             # newqual += qual[left:(left+length)]
+#             left += length
+#             continue
+#
+#         else:
+#             raise Exception("Unable to handle CIGAR token: {} - quitting".format(token))
+#
+#     return shift_pos, newseq, newqual
 
 
 # TODO:  handle reverse complemented reads
@@ -260,23 +314,30 @@ def create_msa_fasta_from_sam(sam_filename, ref, ref_len, out_fasta_filename, ma
             padded_qual2 = ''
             qname2 = qname
             if not SamFlag.IS_MATE_UNMAPPED & int(flag):
-                while i < len(lines) and padded_seq2 == '' and qname2 == qname:
+                #while i < len(lines) and padded_seq2 == '' and qname2 == qname:
+                if i < len(lines):
                     # Look ahead in the SAM for matching read
                     qname2, flag2, refname2, pos2, mapq2, cigar2, rnext2, pnext2, tlen2, seq2, qual2 = lines[i].rstrip().split('\t')[:11]
                     i += 1
 
-                    if not refname2 == ref:
-                        continue
-
-                    # If not the 2nd mate, failed to map, or is secondary alignment, then skip it
-                    if (not qname2 == qname or
-                            SamFlag.IS_UNMAPPED & int(flag2) or SamFlag.IS_SECONDARY_ALIGNMENT & int(flag2) or
-                            refname2 == '*' or cigar2 == '*' or int(pos2) == 0 or int(mapq2) < mapping_cutoff):
-                        continue
-
-                    padded_seq2, padded_qual2 = get_padded_seq_from_cigar(pos=int(pos2), cigar=cigar2, seq=seq2,
-                                                                          qual=qual2, flag=flag2, rname=refname2,
-                                                                          ref_len=ref_len)
+                    # if not refname2 == ref:
+                    #     continue
+                    #
+                    # # If not the 2nd mate, failed to map, or is secondary alignment, then skip it
+                    # if (not qname2 == qname or
+                    #         SamFlag.IS_UNMAPPED & int(flag2) or SamFlag.IS_SECONDARY_ALIGNMENT & int(flag2) or
+                    #         refname2 == '*' or cigar2 == '*' or int(pos2) == 0 or int(mapq2) < mapping_cutoff):
+                    #     continue
+                    #
+                    # padded_seq2, padded_qual2 = get_padded_seq_from_cigar(pos=int(pos2), cigar=cigar2, seq=seq2,
+                    #                                                       qual=qual2, flag=flag2, rname=refname2,
+                    #                                                       ref_len=ref_len)
+                    if (refname2 == ref and qname2 == qname and
+                            not(SamFlag.IS_UNMAPPED & int(flag2) or SamFlag.IS_SECONDARY_ALIGNMENT & int(flag2) or
+                                        refname2 == '*' or cigar2 == '*' or int(pos2) == 0 or int(mapq2) < mapping_cutoff)):
+                        padded_seq2, padded_qual2 = get_padded_seq_from_cigar(pos=int(pos2), cigar=cigar2, seq=seq2,
+                                                                                  qual=qual2, flag=flag2, rname=refname2,
+                                                                                  ref_len=ref_len)
 
             if padded_seq1 or padded_seq2:
                 # merge mates into one padded sequence
@@ -289,10 +350,14 @@ def create_msa_fasta_from_sam(sam_filename, ref, ref_len, out_fasta_filename, ma
                     # Write multiple-sequence-aligned merged read to file using the name of the first mate
                     # Newick tree formats don't like special characters.  Convert them to underscores.
                     newick_nice_qname = re.sub(pattern=NEWICK_NAME_RE, repl='_', string=qname)
+                    # # find first character that is not n, N, or a gap -
+                    # start_pos_1based = re.search(NUCL_RE, mseq).start() + 1
+                    # # find last character that is not n, N, or a gap
+                    # end_pos_1based = len(mseq) - re.search(NUCL_RE, mseq[::-1]).start() - 1
                     # find first character that is not n, N, or a gap -
-                    start_pos_1based = re.search(NUCL_RE, mseq).start() + 1
+                    start_pos_1based = 1
                     # find last character that is not n, N, or a gap
-                    end_pos_1based = len(mseq) - re.search(NUCL_RE, mseq[::-1]).start() - 1
+                    end_pos_1based = 1
                     out_fasta_fh.write(">" + newick_nice_qname + " " + str(start_pos_1based) + " " + str(end_pos_1based) + "\n")
                     out_fasta_fh.write(mseq + "\n")
 

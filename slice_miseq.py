@@ -11,8 +11,11 @@ HYPHY_TSV_DN_COL = 'dN'
 HYPHY_TSV_DS_COL = 'dS'
 HYPHY_TSV_S_COL = 'Observed S Changes'
 HYPHY_TSV_N_COL = 'Observed NS Changes'
-HYPHY_TSV_SCALED_DNDS_COL = 'Scaled dN-dS'
-HYPHY_TSV_PROB_FULLSEQ_NS = 'P{S leq. observed}'
+HYPHY_TSV_SCALED_DN_MINUS_DS_COL = 'Scaled dN-dS'
+HYPHY_TSV_PROB_FULLSEQ_S_COL = 'P{S leq. observed}'
+HYPHY_TSV_NEG_PROB_FULLSEQ_S_COL = 'P{S geq. observed}'
+
+
 
 NUC_PER_CODON = 3
 
@@ -20,14 +23,17 @@ NUC_PER_CODON = 3
 class SiteDnDsInfo:
     def __init__(self):
         self.accum_win_dnds = 0.0
+        self.accum_win_dn_minus_ds = 0.0
         self.total_win_cover_site = 0
         self.total_syn_subs = 0
         self.total_nonsyn_subs = 0
         self.total_reads = 0
 
-    def add_dnds(self, dnds, reads, syn_subs, nonsyn_subs):
+    def add_dnds(self, dnds, dn_minus_ds, reads, syn_subs, nonsyn_subs):
         self.total_win_cover_site += 1
-        self.accum_win_dnds += dnds
+        if dnds is not None:
+            self.accum_win_dnds += dnds
+        self.accum_win_dn_minus_ds += dn_minus_ds
         self.total_reads += reads
         self.total_syn_subs += syn_subs
         self.total_nonsyn_subs += nonsyn_subs
@@ -37,6 +43,13 @@ class SiteDnDsInfo:
             return None
         else:
             return self.accum_win_dnds / self.total_win_cover_site
+
+    def get_ave_dn_minus_ds(self):
+        if not self.total_win_cover_site:
+            return None
+        else:
+            return self.accum_win_dn_minus_ds / self.total_win_cover_site
+
 
     def get_window_coverage(self):
         return self.total_win_cover_site
@@ -78,16 +91,19 @@ class SeqDnDsInfo:
         """
         self.dnds_seq = [SiteDnDsInfo() for i in range(seq_len)]
 
-    def add_site_dnds(self, site_1based, dnds, reads, syn_subs, nonsyn_subs):
+    def add_site_dnds(self, site_1based, dnds, dn_minus_ds, reads, syn_subs, nonsyn_subs):
         """
         Keep track of dn/ds from a window containing this site.
         :param site_1based: 1-based codon site
         :param dnds: dn/ds for this codon site as determined from a window fed into hyphy
         """
-        self.dnds_seq[site_1based-1].add_dnds(dnds=dnds, reads=reads, syn_subs=syn_subs, nonsyn_subs=nonsyn_subs)
+        self.dnds_seq[site_1based-1].add_dnds(dnds=dnds, dn_minus_ds=dn_minus_ds, reads=reads, syn_subs=syn_subs, nonsyn_subs=nonsyn_subs)
 
     def get_site_ave_dnds(self, site_1based):
         return self.dnds_seq[site_1based-1].get_ave_dnds()
+
+    def get_site_ave_dn_minus_ds(self, site_1based):
+        return self.dnds_seq[site_1based-1].get_ave_dn_minus_ds()
 
     def get_seq_len(self):
         return len(self.dnds_seq)
@@ -106,55 +122,6 @@ class SeqDnDsInfo:
 
     def get_site_ave_subs(self, site_1based):
         return self.dnds_seq[site_1based-1].get_ave_subs()
-
-
-
-
-
-
-# TODO:  finish me!!!
-def create_slice_msa_fasta_from_bam(bam_filename, start_pos, end_pos):
-    """
-    From a fasta file of multiple sequence alignments, extract the sequence sequence from desired region.
-    Writes the extracted sequences into a new fasta file with ".<start_pos>_<end_pos>.fasta" suffix.
-    If the sequence is shorter than <end_pos>, then fills in the gaps with '-' characters so that it ends at <end_pos>
-
-    ASSUMES:  that the start and end position of the clipped, unpadded sequence is in the header with this format
-    >sequence_name start_pos_1based end_pos_1based
-    :rtype str: full filepath to sliced multiple sequence alignment fasta
-    :param bam_filename: full file path to bam file sorted by left coordinate
-    :param start_pos: 1-based start position of region to extract
-    :param end_pos: 1-based end position of region to extract
-    """
-    fasta_filename_prefix, fileExtension = os.path.splitext(fasta_filename)
-    slice_fasta_filename = fasta_filename_prefix + "." + str(start_pos) + "_" + str(end_pos) + ".fasta"
-    with open(fasta_filename, 'r') as fasta_fh, open(slice_fasta_filename, 'w') as slice_fasta_fh:
-        header = ""
-        seq = ""
-        for line in fasta_fh:
-            line = line.rstrip()  # remove trailing whitespace
-
-            if line[0] == '>':  # last sequence is finished.  Write out last sequence
-                if seq:
-                    pad = ''
-                    if end_pos > len(seq):
-                        pad = '-' * (end_pos - len(seq))
-                    slice_fasta_fh.write(seq[start_pos-1:end_pos] + pad + "\n")
-
-
-                seq = ""
-
-                header = line   # Write out current header
-                slice_fasta_fh.write(header + "\n")
-            else:   # cache current sequence so that entire sequence is on one line
-                seq += line
-
-        if seq:   # end of fasta file, write out the last sequence still in cache
-            pad = ''
-            if end_pos > len(seq):
-                pad = '-' * (end_pos - len(seq))
-            slice_fasta_fh.write(seq[start_pos-1:end_pos] + pad + "\n")
-    return slice_fasta_filename
 
 
 def __get_window_seq(seq, start_pos, end_pos, breadth_thresh=0.0):
@@ -203,20 +170,22 @@ def create_slice_msa_fasta(fasta_filename, out_fasta_filename, start_pos, end_po
         header = ""
         seq = ""
         for line in fasta_fh:
-            line = line.rstrip().split()[0]  # remove trailing whitespace and any test after the first whitespace
+            line = line.rstrip()
+            if line:
+                line = line.split()[0]  # remove trailing whitespace and any test after the first whitespace
 
-            if line[0] == '>':  # previous sequence is finished.  Write out previous sequence
-                window_seq = __get_window_seq(seq=seq, start_pos=start_pos, end_pos=end_pos, breadth_thresh=breadth_thresh)
-                if window_seq:
-                    slice_fasta_fh.write(header + "\n")
-                    slice_fasta_fh.write(window_seq + "\n")
-                    total_seq += 1
+                if line[0] == '>':  # previous sequence is finished.  Write out previous sequence
+                    window_seq = __get_window_seq(seq=seq, start_pos=start_pos, end_pos=end_pos, breadth_thresh=breadth_thresh)
+                    if window_seq:
+                        slice_fasta_fh.write(header + "\n")
+                        slice_fasta_fh.write(window_seq + "\n")
+                        total_seq += 1
 
-                seq = ""
-                header = line
+                    seq = ""
+                    header = line
 
-            else:   # cache current sequence so that entire sequence is on one line
-                seq += line
+                else:   # cache current sequence so that entire sequence is on one line
+                    seq += line
 
         window_seq = __get_window_seq(seq=seq, start_pos=start_pos, end_pos=end_pos, breadth_thresh=breadth_thresh)
         if window_seq:
@@ -421,14 +390,14 @@ def get_seq_dnds_info(dnds_tsv_dir, pvalue_thresh, ref, ref_codon_len):
     - Observed NS Changes
     - E[S Sites]: proportion of random one-nucleotide substitutions that are expected to be synonymous
     - E[NS Sites]: proportion of random one-nucleotide substitutions that are expected to be non-synonymous
-    - Observed S. Prop.: observed proportion of synomymous substitutions
+    - Observed S. Prop.: observed proportion of synomymous substitutions = Observed S Changes / (Observed S Changes + Observed NS Changes)
     - P{S}:  proportion of substitutions expected to be synonymous under neutral evolution = E[S Sites]/(E[S Sites] + E[NS Sites])
     - dS: observed synonymous substitutions / expected proportion synonymous substitutions = Observed S Changes / E[S Sites]
     - dN: observed non synonymous substitutions / expected proportion nonsynonymous substitutions = Observed NS Changes / E[NS Sites]
     - dN-dS:  difference between dS and dN
     - P{S leq. observed}:  binomial distro pvalue.  Probability of getting less than the observed synynomous substitutions
         under the binomial distribution where probability of 1 synonymous codon = P{S}
-    - P{S geq. observed}: 1-pvalue.  Probability of getting more than the observed synynomous substitutions
+    - P{S geq. observed}: binomial distro  pvalue (for the other tail).  Probability of getting more than the observed synynomous substitutions
         under the binomial distribution where probability of 1 synonymous codon = P{S}
     - Scaled dN-dS:  dN-dS normalized by the total length of the tree.
 
@@ -451,17 +420,24 @@ def get_seq_dnds_info(dnds_tsv_dir, pvalue_thresh, ref, ref_codon_len):
 
             reader = csv.DictReader(dnds_fh, delimiter='\t',)
             for offset, codon_row in enumerate(reader):    # Every codon site is a row in the *.dnds.tsv file
-                pval = float(codon_row[HYPHY_TSV_PROB_FULLSEQ_NS])
-                dS = float(codon_row[HYPHY_TSV_DS_COL])
-                if pval <= pvalue_thresh and not dS == 0:
+                pval = float(codon_row[HYPHY_TSV_PROB_FULLSEQ_S_COL])
+                neg_tail_pval = float(codon_row[HYPHY_TSV_NEG_PROB_FULLSEQ_S_COL])
+                if pval <= pvalue_thresh or neg_tail_pval <= pvalue_thresh:
                     dN = float(codon_row[HYPHY_TSV_DN_COL])
+                    dS = float(codon_row[HYPHY_TSV_DS_COL])
+                    dn_minus_ds = float(codon_row[HYPHY_TSV_SCALED_DN_MINUS_DS_COL])
                     syn_subs = float(codon_row[HYPHY_TSV_S_COL])
                     nonsyn_subs = float(codon_row[HYPHY_TSV_N_COL])
 
                     ref_codon_1based = win_start_codon_1based_wrt_ref + offset
                     codons = codons_by_window_pos[offset]
-                    dnds = dN/dS
-                    seq_dnds_info.add_site_dnds(site_1based=ref_codon_1based, dnds=dnds, reads=codons, syn_subs=syn_subs, nonsyn_subs=nonsyn_subs)
+
+                    if dS == 0:
+                        dnds = None
+                    else:
+                        dnds = dN/dS
+                    seq_dnds_info.add_site_dnds(site_1based=ref_codon_1based, dnds=dnds, dn_minus_ds=dn_minus_ds,
+                                                reads=codons, syn_subs=syn_subs, nonsyn_subs=nonsyn_subs)
 
     return seq_dnds_info
 
@@ -472,14 +448,16 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_dnds_tsv
                                                     ref_codon_len=ref_nuc_len/NUC_PER_CODON)
     with open(output_dnds_tsv_filename, 'w') as dnds_fh:
         dnds_fh.write("# " + comments + "\n")
-        dnds_fh.write("Ref\tSite\tdNdS\tWindows\tCodons\tNonSyn\tSyn\tSubst\n")
+        dnds_fh.write("Ref\tSite\tdNdS\tdN_minus_dS\tWindows\tCodons\tNonSyn\tSyn\tSubst\n")
         for site in range(1, seq_dnds_info.get_seq_len() + 1):
             site_dnds = seq_dnds_info.get_site_ave_dnds(site_1based=site)
+            site_dn_minus_ds = seq_dnds_info.get_site_ave_dn_minus_ds(site_1based=site)
             window = seq_dnds_info.get_site_window_cov(site_1based=site)
             reads = seq_dnds_info.get_site_ave_read_cov(site_1based=site)
             nonsyn = seq_dnds_info.get_site_ave_nonsyn_subs(site_1based=site)
             syn = seq_dnds_info.get_site_ave_syn_subs(site_1based=site)
             subs = seq_dnds_info.get_site_ave_subs(site_1based=site)
-            line = "\t".join((ref, str(site), str(site_dnds), str(window), str(reads),  str(nonsyn), str(syn), str(subs)))
+
+            line = "\t".join((ref, str(site), str(site_dnds), str(site_dn_minus_ds), str(window), str(reads),  str(nonsyn), str(syn), str(subs)))
             dnds_fh.write(line + "\n")
     return seq_dnds_info

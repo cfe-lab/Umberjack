@@ -166,7 +166,7 @@ def eval_window(msa_fasta_filename, window_depth_thresh, window_breadth_thresh, 
         # Feed window fasta into fasttree to make a tree
         os.environ[ENV_OMP_NUM_THREADS] = str(threads)
         with open(fasttree_stdouterr_filename, 'w') as fasttree_stdouterr_fh:
-            subprocess.check_call([fastree_exe, '-gtr', '-nt', '-nosupport',
+            subprocess.check_call([fastree_exe, '-gtr', '-nt', '-gamma', '-nosupport',
                                    '-log', fastree_logfilename, '-out', fastree_treefilename,
                                    msa_window_fasta_filename],
                                   stdout=fasttree_stdouterr_fh, stderr=fasttree_stdouterr_fh, shell=False,
@@ -182,12 +182,14 @@ def eval_window(msa_fasta_filename, window_depth_thresh, window_breadth_thresh, 
         hyphy_input_str = "\n".join(["1",   # Universal
                                     "1",    # New analysis
                                     os.path.abspath(msa_window_fasta_filename), # codon fasta
-                                    "1",    # Substitution Model - Use HK85 and MG94xHKY85
+                                    #"1",    # Substitution Model - Use HK85 and MG94xHKY85
+                                    "2",    #(2):[Custom] Use any reversible nucleotide model crossed with MG94.
+                                    "012345", # GTR
                                     os.path.abspath(fastree_treefilename),      # tree file
                                     os.path.abspath(hyphy_modelfit_filename),   # model fit output file
-                                    "1",    # Neutral dN/dS = 1
+                                    #"1",    # Neutral dN/dS = 1
+                                    "3",    #(3):[Estimate] Estimate from data with branch corrections(slower).
                                     "1",    # Single Acnestor Counting
-                                    "-1",   # Approximate
                                     "1",    # Full tree
                                     "1",    # Averaged
                                     "1",    # Approximate extended binomial distro
