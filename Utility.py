@@ -158,13 +158,21 @@ class Consensus:
         return consensus
 
     def print_stats(self):
-        for base_count in self.seq:
-            print base_count
+        total_mut = 0
+        total_bases = 0
+        for nucpos, base_count in enumerate(self.seq, start=1):
+            mut = sum(base_count.values()) - max(base_count.values())
+            total_bases += sum(base_count.values())
+            total_mut += mut
+            print "1basedNucPos=" + str(nucpos) + ", mut=" + str(mut) + ", basecounts=",
+            print base_count,
             if base_count['A'] == base_count['C'] and base_count['G'] == base_count['T'] and base_count['A'] == base_count['T']:
-                print " TIE!"
+                print " MAX-TIE!"
             else:
-                print "NARP"
-            print "\n"
+                print " ONEMAX"
+        print "Ave Mutations per sequence = " + str(float(total_mut)/len(self.seq))
+        print "Ave Mutations per base per sequence = " + str(float(total_mut)/total_bases)
+
 
 
 
@@ -178,12 +186,13 @@ def get_consensus_from_msa(msa_fasta_filename, consensus_fasta_filename):
         consensus = Consensus()
         for line in in_fh:
             line = line.rstrip()
-            if line[0] == '>':
-                for pos_0based, base in enumerate(seq):
-                    consensus.add_base(base, pos_0based=pos_0based)
-                seq = ""
-            else:
-                seq += line
+            if line:
+                if line[0] == '>':
+                    for pos_0based, base in enumerate(seq):
+                        consensus.add_base(base, pos_0based=pos_0based)
+                    seq = ""
+                else:
+                    seq += line
 
         for pos_0based, base in enumerate(seq):
             consensus.add_base(base, pos_0based=pos_0based)
@@ -194,3 +203,10 @@ def get_consensus_from_msa(msa_fasta_filename, consensus_fasta_filename):
 
         consensus.print_stats()
 
+# Only handles the start positions for now
+def convert_1nuc_to_1codon(nuc_startpos_1based):
+    return nuc_startpos_1based/NUC_PER_CODON + 1
+
+# Only handles the start positions for now
+def convert_1codon_to_1nuc(codon_startpos_1based):
+    return ((codon_startpos_1based - 1) * NUC_PER_CODON) + 1
