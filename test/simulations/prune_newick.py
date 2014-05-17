@@ -1,9 +1,12 @@
 """
 Prune terminal branches on phylogeny given minimum distance cutoff.
 """
-from Bio import Phylo
 import sys
-from seqUtils import convert_fasta
+
+from Bio import Phylo
+
+from test.simulations.seqUtils import convert_fasta
+
 
 try:
     fasta = convert_fasta(open(sys.argv[1], 'rU').readlines())

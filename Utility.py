@@ -3,6 +3,7 @@ import errno
 
 NUC_PER_CODON = 3
 
+
 def create_dir_check(new_dir):
     """
     Creates the directory if it doesn't exist.  Raises errors encountered except 'file already exists' error.
@@ -15,13 +16,13 @@ def create_dir_check(new_dir):
         if exception.errno != errno.EEXIST:
             raise
 
-def get_seq2len(fasta_filename):
-    # keep track of reference contig/chromosome and its length
-    """
-    Map sequence header to sequence length in a dictionary.
 
-    :rtype dict: the seq2len dictionary
-    :param str fasta_filename:
+def get_seq2len(fasta_filename):
+    """
+    Keep track of reference contig/chromosome and its length
+    :return: the sequence to length dictionary
+    :rtype : dict {str:int}
+    :param str fasta_filename: full filepath to fasta
     """
     seq2len = {}
     with open(fasta_filename, 'r') as ref_fasta_fh:
@@ -47,8 +48,9 @@ def get_fasta_headers(fasta_filename):
     """
     Gets a list of headers from the fasta.  Does not include the ">" header prefix.
     Does not include anything after the first whitespace in the header.
-    :rtype list[str] : list of headers
-    :param fasta_filename : full file path to the fasta file
+    :return: list of headers
+    :rtype:  list[str]
+    :param str fasta_filename : full file path to the fasta file
     """
     headers = []
     with open(fasta_filename, 'r') as fasta_fh:
@@ -62,7 +64,8 @@ def get_fasta_headers(fasta_filename):
 def get_longest_seq_size_from_fasta(fasta_filename):
     """
     Gets the size of the longest sequence in the fasta.
-    :rtype int :  size in bp of the longest sequence in the fasta.  Or -1 if error.
+    :return: size in bp of the longest sequence in the fasta.  Or -1 if error.
+    :rtype : int
     :param fasta_filename: full filepath to the fasta.
     """
     longest_seq_len = -1
@@ -79,7 +82,14 @@ def get_longest_seq_size_from_fasta(fasta_filename):
 
     return longest_seq_len
 
+
 def get_total_seq_from_fasta(fasta_filename):
+    """
+    Gets the total sequences from the fasta file.
+    :return:  total sequences in the fasta file.
+    :rtype : int
+    :param fasta_filename: full filepath to fasta
+    """
     count = 0
     with open(fasta_filename) as fh:
         for line in enumerate(fh):
@@ -88,14 +98,14 @@ def get_total_seq_from_fasta(fasta_filename):
     return count
 
 
-
 def get_total_codons_by_pos(msa_fasta_filename):
     """
      Gets List of  total number of sequences with an unambiguous codon for every codon position.
      ASSUME that fasta sequences start at ORF start.
      ASSUME that fasta sequences are multiple sequence aligned
 
-    :rtype : list of codon counts for each position
+    :return: list of codon counts for each position
+    :rtype : list of int
     :param str msa_fasta_filename:  full filepath to nucleotide fasta
     """
     longest_seq = get_longest_seq_size_from_fasta(msa_fasta_filename)
@@ -134,23 +144,37 @@ def get_total_codons_by_pos(msa_fasta_filename):
     return total_unambig_codon_by_pos
 
 
-class Consensus:
+class _Consensus:
+    """
+    Internal use only.  Keeps track of consensus information for a sequence.
+    """
 
-    __base_count = {'A':0, 'C':0, 'T':0, 'G':0}
+    __base_count = {'A': 0, 'C': 0, 'T': 0, 'G': 0}
+
     def __init__(self):
         self.seq = []
 
 
     def add_base(self, base, pos_0based):
+        """
+        Add a base at the given nucleotide position.
+
+        :param str base:  nucleotide base
+        :param int pos_0based: 0-based nucleotide position
+        """
         base = base.upper()
         if pos_0based >= len(self.seq):
             for i in range(pos_0based - len(self.seq) + 1):
-                self.seq.append(Consensus.__base_count.copy())
+                self.seq.append(_Consensus.__base_count.copy())
 
         if self.seq[pos_0based].has_key(base):
             self.seq[pos_0based][base] += 1
 
     def get_consensus(self):
+        """
+        Return the consensus for the entire sequence
+        :rtype : str
+        """
         consensus = ""
         for base_count in self.seq:
             max_base = max(base_count, key=base_count.get)
@@ -158,6 +182,9 @@ class Consensus:
         return consensus
 
     def print_stats(self):
+        """
+        Print information stats to stdout about the set of sequences.
+        """
         total_mut = 0
         total_bases = 0
         for nucpos, base_count in enumerate(self.seq, start=1):
@@ -174,16 +201,17 @@ class Consensus:
         print "Ave Mutations per base per sequence = " + str(float(total_mut)/total_bases)
 
 
-
-
 def get_consensus_from_msa(msa_fasta_filename, consensus_fasta_filename):
     """
-    Gets the consensus from a multiple sequence aligned fasta
+    Gets the consensus from a multiple sequence aligned fasta and prints out stats to stdout
+
+    :param msa_fasta_filename: full filepath to multiple sequence aligned fasta
+    :param consensus_fasta_filename:  full filepath to censusus fasta output
     """
     consensus = ""
     with open(msa_fasta_filename, 'r') as in_fh, open(consensus_fasta_filename, 'w') as out_fh:
         seq = ""
-        consensus = Consensus()
+        consensus = _Consensus()
         for line in in_fh:
             line = line.rstrip()
             if line:
@@ -203,10 +231,38 @@ def get_consensus_from_msa(msa_fasta_filename, consensus_fasta_filename):
 
         consensus.print_stats()
 
-# Only handles the start positions for now
-def convert_1nuc_to_1codon(nuc_startpos_1based):
-    return nuc_startpos_1based/NUC_PER_CODON + 1
 
-# Only handles the start positions for now
-def convert_1codon_to_1nuc(codon_startpos_1based):
-    return ((codon_startpos_1based - 1) * NUC_PER_CODON) + 1
+def convert_fasta (lines):
+    """
+    Return contents of fasta file as list of tuples (header, sequence)
+    :rtype : list of tuples [[str, str]]
+    :param lines: list of lines in fasta file
+    """
+    blocks = []
+    sequence = ''
+    for i in lines:
+        if i[0] == '$': # skip h info
+            continue
+        elif i[0] == '>' or i[0] == '#':
+            if len(sequence) > 0:
+                blocks.append([h,sequence])
+                sequence = ''	# reset containers
+                h = i.strip('\n')[1:]
+            else:
+                h = i.strip('\n')[1:]
+        else:
+            sequence += i.strip('\n')
+    try:
+        blocks.append([h,sequence])	# handle last entry
+    except:
+        print lines
+        raise
+    return blocks
+
+# # Only handles the start positions for now
+# def convert_1nuc_to_1codon(nuc_startpos_1based):
+#     return nuc_startpos_1based/NUC_PER_CODON + 1
+#
+# # Only handles the start positions for now
+# def convert_1codon_to_1nuc(codon_startpos_1based):
+#     return ((codon_startpos_1based - 1) * NUC_PER_CODON) + 1

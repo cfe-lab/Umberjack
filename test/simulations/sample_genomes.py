@@ -1,10 +1,9 @@
 """
 Create genome alignment by random sampling columns from INDELible simulation outputs.
 """
-import sys
-from seqUtils import *
-import random
 import collections
+import Utility
+
 
 
 BASES_PER_CODON = 3
@@ -85,7 +84,7 @@ for interval_idx, interval in enumerate(intervals):
     # scaling_<scaling_factor>_TRUE.fas are fastas containing the INDELible node sequences of a phylogenetic tree
     # The tree mutation rate is scaled by <scaling_factor>.
     infile = open(root+'scaling_'+str(scaling_factor)+'_TRUE.fas', 'rU')
-    fasta = convert_fasta(infile.readlines())  # returns a List of (header, sequence) tuples
+    fasta = Utility.convert_fasta(infile.readlines())  # returns a List of (header, sequence) tuples
     infile.close()
     
     # if this is first time, transfer header

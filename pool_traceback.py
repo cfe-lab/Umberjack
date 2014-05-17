@@ -1,4 +1,9 @@
-#  Copied code from http://stackoverflow.com/questions/6728236/exception-thrown-in-multiprocessing-pool-not-detected
+"""
+Copied code from http://stackoverflow.com/questions/6728236/exception-thrown-in-multiprocessing-pool-not-detected
+This entire script is a workaround for python multiprocessing module inability to bubble exception stack trace
+    to the parent process from a child process.
+Explicitly sets multiprocessing log level to WARN.
+"""
 import traceback
 from multiprocessing.pool import Pool
 import multiprocessing
@@ -13,11 +18,19 @@ formatter = logging.Formatter('%(asctime)s - [%(levelname)s] [%(name)s] [%(proce
 console_handler.setFormatter(formatter)
 LOGGER.addHandler(console_handler)
 
+
 # Shortcut to multiprocessing's logger
 def error(msg, *args):
+    """
+    use multiprocessing's logger to log an ERROR
+    """
     return multiprocessing.get_logger().error(msg, *args)
 
+
 class LogExceptions(object):
+    """
+    Bubble exception stack trace from child process to parent
+    """
     def __init__(self, callable):
         self.__callable = callable
         return
@@ -40,5 +53,12 @@ class LogExceptions(object):
 
 
 class LoggingPool(Pool):
+    """
+    Wrapper class for multiprocessing.Pool that logs that full exception stack trace from a child process.
+    """
+
     def apply_async(self, func, args=(), kwds={}, callback=None):
+        """
+        Override multiprocessing.Pool.apply_async() method such that it logs full exception stack trace from child process.
+        """
         return Pool.apply_async(self, LogExceptions(func), args, kwds, callback)

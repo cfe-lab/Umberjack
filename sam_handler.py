@@ -2,17 +2,17 @@ import re
 import os
 import subprocess
 import logging
-import Utility
-#from enum import IntEnum
+
 
 # Matches 1+ occurrences of a number, followed by a letter from {MIDNSHPX=}
 CIGAR_RE = re.compile('[0-9]+[MIDNSHPX=]')
 SEQ_PAD_CHAR = '-'
-QUAL_PAD_CHAR = '!'     # This is the ASCII character for the lowest PHRED quality score
+QUAL_PAD_CHAR = '!'     # This is the ASCII character for the lowest PHRED quality score in Sanger qualities
 NEWICK_NAME_RE = re.compile('[:;\-\(\)\[\]]')
 NUCL_RE = re.compile('[^nN\-]')
 LOGGER = logging.getLogger(__name__)
 
+PHRED_SANGER_OFFSET = 33
 
 class SamFlag:
     IS_PAIRED =                0x001
@@ -30,31 +30,32 @@ class SamFlag:
 
 
 # TODO:  handle X, =, P, N
+# TODO:  handle inserts
 def apply_cigar (cigar, seq, qual):
     """
     Parse SAM CIGAR and apply to the SAM nucleotide sequence.
-    Do not remove soft clipped sequences in case they contain valid polymorphisms.
-    If the bases have low quality, they can be removed using merge_pairs()
+    Remove soft-clipped sequences.  They may be valid polymorphisms but there is no alignment information for clipped
+    sequences so we have no way to know how they line up with other sequences.
+    Bases with low quality are not removed here - that can be done with merge_pairs()
+    Left-pads and right-pads sequence so that it lines up with the reference.
 
-    Input: cigar, sequence, and quality string from SAM.
-    Output: sequence with CIGAR incorporated + new quality string
+    :return:  tuple [left and right padded sequence, left and right padded quality]
+    :rtype : tuple [str, str]
+    :param str cigar: SAM cigar field
+    :param str seq: SAM sequence field
+    :param str qual: SAM quality field
     """
-
 
     newseq = ''
     newqual = ''
     tokens = CIGAR_RE.findall(cigar)
     if len(tokens) == 0:
-        return None, None, None
+        return None, None
 
-    # We include soft-clipped sequence, but SAM pos field refers to the position of the first match
-    # If the seq starts with soft-clipped bases, we need to shift the starting pos specified by SAM to the left
     left = 0
-    shift_pos = 0
 
     for token in tokens:
         length = int(token[:-1])
-
 
         if token[-1] == 'S':
             left += length
@@ -72,7 +73,6 @@ def apply_cigar (cigar, seq, qual):
 
         # Insertion relative to reference:
         elif token[-1] == 'I':
-            # TODO:  handle inserts
             # newseq += seq[left:(left+length)]
             # newqual += qual[left:(left+length)]
             left += length
@@ -81,159 +81,89 @@ def apply_cigar (cigar, seq, qual):
         else:
             raise Exception("Unable to handle CIGAR token: {} - quitting".format(token))
 
-    return shift_pos, newseq, newqual
+    return newseq, newqual
 
 
-# def apply_cigar (cigar, seq, qual):
-#     """
-#     Parse SAM CIGAR and apply to the SAM nucleotide sequence.
-#     Do not remove soft clipped sequences in case they contain valid polymorphisms.
-#     If the bases have low quality, they can be removed using merge_pairs()
-#
-#     Input: cigar, sequence, and quality string from SAM.
-#     Output: sequence with CIGAR incorporated + new quality string
-#     """
-#
-#
-#     newseq = ''
-#     newqual = ''
-#     tokens = CIGAR_RE.findall(cigar)
-#     if len(tokens) == 0:
-#         return None, None, None
-#
-#     # We include soft-clipped sequence, but SAM pos field refers to the position of the first match
-#     # If the seq starts with soft-clipped bases, we need to shift the starting pos specified by SAM to the left
-#     left = 0
-#     shift_pos = 0
-#     first_token = tokens[0]
-#     length_first_tok = int(first_token[:-1])
-#     cigar_chr = first_token[1]
-#     if cigar_chr == 'S' and length_first_tok:
-#         shift_pos = length_first_tok
-#
-#     for token in tokens:
-#         length = int(token[:-1])
-#
-#
-#         # Matching sequence: carry it over
-#         if token[-1] == 'M' or token[-1] == 'S':
-#             newseq += seq[left:(left+length)]
-#             newqual += qual[left:(left+length)]
-#             left += length
-#
-#         # Deletion relative to reference: pad with gaps
-#         elif token[-1] == 'D':
-#             newseq += '-'*length
-#             newqual += '!'*length 		# Assign fake placeholder score (Q=-1)
-#
-#         # Insertion relative to reference:
-#         elif token[-1] == 'I':
-#             # TODO:  handle inserts
-#             # newseq += seq[left:(left+length)]
-#             # newqual += qual[left:(left+length)]
-#             left += length
-#             continue
-#
-#         else:
-#             raise Exception("Unable to handle CIGAR token: {} - quitting".format(token))
-#
-#     return shift_pos, newseq, newqual
-
-
-# TODO:  handle reverse complemented reads
-# TODO:  handle reads where the insertsize is crappy
-# TODO:  handle mate-pair vs paired-end
 # TODO:  handle when reads align to multiple locations in genome
-def merge_pairs (seq1, seq2, qual1, qual2, q_cutoff=10, minimum_q_delta=5):
+def merge_pairs(seq1, seq2, qual1, qual2, q_cutoff=10):
     """
     Merge two sequences that overlap over some portion (paired-end
     reads).  Using the positional information in the SAM file, we will
     know where the sequences lie relative to one another.  In the case
     that the base in one read has no complement in the other read
     (in partial overlap region), take that base at face value.
+
+    :return:  merged paired-end read
+    :rtype : str
+    :param str seq1: first mate sequence in forward direction, left and right padded to line up with reference
+    :param str seq2: second mate sequence in forward direction, left and right padded to line up with reference
+    :param str qual1: first mate quality in forward direction, left and right padded to line up with reference.
+                        We expect this to be sanger phred-33 based ASCII characters.
+    :param str qual2: second mate quality in forward direction, left and right padded to line up with reference.
+                        We expect this to be sanger phred-33 based ASCII characters.
+    :param int q_cutoff: quality cutoff below which a base is converted to N if there is no consensus between the mates.
     """
 
     mseq = ''
 
-    # We swap the contents of the sequences so that seq2 is always the longest
-    # so that when we iterate through the sequences, we don't run out of sequence before comparing the other
-    if len(seq1) > len(seq2):
-        seq1, seq2 = seq2, seq1
-        qual1, qual2 = qual2, qual1 # FIXME: quality strings must be concordant
+    if len(seq1) != len(seq2):
+        raise Exception("Expect left and right padded mate sequences such that they line up with the reference.  " +
+                            "mate1=" + seq1 + ", mate2=" + seq2)
 
-    for i, c2 in enumerate(seq2):
+    for i in range(0, len(seq2)):
 
-        # FIXME: Track the q-score of each base at each position
-        q2 = ord(qual2[i])-33
+        q2 = ord(qual2[i])-PHRED_SANGER_OFFSET
+        q1 = ord(qual1[i])-PHRED_SANGER_OFFSET
 
-        if i < len(seq1):
+        if q1 is None and q2 is None:
+            mseq += 'N'
 
-            c1 = seq1[i]
-            q1 = ord(qual1[i])-33
+        elif q2 is None and q1 is not None and q1 > q_cutoff:
+            mseq += seq1[i]
 
-            # NOT SURE IF THESE NEXT 3 CASES MAKE SENSE
-            if q1 is None and q2 is None:
-                mseq += 'N'
+        elif q1 is None and q2 is not None and q2 > q_cutoff:
+            mseq += seq2[i]
 
-            elif q2 is None and q1 is not None and q1 > q_cutoff:
-                mseq += seq1[i]
+        # Reads agree  - quality doesn't matter
+        elif seq1[i] == seq2[i]:  # Gaps are NOT N-censored
+            mseq += seq1[i]
 
-            elif q1 is None and q2 is not None and q2 > q_cutoff:
-                mseq += seq2[i]
+        # Sequences disagree with differing confidence: take the high confidence
+        elif q1 > q2 and q1 > q_cutoff:
+            mseq += seq1[i]
 
-            # Reads agree (does not matter if sufficient confidence)
-            elif c1 == c2:  # Gaps are NOT N-censored
-                mseq += c1
-
-            # Reads disagree but both have too similar a confidence
-            elif abs(q2-q1) < minimum_q_delta:
-                mseq += 'N'
-
-            # Sequences disagree with differing confidence: take the high confidence
-            elif q1 > q2 and q1 > q_cutoff:
-                mseq += c1
-
-            elif q2 > q1 and q2 > q_cutoff:
-                mseq += c2
-
-            # Not sure if I've missed any cases - for now, drop these cases....
-            else:
-                mseq += 'N'
+        elif q2 > q1 and q2 > q_cutoff:
+            mseq += seq2[i]
 
         else:
-            if q2 > q_cutoff:
-                mseq += c2
-            else:
-                mseq += 'N'
+            mseq += 'N'
 
     return mseq
 
 
-def get_padded_seq_from_cigar(pos, cigar, seq, qual, flag, rname, ref_len):
+# TODO:  handle inserts
+# TODO:  hack - We hard cut sequences if they extend past the reference boundaries.  Don't do this.
+def get_padded_seq_from_cigar(pos, cigar, seq, qual, ref_len):
     """
     Returns the padded sequence from the cigar, with soft-clipped bases removed.
     Left Pads with '-' up to pos.
     Right pads with '-' until the end of the reference.
-    :param ref_len:
-    TODO:  handle indels!!!
 
     :param int pos : pos field from SAM.  1-based position with respect to the reference.
     :param str cigar:  cigar field from SAM
     :param str seq : sequence field from SAM
     :param str qual : qual field from SAM
-    :param str rname : rname field from SAM
-    :param str ref_fasta_filename : full filepath to reference fasta file
-    :rtype list : [left-padded sequence with soft-clips removed, left-padded quality sequence with soft-clips removed]
+    :param int ref_len : length of reference contig in nucleotides
+    :return:  tuple [left-padded sequence with soft-clips removed, left-padded quality sequence with soft-clips removed]
+    :rtype : tuple [str, str]
 
     """
 
-    shift_pos, formatted_seq, formatted_qual = apply_cigar(cigar, seq, qual)
-
-
-    left_pad_len = pos  - shift_pos - 1
+    formatted_seq, formatted_qual = apply_cigar(cigar, seq, qual)
+    left_pad_len = pos  - 1
     right_pad_len = ref_len - left_pad_len - len(formatted_seq)
-    # TODO:  hack - We hard cut sequences if they extend past the reference boundaries.  Don't do this.
-    # This hack is in place so that we don't have to worry about MSA alignments
+
+    # TODO:  This hack is in place so that we don't have to worry about MSA alignments
     if right_pad_len < 0:
         formatted_seq = formatted_seq[:right_pad_len]
         formatted_qual = formatted_qual[:right_pad_len]
@@ -242,37 +172,33 @@ def get_padded_seq_from_cigar(pos, cigar, seq, qual, flag, rname, ref_len):
     padded_seq = (SEQ_PAD_CHAR * left_pad_len) + formatted_seq + (SEQ_PAD_CHAR * right_pad_len)
     padded_qual = (QUAL_PAD_CHAR * left_pad_len) + formatted_qual + (QUAL_PAD_CHAR*right_pad_len)
 
-
-
     if len(padded_seq) != ref_len:
         raise Exception("len(padded_seq)=" + str(len(padded_seq)) + " ref2len[rname]=" + str(ref_len))
 
     return [padded_seq, padded_qual]
 
 
+# TODO:  handle inserts.  Right now, all inserts are squelched so that there is multiple sequence alignment.
 def create_msa_fasta_from_sam(sam_filename, ref, ref_len, out_fasta_filename, mapping_cutoff, read_qual_cutoff,
                               max_prop_N):
     """
-    Parse SAM file contents for query-ref aligned sequences.
-    Does pseudo multiple sequence alignment on all the query sequences and reference.
-    :param ref:
-    TODO:  handle inserts.  Right now, all inserts are squelched so that there is multiple sequence alignment.
+    Parse SAM file contents for query-ref (pairwise) aligned sequences for a specific reference contig.
     For paired-end reads, merges the reads into a single sequence with gaps with respect to the reference.
-    TODO:  handle mate pairs.
-    Writes the MSA sequences to out_fasta_filename.  Specifies the 1-based start and end position of the unpadded sequence in the header.
-    TODO: handle hypens, colons, semicolons in name
-    From Newick format:   name can be any string of printable characters except blanks, colons, semicolons, parentheses, and square brackets.
+    Creates a pseudo-multiple sequence alignment on all the query sequences and reference.
+    Writes the MSA sequences to out_fasta_filename.
+    Converts query names so that they are compatible with Newick format in phylogenetic reconstruction by
+        converting colons, semicolons, parentheses to underscores.
 
-    ASSUMES:  mates from same read are ordered together in the file, with the first mate occuring first
-    TODO:  do not assume order
-
-    Only takes the primary alignment.
+    ASSUMES:  SAM is ordered by query name
+    NB: Only takes the primary alignment.
 
     :param str sam_filename: full path to sam file
-    :param float mapping_cutoff:  Ignore alignments with mapping quality lower than the cutoff.
-    :param int read_qual_cutoff: When merging overlapping paired-end reads, ignore mate with read quality lower than the cutoff.
-    :param float max_prop_N:  Do not output sequences with proportion of N higher than the cutoff
+    :param str ref: name of reference contig to form MSA alignments to
+    :param int ref_len: length of reference contig in nucleotides
     :param str out_fasta_filename: full path of fasta file to write to.  Will completely overwite file.
+    :param int mapping_cutoff:  Ignore alignments with mapping quality lower than the cutoff.
+    :param int read_qual_cutoff: Convert bases with quality lower than this cutoff to N unless both mates agree.
+    :param float max_prop_N:  Do not output merged sequences with proportion of N higher than the cutoff
     """
 
     LOGGER.debug("sam_filename=" + sam_filename + " out_fasta_filename=" + out_fasta_filename)
@@ -308,11 +234,10 @@ def create_msa_fasta_from_sam(sam_filename, ref, ref_len, out_fasta_filename, ma
 
 
             padded_seq1, padded_qual1 = get_padded_seq_from_cigar(pos=int(pos), cigar=cigar, seq=seq, qual=qual,
-                                                                  flag=flag, rname=refname, ref_len=ref_len)
+                                                                  ref_len=ref_len)
 
             padded_seq2 = ''
             padded_qual2 = ''
-            qname2 = qname
             if not SamFlag.IS_MATE_UNMAPPED & int(flag):
                 #while i < len(lines) and padded_seq2 == '' and qname2 == qname:
                 if i < len(lines):
@@ -334,82 +259,25 @@ def create_msa_fasta_from_sam(sam_filename, ref, ref_len, out_fasta_filename, ma
                     #                                                       ref_len=ref_len)
                     if (refname2 == ref and qname2 == qname and
                             not(SamFlag.IS_UNMAPPED & int(flag2) or SamFlag.IS_SECONDARY_ALIGNMENT & int(flag2) or
-                                        refname2 == '*' or cigar2 == '*' or int(pos2) == 0 or int(mapq2) < mapping_cutoff)):
+                                refname2 == '*' or cigar2 == '*' or int(pos2) == 0 or int(mapq2) < mapping_cutoff)):
                         padded_seq2, padded_qual2 = get_padded_seq_from_cigar(pos=int(pos2), cigar=cigar2, seq=seq2,
-                                                                                  qual=qual2, flag=flag2, rname=refname2,
-                                                                                  ref_len=ref_len)
+                                                                              qual=qual2, ref_len=ref_len)
 
             if padded_seq1 or padded_seq2:
                 # merge mates into one padded sequence
-                # We merge because we expect the pairs to overlap and the overlap gives us confidence on the bases
-                # TODO:  this doesn't always apply to other people's pipelines.  We should change this.
+                # We merge in case the mates overlap, the overlap gives us confidence on the bases
                 mseq = merge_pairs(padded_seq1, padded_seq2, padded_qual1, padded_qual2, read_qual_cutoff)
 
                 # Sequence must not have too many censored bases
                 if mseq.count('N') / float(len(mseq)) <= max_prop_N:
-                    # Write multiple-sequence-aligned merged read to file using the name of the first mate
+                    # Write multiple-sequence-aligned merged read to file
                     # Newick tree formats don't like special characters.  Convert them to underscores.
                     newick_nice_qname = re.sub(pattern=NEWICK_NAME_RE, repl='_', string=qname)
-                    # # find first character that is not n, N, or a gap -
-                    # start_pos_1based = re.search(NUCL_RE, mseq).start() + 1
-                    # # find last character that is not n, N, or a gap
-                    # end_pos_1based = len(mseq) - re.search(NUCL_RE, mseq[::-1]).start() - 1
-                    # find first character that is not n, N, or a gap -
-                    start_pos_1based = 1
-                    # find last character that is not n, N, or a gap
-                    end_pos_1based = 1
-                    out_fasta_fh.write(">" + newick_nice_qname + " " + str(start_pos_1based) + " " + str(end_pos_1based) + "\n")
+                    out_fasta_fh.write(">" + newick_nice_qname + "\n")
                     out_fasta_fh.write(mseq + "\n")
 
 
-
-
-
-def samBitFlag(flag):
-    """
-
-
-    :rtype dict  {str: bool}:  dict of whether the label applies to the given flag
-    :param flag int:  flag field from sam file as int
-
-    Interpret bitwise flag in SAM field as follows:
-
-    Flag	Chr	Description
-    =============================================================
-    0x0001	p	the read is paired in sequencing
-    0x0002	P	the read is mapped in a proper pair
-    0x0004	u	the query sequence itself is unmapped
-    0x0008	U	the mate is unmapped
-    0x0010	r	strand of the query (1 for reverse)
-    0x0020	R	strand of the mate
-    0x0040	1	the read is the first read in a pair
-    0x0080	2	the read is the second read in a pair
-    0x0100	s	the alignment is not primary
-    0x0200	f	the read fails platform/vendor quality checks
-    0x0400	d	the read is either a PCR or an optical duplicate
-    0x0800      the alignment is part of a chimeric alignment
-    """
-    labels = ['is_paired', 'is_mapped_in_proper_pair', 'is_unmapped', 'mate_is_unmapped',
-              'is_reverse', 'mate_is_reverse', 'is_first', 'is_second', 'is_secondary_alignment',
-              'is_failed', 'is_duplicate']
-
-
-    binstr = bin(int(flag)).replace('0b', '')
-    # flip the string
-    binstr = binstr[::-1]
-    # if binstr length is shorter than 11, pad the right with zeroes
-    for i in range(len(binstr), 11):
-        binstr += '0'
-
-    bitflags = list(binstr)
-    res = {}
-    for i, bit in enumerate(bitflags):
-        res.update({labels[i]: bool(int(bit))})
-
-    return res
-
-
-def create_depth_file_from_bam (bam_filename):
+def create_depth_file_from_bam(bam_filename):
     """
     Gets the coverage from samtools depth.
     Creates a samtools per-base depth file with the same name as bam_filename but appended with ".depth".
@@ -417,11 +285,10 @@ def create_depth_file_from_bam (bam_filename):
     TODO: what to do with STDERR
 
     :param str bam_filename:  full path to sorted and indexed bam file
+    :return: returns full filepath to depth file
+    :rtype : str
     :raise subprocess.CalledProcessError
-    :rtype str : returns full filepath to depth file
     """
-
-    import subprocess
 
     # Get per-base depth
     depth_filename = bam_filename + ".depth"
@@ -433,12 +300,14 @@ def create_depth_file_from_bam (bam_filename):
 def sam_to_sort_bam(sam_filename, ref_filename):
     """
     Creates index of reference.  This creates a <ref_filename>.fai file.
-    Converts sam to bam file sorted by coordinates.  This creates a <sam_filename prefix>.bam and <sam filename prefix>.bam.sort files.
+    Converts sam to bam file sorted by coordinates.
+    This creates a <sam_filename prefix>.bam and <sam filename prefix>.bam.sort files.
     Creates index of sorted bam.  This creates a <bam_filename>.index file.
     Pipes STDERR to STDOUT.
     Uses default samtools from PATH environment variable.
 
-    :rtype str : full filepath to sorted, indexed bam  file
+    :return: full filepath to sorted, indexed bam  file
+    :rtype : str
     :param str sam_filename: full filepath to sam alignment file
     :param str ref_filename:  full filepath to reference fasta
     """
@@ -473,7 +342,8 @@ def get_ave_coverage_from_bam (bam_filename, ref, pos_start, pos_end):
     :param str ref: name of reference sequence to get coverage for
     :param int pos_start: region starting position, 1-based
     :param int pos_end: region ending position, 1-based
-    :rtype float : average per-base coverage for the specified reference and region.
+    :return: average per-base coverage for the specified reference and region.
+    :rtype : float
     """
     import os
 

@@ -21,34 +21,29 @@ HYPHY_BASEDIR = "/usr/local/lib/hyphy/TemplateBatchFiles/"
 FASTTREE_EXE = "FastTreeMP"
 ENV_OMP_NUM_THREADS = 'OMP_NUM_THREADS'
 
-NUC_PER_CODON = 3
-
-CMDLINE_OPTIONS = [
-    "sam=",
-    "ref=",
-    "ref_len=",
-    "out_dir=",
-    "map_q_thresh=",
-    "read_q_thresh=",
-    "max_N_thresh=",
-    "window_size=",
-    "window_breadth_thresh=",
-    "window_depth_thresh=",
-    "start_nucpos=",
-    "end_nucpos=",
-    "pvalue=",
-    "threads_per_window=",
-    "concurrent_windows=",
-    "dnds_tsv=",
-    "hyphy_exe",
-    "hyphy_basedir",
-    "fastree_exe"]
 
 
-
+# TODO:  handle inserts in multiple sequence align file
+# TODO:  handle reads that extend the reference in MSA file
+# TODO: this is a performance killing step.  Instead of writing all MSA aligned reads to file, we need to just do it for
+#   parts of the genome that are used in the sliding window or hold all of this in memory.
 def create_full_msa_fasta(sam_filename, out_dir, ref, ref_len, mapping_cutoff, read_qual_cutoff, max_prop_N):
-    # Create a pseudo multiple-sequence aligned fasta file
-    # TODO:  handle indels in multiple sequence align file
+    """
+    Creates a pseudo multiple-sequence aligned fasta file for all reads using pairwise alignment from a SAM file.
+
+
+    :return: path to multiple sequence aligned fasta file of all reads
+    :rtype : str
+    :param str sam_filename: filepath to sam file of read alignments to the reference
+    :param str out_dir: output directory
+    :param str ref: reference name
+    :param int ref_len: length of reference in nucleotides
+    :param float mapping_cutoff: mapping quality cutoff
+    :param float read_qual_cutoff: read quality cutoff.  Bases below this cutoff are converted to N's.
+    :param float max_prop_N:  maximum fraction of bases in a merged mate-pair read that is allowed to be N's.
+                                Reads that exceed this threshold are thrown out.
+    """
+
     sam_filename_nopath = os.path.split(sam_filename)[1]
     sam_filename_prefix = os.path.splitext(sam_filename_nopath)[0]
     msa_filename_prefix = out_dir + os.sep + sam_filename_prefix + "." + ref + ".msa"
@@ -65,64 +60,26 @@ def create_full_msa_fasta(sam_filename, out_dir, ref, ref_len, mapping_cutoff, r
 
     return msa_fasta_filename
 
-def eval_windows(ref, ref_len, sam_filename, out_dir, output_dnds_tsv_filename,
-                 mapping_cutoff, read_qual_cutoff, max_prop_N,
-                 start_nucpos, end_nucpos,
-                 window_depth_thresh, window_breadth_thresh, windowsize=300,
-                 pvalue=0.05, threads=1, ):
-    """
-    Slides window along genome.
-    Creates the multiple sequence aligned fasta files for the window.
-    Feeds the multiple-sequence aligned fasta files to fasttree2 to create a tree.
-    Feeds the tree into HyPhy to obtain dn/ds values.
-    """
-    # TODO:  how to get ORFs?
-    # TODO:  do not use kalign2 from PATH
-    # TODO:  do not hyphy from PATH
 
-    # Create a pseudo multiple-sequence aligned fasta file
-    # TODO:  handle indels in multiple sequence align file
-    msa_fasta_filename = create_full_msa_fasta(sam_filename=sam_filename, out_dir=out_dir, ref=ref, ref_len=ref_len,
-                          mapping_cutoff=mapping_cutoff, read_qual_cutoff=read_qual_cutoff, max_prop_N=max_prop_N)
-
-    # All nucleotide positions are 1-based
-    last_window_start_nucpos = end_nucpos - windowsize
-    for start_window_nucpos in range(start_nucpos, last_window_start_nucpos+1, NUC_PER_CODON):
-        end_window_nucpos = start_window_nucpos + windowsize - 1
-
-        eval_window(msa_fasta_filename=msa_fasta_filename, out_dir=out_dir,
-                    mapping_cutoff=mapping_cutoff, read_qual_cutoff=read_qual_cutoff, max_prop_N=max_prop_N,
-                    window_depth_thresh=window_depth_thresh, window_breadth_thresh=window_breadth_thresh,
-                    start_nucpos=start_window_nucpos, end_nucpos=end_window_nucpos,
-                    ref=ref, ref_len=ref_len,
-                    pvalue=pvalue, threads=threads)
-
-    dnds_tsv_comments = ("ref=" + ref + ","
-                         "ref_len=" + str(ref_len) + "," +
-                         "sam=" + sam_filename + "," +
-                         "mapping qual cutoff=" + str(mapping_cutoff) + "," +
-                         "read qual cutoff=" + str(read_qual_cutoff) + "," +
-                         "max fraction N=" + str(max_prop_N) + "," +
-                         "start nuc pos=" + str(start_nucpos) + "," +
-                         "end nuc pos=" + str(end_nucpos) + "," +
-                         "windowsize=" + str(windowsize) + "," +
-                         "window depth thresh=" + str(window_depth_thresh) + "," +
-                         "window breadth fraction=" + str(window_breadth_thresh) + "," +
-                         "pvalue=" + str(pvalue))
-    LOGGER.debug("Start Ave Dn/DS for all windows for ref " + ref + " " + output_dnds_tsv_filename)
-    seq_dnds_info = tabulate_dnds(dnds_tsv_dir=out_dir, pvalue_thresh=pvalue, ref=ref, ref_nuc_len=ref_len,
-                                  comments=dnds_tsv_comments, output_dnds_tsv_filename=output_dnds_tsv_filename)
-    LOGGER.debug("Done Ave Dn/DS for all windows  for ref " + ref + ".  Wrote to " + output_dnds_tsv_filename)
-    return seq_dnds_info
-
-
+# TODO:  do multiple test corrections for pvalues
 def eval_window(msa_fasta_filename, window_depth_thresh, window_breadth_thresh, start_nucpos, end_nucpos, pvalue, threads,
                 hyphy_exe=HYPHY_EXE, hyphy_basedir=HYPHY_BASEDIR, fastree_exe=FASTTREE_EXE):
     """
-    Slides window along genome.
-    Creates the multiple sequence aligned fasta files for the window.
-    Feeds the multiple-sequence aligned fasta files to fasttree2 to create a tree.
+    Handles the processing for a single window along the genome.
+    Creates the multiple sequence aligned fasta file for the window.
+    Feeds the window multiple-sequence aligned fasta file to fasttree2 to create a tree.
     Feeds the tree into HyPhy to obtain dn/ds values.
+
+    :param str msa_fasta_filename: full filepath to multiple sequence aligned file for all reads.
+    :param int window_depth_thresh:  the minimum number of required reads that meet the breadth threshold below which the window is thrown out
+    :param float window_breadth_thresh: the minimum fraction of a window that merged paired-end read must cover to be included in the window.
+    :param int start_nucpos:  1-based start nucleotide position of the window
+    :param int end_nucpos:  1-based end nucleotide position of the window
+    :param float pvalue:  pvalue threshold for detecting dN/dS (used by HyPhy)
+    :param int threads: number of threads allotted to processing this window  (only FastTree and HyPhy will be multithreaded)
+    :param str hyphy_exe: full filepath to HYPHYMP executable
+    :param str hyphy_basedir:  full filepath to HyPhy base directory containing the template batch files
+    :param str fastree_exe: full filepath to FastTreeMP executable
     """
 
     LOGGER.debug("msa_fasta_filename=" + msa_fasta_filename + "\n" +
@@ -132,7 +89,6 @@ def eval_window(msa_fasta_filename, window_depth_thresh, window_breadth_thresh, 
                  "end_nucpos=" + str(end_nucpos) + "\n" +
                  "pvalue=" + str(pvalue) + "\n" +
                  "threads=" + str(threads) + "\n")
-
 
     # Slice the multiple sequence aligned fasta file into a window fasta
     msa_fasta_filename_prefix = os.path.splitext(msa_fasta_filename)[0]
@@ -182,12 +138,10 @@ def eval_window(msa_fasta_filename, window_depth_thresh, window_breadth_thresh, 
         hyphy_input_str = "\n".join(["1",   # Universal
                                     "1",    # New analysis
                                     os.path.abspath(msa_window_fasta_filename), # codon fasta
-                                    #"1",    # Substitution Model - Use HK85 and MG94xHKY85
                                     "2",    #(2):[Custom] Use any reversible nucleotide model crossed with MG94.
                                     "012345", # GTR
                                     os.path.abspath(fastree_treefilename),      # tree file
                                     os.path.abspath(hyphy_modelfit_filename),   # model fit output file
-                                    #"1",    # Neutral dN/dS = 1
                                     "3",    #(3):[Estimate] Estimate from data with branch corrections(slower).
                                     "1",    # Single Acnestor Counting
                                     "1",    # Full tree
@@ -222,20 +176,41 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir,
     """
     Launch a separate process to analyze each window.
     Each window can use up to <threads_per_window> threads.
+
+    The maximum number of CPU cores required on a single node = threads_per_window x concurrent_windows.
+
+    :param str ref:  reference name
+    :param int ref_len:  length of reference in nucleotide bases
+    :param str sam_filename:  full filepath to sam file of read alignments against the reference
+    :param str out_dir:  output directory
+    :param int mapping_cutoff:  mapping quality threshold below which alignments are thrown out
+    :param int read_qual_cutoff:  read quality threshold below which bases are converted to N's
+    :param float max_prop_N:  maximum fraction of merged paired-end read that are N's.  Below this threshold the read pair is thrown out.
+    :param int start_nucpos:  1-based start nucleotide position of the window
+    :param int end_nucpos:  1-based end nucleotide position of the window
+    :param int windowsize:  size of each window in nucleotide bases
+    :param int window_depth_thresh:  the minimum number of required reads that meet the breadth threshold below which the window is thrown out
+    :param float window_breadth_thresh:  the minimum fraction of a window that merged paired-end read must cover to be included in the window.
+    :param float pvalue:  pvalue threshold for detecting dN/dS (used by HyPhy)
+    :param int threads_per_window:  number of threads allotted to processing a single window  (only FastTree and HyPhy will be multithreaded)
+    :param int concurrent_windows:  the number of windows to process at the same time.
+    :param str output_dnds_tsv_filename:  name of output dN/dS tab separated file generated by HyPhy.  Will be created under out_dir.
+    :param str hyphy_exe:  full filepath to HYPHYMP executable
+    :param str hyphy_basedir:  full filepath to HyPhy base directory containing the template batch files
+    :param str fastree_exe:  full filepath to FastTreeMP executable
     """
 
     pool = pool_traceback.LoggingPool(processes=concurrent_windows)
 
     # Create a pseudo multiple-sequence aligned fasta file
-    # TODO:  handle indels in multiple sequence align file
     msa_fasta_filename = create_full_msa_fasta(sam_filename=sam_filename, out_dir=out_dir, ref=ref, ref_len=ref_len,
-                                                mapping_cutoff=mapping_cutoff, read_qual_cutoff=read_qual_cutoff, max_prop_N=max_prop_N)
+                                               mapping_cutoff=mapping_cutoff, read_qual_cutoff=read_qual_cutoff, max_prop_N=max_prop_N)
 
     # All nucleotide positions are 1-based
     last_window_start_nucpos = min(end_nucpos, ref_len - windowsize + 1)
-    total_windows = (last_window_start_nucpos - start_nucpos + 1)/NUC_PER_CODON
+    total_windows = (last_window_start_nucpos - start_nucpos + 1)/Utility.NUC_PER_CODON
     process_results = []
-    for start_window_nucpos in range(start_nucpos, last_window_start_nucpos+1, NUC_PER_CODON):
+    for start_window_nucpos in range(start_nucpos, last_window_start_nucpos+1, Utility.NUC_PER_CODON):
         end_window_nucpos = start_window_nucpos + windowsize - 1
         process_args = (msa_fasta_filename, window_depth_thresh, window_breadth_thresh,
                         start_window_nucpos, end_window_nucpos, pvalue, threads_per_window,
@@ -277,25 +252,33 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir,
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--sam")
-    parser.add_argument("--ref")
-    parser.add_argument("--ref_len", type=int)
-    parser.add_argument("--out_dir")
-    parser.add_argument("--map_q_thresh", type=int)
-    parser.add_argument("--read_q_thresh", type=int)
-    parser.add_argument("--max_N_thresh", type=float)
-    parser.add_argument("--window_size", type=int)
-    parser.add_argument("--window_breadth_thresh", type=float)
-    parser.add_argument("--window_depth_thresh", type=int)
-    parser.add_argument("--start_nucpos", type=int)
-    parser.add_argument("--end_nucpos", type=int)
-    parser.add_argument("--pvalue", type=float)
-    parser.add_argument("--threads_per_window", type=int)
-    parser.add_argument("--concurrent_windows", type=int)
-    parser.add_argument("--dnds_tsv")
-    parser.add_argument("--hyphy_exe")
-    parser.add_argument("--hyphy_basedir")
-    parser.add_argument("--fastree_exe")
+    parser.add_argument("--sam", help="full filepath to sam alignment file")
+    parser.add_argument("--ref", help="name of reference contig")
+    parser.add_argument("--ref_len", type=int, help="length of reference contig in nucleotide bases")
+    parser.add_argument("--out_dir", help="output directory in which the pipeline will write all its intermediate files")
+    parser.add_argument("--map_q_thresh", type=int, help="mapping quality threshold below which alignments are ignored")
+    parser.add_argument("--read_q_thresh", type=int, help="read quality threshold below which bases are converted to Ns")
+    parser.add_argument("--max_N_thresh", type=float,
+                        help="maximum fraction of Ns allowed in the merged paired-end read below which the paired-end read is ignored")
+    parser.add_argument("--window_size", type=int, help="window size in nucleotides")
+    parser.add_argument("--window_breadth_thresh", type=float,
+                        help="fraction of window that merged paired-end read must cover with non-gap and non-N nucleotides.  Below this threshold, the read is omitted from the window.")
+    parser.add_argument("--window_depth_thresh", type=int,
+                        help="1-based start nucleotide position in the reference contig.  The first window will start at this position.")
+    parser.add_argument("--start_nucpos", type=int,
+                        help="1-based start nucleotide position in the reference contig.  The first window will start at this position.")
+    parser.add_argument("--end_nucpos", type=int,
+                        help="1-based end nucleotide position in the reference contig.  The last window will start at or before this position.")
+    parser.add_argument("--pvalue", type=float,
+                        help=" p-value threshold for determining selection significantly different from neutral evolution.")
+    parser.add_argument("--threads_per_window", type=int,
+                        help="threads allotted per window")
+    parser.add_argument("--concurrent_windows", type=int, help="max number of windows to process concurrently")
+    parser.add_argument("--dnds_tsv",
+                        help="full filepath of final tab-separated values file containing selection information for each codon site in the reference")
+    parser.add_argument("--hyphy_exe", help="full filepath of HYPHYMP executable")
+    parser.add_argument("--hyphy_basedir", help="full filepath of HyPhy base directory containing template batch files")
+    parser.add_argument("--fastree_exe", help="full filepath of FastTreeMP executable")
 
     args = parser.parse_args()
     print args
