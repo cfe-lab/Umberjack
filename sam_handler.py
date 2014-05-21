@@ -30,7 +30,7 @@ class SamFlag:
 
 
 # TODO:  handle X, =, P, N
-# TODO:  handle inserts
+# TODO:  handle combinations of inserts/deletions
 def apply_cigar (cigar, seq, qual):
     """
     Parse SAM CIGAR and apply to the SAM nucleotide sequence.
@@ -324,8 +324,9 @@ def sam_to_sort_bam(sam_filename, ref_filename):
                           stderr=subprocess.STDOUT, shell=False)
 
     # Sort the bam file by leftmost position on the reference assembly.  Required for samtools depth.
-    sorted_bam_filename = bam_filename + ".sort"
-    subprocess.check_call(['samtools', 'sort', '-f', bam_filename, sorted_bam_filename], stderr=subprocess.STDOUT, shell=False)
+    sorted_bam_filename_prefix = sam_filename_prefix + ".sort"
+    sorted_bam_filename = sorted_bam_filename_prefix + ".bam"
+    subprocess.check_call(['samtools', 'sort', bam_filename, sorted_bam_filename_prefix], stderr=subprocess.STDOUT, shell=False)
 
     # index sorted bam file
     subprocess.check_call(['samtools', 'index', sorted_bam_filename, ], stderr=subprocess.STDOUT, shell=False)
