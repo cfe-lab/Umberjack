@@ -44,14 +44,22 @@ Usage
     * --start_nucpos:  1-based start nucleotide position in the reference contig.  The first window will start at this position.
     * --end_nucpos:  1-based end nucleotide position in the reference contig.  The last window will start at or before this position.
     * --pvalue: p-value threshold for determining selection significantly different from neutral evolution.
-    * --threads_per_window:  threads allotted per window.
-    * --concurrent_windows:  max number of windows to process concurrently.
+    * --threads_per_window:  threads allotted per window.  (Default: 1)
+    * --concurrent_windows:  max number of windows to process concurrently.  (Default: 1)
     * --dnds_tsv:  full filepath of final tab-separated values file containing selection information for each codon site in the reference.
-    * --hyphy_exe:  full filepath of HYPHYMP executable
-    * --hyphy_basedir:  full filepath of HyPhy base directory containing template batch files
-    * --fastree_exe:  full filepath of FastTreeMP executable
-* The pipeline will output dN/dS values for each codin site in the tab-separated file as specified in --dnds_tsv.
-* At this point, there is no pretty visualization of the dN/dS, so you will need to feed this .tsv file into R or similar for charting.
+    * --hyphy_exe:  full filepath of HYPHYMP executable  (Default: uses HYPHYMP from PATH environment variable)
+    * --hyphy_basedir:  full filepath of HyPhy base directory containing template batch files  (Default: uses /usr/local/lib/hyphy/TemplateBatchFiles/)
+    * --fastree_exe:  full filepath of FastTreeMP executable.  (Default: uses FastTreeMP from PATH environment variable)
+* The pipeline will output dN/dS values for each codon site in the tab-separated file as specified in --dnds_tsv.
+
+
+Visualization
+--------------
+GUI not yet implemented :(.  If you want to visualize dN/dS across the genome, you will need to feed the
+tab-separated-values file specified in --dnds_tsv into some charting program.
+If you're familiar with R, you can check out
+'<SlidingWindowTrees git repo>/test/simulations/R/sliding_window_tree_unit_test.R', which plots expected versus
+inferred dN/dS amongst other things.
 
 Parallelization
 -----------------
@@ -59,5 +67,10 @@ Currently, the pipeline code is capable of running on multiple cores on a single
 on multiple nodes on a cluster, you will need to do some manual or scripted massaging to kick off the pipeline for
 multiple sections of the genome concurrently.  For each node, specify the genomic region that you'd like to process
 using the --start_nucpos and --end_nucpos parameters.
+
+Unit Tests
+------------------
+Most of the test assets (fasta files, etc) are too large to be uploaded to github.  They are currently shared in a DropBox
+folder.
 
 
