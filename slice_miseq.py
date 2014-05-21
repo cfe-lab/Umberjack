@@ -24,6 +24,7 @@ class _SiteDnDsInfo:
         self.total_syn_subs = 0
         self.total_nonsyn_subs = 0
         self.total_reads = 0
+        self.window_dnds_subs = [] # list of number of substitutions
 
     def add_dnds(self, dnds, dn_minus_ds, reads, syn_subs, nonsyn_subs):
         """
@@ -42,6 +43,21 @@ class _SiteDnDsInfo:
         self.total_reads += reads
         self.total_syn_subs += syn_subs
         self.total_nonsyn_subs += nonsyn_subs
+        self.window_dnds_subs.append([dnds, syn_subs + nonsyn_subs])
+
+    def get_weighted_ave_dnds(self):
+        """
+        Return weighted average dN/dS from all windows for the codon site.
+        Average weighted by number of substitutions for the codon site in the window.
+        :rtype : float
+        """
+        if not self.total_win_cover_site:
+            return None
+        else:
+            total_weighted_dnds = 0
+            for dnds_sub in self.window_dnds_subs:
+                total_weighted_dnds += dnds_sub[0] * dnds_sub[1]
+            return total_weighted_dnds / float(self.total_syn_subs + self.total_nonsyn_subs)
 
     def get_ave_dnds(self):
         """
@@ -139,7 +155,7 @@ class SeqDnDsInfo:
         :rtype : float
         :param int site_1based : 1-based codon site position
         """
-        return self.dnds_seq[site_1based-1].get_ave_dnds
+        return self.dnds_seq[site_1based-1].get_ave_dnds()
 
     def get_site_ave_dn_minus_ds(self, site_1based):
         """
