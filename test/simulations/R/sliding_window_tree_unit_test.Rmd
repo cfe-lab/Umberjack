@@ -3,20 +3,19 @@
 library(limma)
 library(ggplot2)
 library(reshape2)
+library(knitr)
 
 NUC_PER_CODON <- 3
 WINDOWSIZE <- 400
 REF_LEN_NUC <- 9000
-REF_LEN_CODON <- REF_LEN_NUC %/% NUC_PER_CODON
 
-INDELIBLE_RATES_OUTPUT_COMMENT_LINES <- 10
 POPN_SIZE <- 10000
 START_NUCPOS <- 3001
 END_NUCPOS <- 3400
 
-START_CODON <- 1001 #((START_NUCPOS - 1) / NUC_PER_CODON) + 1
-END_CODON <- 1333
-  
+START_CODON <- 1001
+END_CODON <- 1133
+
 actual_dnds_filename <- "../data/out/consensus/mut100_1x_errfree_window400/actual_dnds_by_site.tsv"
 dnds_file <- file(actual_dnds_filename, open="rt")
 comments <- readLines(dnds_file, 1) # Read one line 
@@ -43,47 +42,68 @@ head(expected_dnds)
 str(expected_dnds)
 summary(expected_dnds)
 
-actual_dnds <- actual_dnds[1001:1133,]
+all(expected_dnds$Site == actual_dnds$Site)
+actual_dnds <- actual_dnds[START_CODON:END_CODON,]
 summary(actual_dnds)
-expected_dnds <- expected_dnds[1001:1133,]
+expected_dnds <- expected_dnds[START_CODON:END_CODON,]
 summary(expected_dnds)
+
+
+# check consistency
+all(expected_dnds$Site == actual_dnds$Site)
 ```
 
 **Scatterplot actual vs expected dn ds together**
 
 ```{r fig.width=24}
-# check consistency
-all(expected_dnds$Site == actual_dnds$Site)
+fullDat <- data.frame(Site=expected_dnds$Site,
+                      Expected=expected_dnds$Omega,
+                      Inferred=actual_dnds$dNdS)
+head(fullDat[!is.na(fullDat$Inferred),])
+fullDatNoNA <- fullDat[!is.na(fullDat$Inferred),]
 
-fullDat <- data.frame(expected_site=expected_dnds$Site,
-                      expected=expected_dnds$Omega,
-                      actual_site=actual_dnds$Site,
-                      actual=actual_dnds$dNdS)
-head(fullDat[!is.na(fullDat$actual),])
-ggplot(fullDat, aes(x=actual, y=expected)) + geom_smooth(method=lm)
+
+ggplot(fullDatNoNA, aes(x=Inferred, y=Expected)) + geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
+  xlab("\nInferred") + 
+  ylab("Expected\n") + 
+  theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
+  scale_x_continuous(breaks=seq(0, 3, 0.5), limits=c(0, max(fullDatNoNA$Inferred))) +
+  scale_y_continuous(breaks=seq(0, 3, 0.5), limits=c(0, max(fullDatNoNA$Expected))) +
+  coord_fixed(ratio=1) + 
+  ggtitle("Inferred vs Expected dn/ds")
 ```
 
-**Scatterplot the dn/ds across the genome**
+**Smoothed Scatterplot of dn/ds across the genome**
 
 ```{r fig.width=28}
-fullDatBySource <- reshape2:::melt.data.frame(data=fullDat, na.rm = FALSE, id.vars="actual_site", measure.vars=c("expected", "actual"),
+fullDatBySource <- reshape2:::melt.data.frame(data=fullDat, na.rm = FALSE, id.vars="Site", measure.vars=c("Expected", "Inferred"),
                                               variable.name="source", value.name="dnds")
 head(fullDatBySource)
 tail(fullDatBySource)
 str(fullDatBySource)
 summary(fullDatBySource)
-ggplot(fullDatBySource, aes(x=site, y=dnds, color=source) ) + geom_smooth() + 
+ggplot(fullDatBySource, aes(x=Site, y=dnds, color=source) ) + geom_smooth() + 
+  xlab("Codon Site") + 
+  ylab("dN/dS") + 
+  ggtitle("dn/ds by site")
+theme(plot.title=element_text(size=36), axis.title=element_text(size=32), axis.text=element_text(size=24), 
+      legend.text=element_text(size=24), legend.title=element_blank())
+```
+
+**Line Plot of dn/ds across the genome**
+
+
+```{r }
+ggplot(fullDatBySource, aes(x=Site, y=dnds, color=source) ) + geom_line() + 
   xlab("Codon Site Along Genome") + 
   ylab("dN/dS") + 
   ggtitle("dn/ds by site")
+```
 
-ggplot(fullDatBySource, aes(x=actual_site, y=dnds, color=source) ) + geom_line() + 
-  xlab("Codon Site Along Genome") + 
-  ylab("dN/dS") + 
-  ggtitle("dn/ds by site")
+**Point Plot of dn/ds across the genome**
 
-
-ggplot(fullDatBySource, aes(x=actual_site, y=dnds, color=source) ) + geom_point() + 
+```{r }
+ggplot(fullDatBySource, aes(x=Site, y=dnds, color=source) ) + geom_point() + 
   xlab("Codon Site Along Genome") + 
   ylab("dN/dS") + 
   ggtitle("dn/ds by site")
@@ -159,39 +179,11 @@ htest <-  wilcox.test(actual_dnds$dNdS, expected_dnds$Omega, paired=TRUE, exact=
 print (htest)
 
 ```{r **Find how correlated the actual vs expected dn/ds are**}
-#dnds_cor <- cor(log(actual_dnds$dNdS), expected_dnds$Omega, method="spearman", use="pairwise.complete.obs")
 dnds_cor <- cor(actual_dnds$dNdS, expected_dnds$Omega, method="spearman", use="complete.obs")
 print(dnds_cor)
 
 ```{r **Find how correlated the actual dn-ds vs expected dn/ds are**}
 dnds_dnMinusds_cor <- cor(actual_dnds$dN_minus_dS, expected_dnds$Omega, method="spearman", use="complete.obs")
 print(dnds_dnMinusds_cor)
-```
-
-**Linear Regression to see how dN/dS varies by reads, substitutions, seq error**
-
-
-```{r }
-# rows are codon sites. cols are samples  
-# our samples are actual, expected  
-# linDat <- data.frame(row.names=expected_dnds$Site,
-#                      site=expected_dnds$Site,
-#                      expected_dnds=expected_dnds$Omega,                     
-#                      actual_dnds=actual_dnds$dNdS
-#                      )
-# head(linDat[!is.na(linDat$actual),])
-# str(linDat)
-# summary(linDat)
-# 
-# 
-# linDes <- reshape2:::melt.data.frame(data=linDat, na.rm = FALSE, id.vars="site", measure.vars=c("expected_dnds", "actual_dnds"),
-#                                      variable.name="source", value.name="dnds")
-# linDesModMat <- model.matrix(~source, linDes)
-# str(linDesModMat)
-# 
-# fit <- lmFit(linDat, linDesModMat)
-# ebfit <- eBayes(fit)
-# 
-# tophits <- topTable(wtEbFit, coef = grep("devStage", colnames(coef(wtEbFit)))))
 ```
 
