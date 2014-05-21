@@ -127,6 +127,7 @@ def eval_window(msa_fasta_filename, window_depth_thresh, window_breadth_thresh, 
                                    msa_window_fasta_filename],
                                   stdout=fasttree_stdouterr_fh, stderr=fasttree_stdouterr_fh, shell=False,
                                   env=os.environ)
+
         LOGGER.debug("Done Fasttree for window " + fastree_treefilename)
     else:
         LOGGER.debug("Found existing Fasttree for window " + fastree_treefilename + ". Not regenerating")
@@ -156,8 +157,8 @@ def eval_window(msa_fasta_filename, window_depth_thresh, window_breadth_thresh, 
         hyphy_log = msa_window_filename_prefix + ".hyphy.log"
         with open(hyphy_log, 'w') as hyphy_log_fh:
             hyphy_cmd = [hyphy_exe, "BASEPATH="+hyphy_basedir, "CPU=" + str(threads), SELECTION_BF]
-            hyphy_proc = subprocess.Popen(hyphy_cmd,
-                                          stdin=subprocess.PIPE, stdout=hyphy_log_fh, stderr=hyphy_log_fh, shell=False)
+            hyphy_proc = subprocess.Popen(hyphy_cmd, stdin=subprocess.PIPE, stdout=hyphy_log_fh, stderr=hyphy_log_fh,
+                                          shell=False, env=os.environ)
             hyphy_proc.communicate(hyphy_input_str)
 
             if hyphy_proc.returncode:
@@ -172,7 +173,7 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir,
                        start_nucpos, end_nucpos,
                        windowsize, window_depth_thresh, window_breadth_thresh,
                        pvalue, threads_per_window, concurrent_windows, output_dnds_tsv_filename,
-                       hyphy_exe, hyphy_basedir, fastree_exe):
+                       hyphy_exe=HYPHY_EXE, hyphy_basedir=HYPHY_BASEDIR, fastree_exe=FASTTREE_EXE):
     """
     Launch a separate process to analyze each window.
     Each window can use up to <threads_per_window> threads.
@@ -272,13 +273,13 @@ def main():
     parser.add_argument("--pvalue", type=float,
                         help=" p-value threshold for determining selection significantly different from neutral evolution.")
     parser.add_argument("--threads_per_window", type=int,
-                        help="threads allotted per window")
-    parser.add_argument("--concurrent_windows", type=int, help="max number of windows to process concurrently")
+                        help="threads allotted per window.  Default: 1")
+    parser.add_argument("--concurrent_windows", type=int, help="max number of windows to process concurrently.  Default: 1")
     parser.add_argument("--dnds_tsv",
-                        help="full filepath of final tab-separated values file containing selection information for each codon site in the reference")
-    parser.add_argument("--hyphy_exe", help="full filepath of HYPHYMP executable")
-    parser.add_argument("--hyphy_basedir", help="full filepath of HyPhy base directory containing template batch files")
-    parser.add_argument("--fastree_exe", help="full filepath of FastTreeMP executable")
+                        help="full filepath of final tab-separated values file containing selection information for each codon site in the reference from averaged over multiple windows")
+    parser.add_argument("--hyphy_exe", help="full filepath of HYPHYMP executable.  Default: taken PATH")
+    parser.add_argument("--hyphy_basedir", help="full filepath of HyPhy base directory containing template batch files.  Default: /usr/local/lib/hyphy/TemplateBatchFiles/")
+    parser.add_argument("--fastree_exe", help="full filepath of FastTreeMP executable.  Default: taken from PATH")
 
     args = parser.parse_args()
     print args
