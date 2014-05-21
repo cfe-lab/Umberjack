@@ -32,7 +32,7 @@ class TestSlidingWindowTree(unittest.TestCase):
 
     def test_eval_windows_async(self):
         # TODO:  automate check output of R scripts.  Right now, we need to manually view HTML generated from R.
-        # i.e.  it's up to you to open up ./R/sliding_window_tree_unit_test.html and inspect the graphs/contents.
+        # i.e.  it's up to you to open up ./simulations/R/sliding_window_tree_unit_test.html and inspect the graphs/contents.
 
         seq_dnds_info = sliding_window_tree.eval_windows_async(sam_filename=SAM_FILENAME,
                                                                ref=REF,
@@ -51,7 +51,7 @@ class TestSlidingWindowTree(unittest.TestCase):
                                                                concurrent_windows=WINDOW_PROCS,
                                                                output_dnds_tsv_filename=ACTUAL_DNDS_FILENAME)
 
-        subprocess.check_call(["Rscript", "-e", "library(knitr); setwd('./R'); getwd(); knit('sliding_window_tree_unit_test.R')"],
+        subprocess.check_call(["Rscript", "-e", "library(knitr); setwd('./simulations/R'); getwd(); spin('sliding_window_tree_unit_test.R')"],
                               shell=False, env=os.environ)
 
 
