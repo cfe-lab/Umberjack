@@ -263,7 +263,7 @@ def create_msa_fasta_from_sam(sam_filename, ref, ref_len, out_fasta_filename, ma
                         padded_seq2, padded_qual2 = get_padded_seq_from_cigar(pos=int(pos2), cigar=cigar2, seq=seq2,
                                                                               qual=qual2, ref_len=ref_len)
 
-            if padded_seq1 or padded_seq2:
+            if padded_seq1 and padded_seq2:
                 # merge mates into one padded sequence
                 # We merge in case the mates overlap, the overlap gives us confidence on the bases
                 mseq = merge_pairs(padded_seq1, padded_seq2, padded_qual1, padded_qual2, read_qual_cutoff)
@@ -275,6 +275,8 @@ def create_msa_fasta_from_sam(sam_filename, ref, ref_len, out_fasta_filename, ma
                     newick_nice_qname = re.sub(pattern=NEWICK_NAME_RE, repl='_', string=qname)
                     out_fasta_fh.write(">" + newick_nice_qname + "\n")
                     out_fasta_fh.write(mseq + "\n")
+            else:
+                LOGGER.warn("Sequence has no mate " + qname)
 
 
 def create_depth_file_from_bam(bam_filename):
