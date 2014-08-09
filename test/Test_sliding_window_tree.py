@@ -34,20 +34,14 @@ class TestSlidingWindowTree(unittest.TestCase):
         # TODO:  automate check output of R scripts.  Right now, we need to manually view HTML generated from R.
         # i.e.  it's up to you to open up ./simulations/R/sliding_window_tree_unit_test.html and inspect the graphs/contents.
 
-        seq_dnds_info = sliding_window_tree.eval_windows_async(sam_filename=SAM_FILENAME,
-                                                               ref=REF,
-                                                               ref_len=REF_LEN,
-                                                               out_dir=OUT_DIR,
-                                                               mapping_cutoff=MAPQ_CUTOFF,
-                                                               read_qual_cutoff=READ_QUAL_CUTOFF,
-                                                               max_prop_N=MAX_PROP_N,
-                                                               windowsize=WINDOW_SIZE,
-                                                               window_breadth_thresh=MIN_WINDOW_BREADTH_COV_FRACTION,
-                                                               window_depth_thresh=MIN_WINDOW_DEPTH_COV,
-                                                               start_nucpos=START_NUCPOS,
-                                                               end_nucpos=END_NUCPOS,
-                                                               pvalue=PVALUE,
-                                                               threads_per_window=THREADS_PER_WINDOW,
+        seq_dnds_info = sliding_window_tree.eval_windows_async(ref=REF, ref_len=REF_LEN, sam_filename=SAM_FILENAME,
+                                                               out_dir=OUT_DIR, map_qual_cutoff=MAPQ_CUTOFF,
+                                                               read_qual_cutoff=READ_QUAL_CUTOFF, max_prop_n=MAX_PROP_N,
+                                                               start_nucpos=START_NUCPOS, end_nucpos=END_NUCPOS,
+                                                               window_size=WINDOW_SIZE,
+                                                               window_depth_cutoff=MIN_WINDOW_DEPTH_COV,
+                                                               window_breadth_cutoff=MIN_WINDOW_BREADTH_COV_FRACTION,
+                                                               pvalue=PVALUE, threads_per_window=THREADS_PER_WINDOW,
                                                                concurrent_windows=WINDOW_PROCS,
                                                                output_dnds_tsv_filename=ACTUAL_DNDS_FILENAME)
 
