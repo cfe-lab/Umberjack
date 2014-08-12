@@ -395,6 +395,7 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     LOGGER.debug("I am rank=" + str(rank))
+    LOGGER.debug("I am on machine=" + str(MPI.Get_processor_name()))
 
     if rank == MASTER_RANK:
         pool_size = comm.Get_size()
@@ -436,6 +437,8 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
                 LOGGER.debug(
                     "Sending window=" + str(start_window_nucpos) + "-" + str(end_window_nucpos) + " to slave=" + str(
                         slave_rank))
+                str_process_args = ', '.join('{}:{}'.format(key, val) for key, val in process_args.items())
+                LOGGER.debug("Sending process_args to slave=" + str(slave_rank) + " " + str_process_args)
                 comm.isend(obj=process_args, dest=slave_rank, tag=TAG_WORK)  # non-blocking
                 request = comm.irecv(dest=slave_rank, tag=MPI.ANY_TAG)  # non-blocking
                 busy_slave_2_request[slave_rank] = request
@@ -487,11 +490,12 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
         while not is_die:
             try:
                 mpi_status = MPI.Status()
-                process_args = comm.recv(source=MASTER_RANK, tag=MPI.ANY_TAG,
-                                         status=mpi_status)  # block till the master tells me to do something
+                process_args = comm.recv(source=MASTER_RANK, tag=MPI.ANY_TAG, status=mpi_status)  # block till the master tells me to do something
                 if mpi_status.Get_tag() == TAG_DIE:  # master wants me to die
                     is_die = True
                 else:  # master wants me to work
+                    str_process_args = ', '.join('{}:{}'.format(key, val) for key, val in process_args.items())
+                    LOGGER.debug("Received process_args=" + str_process_args)
                     eval_window(**process_args)
                     comm.send(dest=MASTER_RANK, tag=TAG_WORK)  # Tell master that I'm done
             except Exception, e:
