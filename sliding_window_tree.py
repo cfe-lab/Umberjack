@@ -9,6 +9,15 @@ import pool_traceback
 import re
 import time
 import traceback
+from array import array
+
+#sys.path.append("./pycharm-debug.egg")
+#import pydevd
+from mpi4py import MPI
+
+
+#pydevd.settrace('192.168.69.216', port=4444, stdoutToServer=True, stderrToServer=True)
+
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
@@ -312,6 +321,8 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, rea
     :param str fastree_exe:  full filepath to FastTreeMP executable
     """
 
+
+
     pool = pool_traceback.LoggingPool(processes=concurrent_windows)
 
     # Create a pseudo multiple-sequence aligned fasta file
@@ -390,7 +401,7 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
     :param str fastree_exe:  full filepath to FastTreeMP executable
     """
 
-    from mpi4py import MPI
+    # from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -426,6 +437,7 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
                         "hyphy_basedir": hyphy_basedir,
                         "fastree_exe": fastree_exe}
 
+
         while start_window_nucpos < last_window_start_nucpos or busy_slave_2_request:
 
             # Assign work to slaves
@@ -433,14 +445,29 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
                 end_window_nucpos = start_window_nucpos + window_size - 1
                 process_args["start_nucpos"] = start_window_nucpos
                 process_args["end_nucpos"] = end_window_nucpos
+
+                process_args_arr = array('c',
+                                         ",".join([msa_fasta_filename,
+                         str(window_depth_cutoff),
+                         str(window_breadth_cutoff),
+                         str(start_window_nucpos),
+                         str(end_window_nucpos),
+                         str(pvalue),
+                         str(threads_per_window),
+                         str(mode),
+                         hyphy_exe,
+                         hyphy_basedir,
+                         fastree_exe]))
+
                 slave_rank = available_slaves.pop(0)
                 LOGGER.debug(
                     "Sending window=" + str(start_window_nucpos) + "-" + str(end_window_nucpos) + " to slave=" + str(
                         slave_rank))
                 str_process_args = ', '.join('{}:{}'.format(key, val) for key, val in process_args.items())
                 LOGGER.debug("Sending process_args to slave=" + str(slave_rank) + " " + str_process_args)
-                comm.isend(obj=process_args, dest=slave_rank, tag=TAG_WORK)  # non-blocking
-                request = comm.irecv(dest=slave_rank, tag=MPI.ANY_TAG)  # non-blocking
+                comm.Isend(buf=[process_args_arr, MPI.CHAR], dest=slave_rank, tag=TAG_WORK)  # non-blocking
+                empty_buffer = array('c', '\0'*2046)
+                request = comm.Irecv(buf=[empty_buffer, MPI.CHAR], source=slave_rank, tag=MPI.ANY_TAG)  # non-blocking
                 busy_slave_2_request[slave_rank] = request
 
                 start_window_nucpos += window_slide
@@ -473,7 +500,8 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
 
         LOGGER.debug("About to Kill Slaves")
         for slave_rank in range(1, pool_size):
-            comm.isend(dest=slave_rank, tag=TAG_DIE)
+            empty_buffer = array('c', '\0'*2046)
+            comm.Isend(buf=[empty_buffer, MPI.CHAR], dest=slave_rank, tag=TAG_DIE)
         LOGGER.debug("Done Killing slaves.")
 
         LOGGER.debug("About to tabulate results")
@@ -490,18 +518,57 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
         while not is_die:
             try:
                 mpi_status = MPI.Status()
-                process_args = comm.recv(source=MASTER_RANK, tag=MPI.ANY_TAG, status=mpi_status)  # block till the master tells me to do something
+                # [msa_fasta_filename,
+                #          str(window_depth_cutoff),
+                #          str(window_breadth_cutoff),
+                #          str(start_window_nucpos),
+                #          str(end_window_nucpos),
+                #          str(pvalue),
+                #          str(threads_per_window),
+                #          str(mode),
+                #          hyphy_exe,
+                #          hyphy_basedir,
+                #          fastree_exe], dtype=str)
+                rcv_buffer = array('c', '\0'*4096)
+                comm.Recv(buf=[rcv_buffer, MPI.CHAR], source=MASTER_RANK, tag=MPI.ANY_TAG, status=mpi_status)  # block till the master tells me to do something
+
+
                 if mpi_status.Get_tag() == TAG_DIE:  # master wants me to die
                     is_die = True
                 else:  # master wants me to work
+                    LOGGER.debug(rcv_buffer.tostring().rstrip('\0'))
+                    process_args_arr = rcv_buffer.tostring().rstrip('\0').split(",")
+                    process_args = {}
+                    # {"msa_fasta_filename": msa_fasta_filename,
+                    #         "window_depth_thresh": window_depth_cutoff,
+                    #         "window_breadth_thresh": window_breadth_cutoff,
+                    #         "pvalue": pvalue,
+                    #         "threads": threads_per_window,
+                    #         "mode": mode,
+                    #         "hyphy_exe": hyphy_exe,
+                    #         "hyphy_basedir": hyphy_basedir,
+                    #         "fastree_exe": fastree_exe}
+                    process_args["msa_fasta_filename"] = process_args_arr[0]
+                    process_args["window_depth_thresh"] = process_args_arr[1]
+                    process_args["window_breadth_thresh"] = process_args_arr[2]
+                    process_args["start_nucpos"] = int(process_args_arr[3])
+                    process_args["end_nucpos"] = int(process_args_arr[4])
+                    process_args["pvalue"] = float(process_args_arr[5])
+                    process_args["threads"] = int(process_args_arr[6])
+                    process_args["mode"] = process_args_arr[7]
+                    process_args["hyphy_exe"] = process_args_arr[8]
+                    process_args["hyphy_basedir"] = process_args_arr[9]
+                    process_args["fastree_exe"] = process_args_arr[10]
                     str_process_args = ', '.join('{}:{}'.format(key, val) for key, val in process_args.items())
                     LOGGER.debug("Received process_args=" + str_process_args)
                     eval_window(**process_args)
-                    comm.send(dest=MASTER_RANK, tag=TAG_WORK)  # Tell master that I'm done
+                    empty_buffer = array('c', '\0'*2046)
+                    comm.Send(buf=[empty_buffer, MPI.CHAR], dest=MASTER_RANK, tag=TAG_WORK)  # Tell master that I'm done
             except Exception, e:
                 LOGGER.exception("Failure in slave=" + str(rank))
                 err_msg = traceback.format_exc()
-                comm.send(obj=err_msg, dest=MASTER_RANK, tag=TAG_WORK)  # Tell master that I encountered an exception
+                data = array('c', err_msg)
+                comm.Send(buf=[data, MPI.CHAR], dest=MASTER_RANK, tag=TAG_WORK)  # Tell master that I encountered an exception
 
 
 def main():
@@ -552,16 +619,17 @@ def main():
 
     # if the user has mpi4py installed, then runs the MPI version
     # otherwise runs the multiprocessing version on current node
-    do_mpi = False
-    if args.mpi:
-        try:
-            from mpi4py import MPI
-            # Ignore the concurrent_windows commandline arg and uses the number of processors indicated by mpirun command
-            eval_windows_args.pop("concurrent_windows", None)
-            LOGGER.debug("Running MPI Version. Ignoring --concurrent_windows flag.  Using mpirun node arguments.")
-            do_mpi = True
-        except ImportError:
-            LOGGER.warn("You must install mpi4py module in order to leverage multiple nodes.  Running on single node.")
+    # do_mpi = False
+    do_mpi = True
+    # if args.mpi:
+    #     try:
+    #         from mpi4py import MPI
+    #         # Ignore the concurrent_windows commandline arg and uses the number of processors indicated by mpirun command
+    #         eval_windows_args.pop("concurrent_windows", None)
+    #         LOGGER.debug("Running MPI Version. Ignoring --concurrent_windows flag.  Using mpirun node arguments.")
+    #         do_mpi = True
+    #     except ImportError:
+    #         LOGGER.warn("You must install mpi4py module in order to leverage multiple nodes.  Running on single node.")
 
     eval_windows_args.pop("mpi", None)  # this is not used in eval_windows* methods
     if do_mpi:
