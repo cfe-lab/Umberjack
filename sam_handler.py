@@ -215,7 +215,12 @@ def create_msa_fasta_from_sam(sam_filename, ref, ref_len, out_fasta_filename, ma
 
         i = start  # Keep track of the current line so that we can come back after traversing forward for mates
         while i < len(lines):
-            qname, flag, refname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual = lines[i].rstrip().split('\t')[:11]
+
+            lines_arr = lines[i].rstrip().split('\t')
+            if len(lines_arr) < 11:  # in case there are no alignments
+                break
+
+            qname, flag, refname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual = lines_arr[:11]
             i += 1
 
             if not refname == ref:
