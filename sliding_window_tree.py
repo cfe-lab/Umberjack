@@ -9,6 +9,15 @@ import pool_traceback
 import re
 import time
 import traceback
+from array import array
+
+#sys.path.append("./pycharm-debug.egg")
+#import pydevd
+from mpi4py import MPI
+
+
+#pydevd.settrace('192.168.69.216', port=4444, stdoutToServer=True, stderrToServer=True)
+
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
@@ -170,9 +179,9 @@ def do_hyphy(hyphy_exe, hyphy_basedir, threads, hyphy_filename_prefix, mode, cod
 
 
 # TODO:  do multiple test corrections for pvalues
-def eval_window(msa_fasta_filename, window_depth_thresh, window_breadth_thresh, start_nucpos, end_nucpos, pvalue,
-                threads, mode="DNDS",
-                hyphy_exe=HYPHY_EXE, hyphy_basedir=HYPHY_BASEDIR, fastree_exe=FASTTREE_EXE):
+def eval_window(msa_fasta_filename, window_depth_cutoff, window_breadth_cutoff, start_window_nucpos, end_window_nucpos,
+                pvalue, threads_per_window, mode="DNDS", hyphy_exe=HYPHY_EXE, hyphy_basedir=HYPHY_BASEDIR,
+                fastree_exe=FASTTREE_EXE):
     """
     Handles the processing for a single window along the genome.
     Creates the multiple sequence aligned fasta file for the window.
@@ -180,36 +189,36 @@ def eval_window(msa_fasta_filename, window_depth_thresh, window_breadth_thresh, 
     Feeds the tree into HyPhy to obtain dn/ds values.
 
     :param str msa_fasta_filename: full filepath to multiple sequence aligned file for all reads.
-    :param int window_depth_thresh:  the minimum number of required reads that meet the breadth threshold below which the window is thrown out
-    :param float window_breadth_thresh: the minimum fraction of a window that merged paired-end read must cover to be included in the window.
-    :param int start_nucpos:  1-based start nucleotide position of the window
-    :param int end_nucpos:  1-based end nucleotide position of the window
+    :param int window_depth_cutoff:  the minimum number of required reads that meet the breadth threshold below which the window is thrown out
+    :param float window_breadth_cutoff: the minimum fraction of a window that merged paired-end read must cover to be included in the window.
+    :param int start_window_nucpos:  1-based start nucleotide position of the window
+    :param int end_window_nucpos:  1-based end nucleotide position of the window
     :param float pvalue:  pvalue threshold for detecting dN/dS (used by HyPhy)
-    :param int threads: number of threads allotted to processing this window  (only FastTree and HyPhy will be multithreaded)
+    :param int threads_per_window: number of threads allotted to processing this window  (only FastTree and HyPhy will be multithreaded)
     :param str hyphy_exe: full filepath to HYPHYMP executable
     :param str hyphy_basedir:  full filepath to HyPhy base directory containing the template batch files
     :param str fastree_exe: full filepath to FastTreeMP executable
     """
 
     LOGGER.debug("msa_fasta_filename=" + msa_fasta_filename + "\n" +
-                 "window_depth_thresh=" + str(window_depth_thresh) + "\n" +
-                 "window_breadth_thresh=" + str(window_breadth_thresh) + "\n" +
-                 "start_nucpos=" + str(start_nucpos) + "\n" +
-                 "end_nucpos=" + str(end_nucpos) + "\n" +
+                 "window_depth_thresh=" + str(window_depth_cutoff) + "\n" +
+                 "window_breadth_thresh=" + str(window_breadth_cutoff) + "\n" +
+                 "start_nucpos=" + str(start_window_nucpos) + "\n" +
+                 "end_nucpos=" + str(end_window_nucpos) + "\n" +
                  "pvalue=" + str(pvalue) + "\n" +
-                 "threads=" + str(threads) + "\n")
+                 "threads=" + str(threads_per_window) + "\n")
 
     # Slice the multiple sequence aligned fasta file into a window fasta
     msa_fasta_filename_prefix = os.path.splitext(msa_fasta_filename)[0]
-    msa_window_filename_prefix = msa_fasta_filename_prefix + "." + str(start_nucpos) + "_" + str(end_nucpos)
+    msa_window_filename_prefix = msa_fasta_filename_prefix + "." + str(start_window_nucpos) + "_" + str(end_window_nucpos)
     msa_window_fasta_filename = msa_window_filename_prefix + ".fasta"
     total_slice_seq = -1
     LOGGER.debug("Start Create Sliced MSA-Fasta " + msa_window_fasta_filename)
     if not os.path.exists(msa_window_fasta_filename) or os.path.getsize(msa_window_fasta_filename) <= 0:
         total_slice_seq = slice_miseq.create_slice_msa_fasta(fasta_filename=msa_fasta_filename,
                                                              out_fasta_filename=msa_window_fasta_filename,
-                                                             start_pos=start_nucpos, end_pos=end_nucpos,
-                                                             breadth_thresh=window_breadth_thresh)
+                                                             start_pos=start_window_nucpos, end_pos=end_window_nucpos,
+                                                             breadth_thresh=window_breadth_cutoff)
         LOGGER.debug("Done Create Sliced MSA-Fasta " + msa_window_fasta_filename +
                      ".  Wrote " + str(total_slice_seq) + " to file")
     else:
@@ -223,13 +232,13 @@ def eval_window(msa_fasta_filename, window_depth_thresh, window_breadth_thresh, 
         # Check whether the msa sliced fasta has enough reads to make a good tree
         if total_slice_seq < 0:
             total_slice_seq = Utility.get_total_seq_from_fasta(msa_window_fasta_filename)
-        if total_slice_seq < window_depth_thresh:
+        if total_slice_seq < window_depth_cutoff:
             LOGGER.warn("MSA Window " + msa_window_fasta_filename + " does not satisfy window depth constraints")
         else:
             LOGGER.debug("MSA Window " + msa_window_fasta_filename + " satisfies window depth constraints")
 
             # Feed window fasta into fasttree to make a tree
-            os.environ[ENV_OMP_NUM_THREADS] = str(threads)
+            os.environ[ENV_OMP_NUM_THREADS] = str(threads_per_window)
             with open(fasttree_stdouterr_filename, 'w') as fasttree_stdouterr_fh:
                 subprocess.check_call([fastree_exe, '-gtr', '-nt', '-gamma', '-nosupport',
                                        '-log', fastree_logfilename, '-out', fastree_treefilename,
@@ -241,8 +250,8 @@ def eval_window(msa_fasta_filename, window_depth_thresh, window_breadth_thresh, 
     else:
         LOGGER.debug("Found existing Fasttree for window " + fastree_treefilename + ". Not regenerating")
 
-    if total_slice_seq >= window_depth_thresh:
-        do_hyphy(hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, threads=threads,
+    if total_slice_seq >= window_depth_cutoff:
+        do_hyphy(hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, threads=threads_per_window,
                  hyphy_filename_prefix=msa_window_filename_prefix,
                  mode=mode, codon_fasta_filename=msa_window_fasta_filename, tree_filename=fastree_treefilename,
                  pvalue=pvalue)
@@ -312,6 +321,8 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, rea
     :param str fastree_exe:  full filepath to FastTreeMP executable
     """
 
+
+
     pool = pool_traceback.LoggingPool(processes=concurrent_windows)
 
     # Create a pseudo multiple-sequence aligned fasta file
@@ -328,7 +339,7 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, rea
     process_results = []
     for start_window_nucpos in range(start_nucpos, last_window_start_nucpos + 1, window_slide):
         end_window_nucpos = start_window_nucpos + window_size - 1
-        process_args = {"msa_fasta_filename": msa_fasta_filename,
+        window_args = {"msa_fasta_filename": msa_fasta_filename,
                         "window_depth_thresh": window_depth_cutoff,
                         "window_breadth_thresh": window_breadth_cutoff,
                         "start_nucpos": start_window_nucpos,
@@ -339,7 +350,7 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, rea
                         "hyphy_exe": hyphy_exe,
                         "hyphy_basedir": hyphy_basedir,
                         "fastree_exe": fastree_exe}
-        process_result = pool.apply_async(eval_window, (), process_args)
+        process_result = pool.apply_async(eval_window, (), window_args)
         process_results.append(process_result)
 
     pool.close()
@@ -361,6 +372,20 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, rea
                      pvalue, output_dnds_tsv_filename,
                      mode, window_slide)
 
+
+class WindowSlaveInfo:
+    """
+    Keeps track of the slave information
+    """
+    def __init__(self, slave_rank, work_arguments, mpi_request):
+        """
+        :param slave_rank: integer slave rank (starts from 1)
+        :param dict work_arguments:  dict of arguments sent to the slave to do work
+        :param mpi_request: mpi request returned by slave
+        """
+        self.slave_rank = slave_rank
+        self.work_arguments = work_arguments
+        self.mpi_request = mpi_request
 
 def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
                      end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, pvalue, threads_per_window,
@@ -390,118 +415,121 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
     :param str fastree_exe:  full filepath to FastTreeMP executable
     """
 
-    from mpi4py import MPI
+    # from mpi4py import MPI
 
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    LOGGER.debug("I am rank=" + str(rank))
-    LOGGER.debug("I am on machine=" + str(MPI.Get_processor_name()))
+    try:
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        LOGGER.debug("I am rank=" + str(rank))
+        LOGGER.debug("I am on machine=" + str(MPI.Get_processor_name()))
 
-    if rank == MASTER_RANK:
-        pool_size = comm.Get_size()
-        LOGGER.debug("Pool size = " + str(pool_size))
+        if rank == MASTER_RANK:
+            pool_size = comm.Get_size()
+            LOGGER.debug("Pool size = " + str(pool_size))
 
-        # Create a pseudo multiple-sequence aligned fasta file
-        msa_fasta_filename = create_full_msa_fasta(sam_filename=sam_filename, out_dir=out_dir, ref=ref, ref_len=ref_len,
-                                                   mapping_cutoff=map_qual_cutoff, read_qual_cutoff=read_qual_cutoff,
-                                                   max_prop_N=max_prop_n)
+            # Create a pseudo multiple-sequence aligned fasta file
+            msa_fasta_filename = create_full_msa_fasta(sam_filename=sam_filename, out_dir=out_dir, ref=ref, ref_len=ref_len,
+                                                       mapping_cutoff=map_qual_cutoff, read_qual_cutoff=read_qual_cutoff,
+                                                       max_prop_N=max_prop_n)
 
-        # All nucleotide positions are 1-based
-        last_window_start_nucpos = min(end_nucpos, ref_len - window_size + 1)
+            # All nucleotide positions are 1-based
+            last_window_start_nucpos = min(end_nucpos, ref_len - window_size + 1)
 
-        total_windows = (last_window_start_nucpos - start_nucpos + 1) / Utility.NUC_PER_CODON
-        LOGGER.debug("Launching " + str(total_windows) + " total windows")
+            total_windows = (last_window_start_nucpos - start_nucpos + 1) / Utility.NUC_PER_CODON
+            LOGGER.debug("Launching " + str(total_windows) + " total windows")
 
-        available_slaves = range(1, pool_size)
-        busy_slave_2_request = {}
+            available_slaves = range(1, pool_size)
+            busy_slave_2_request = {}
 
-        start_window_nucpos = start_nucpos
-        process_args = {"msa_fasta_filename": msa_fasta_filename,
-                        "window_depth_thresh": window_depth_cutoff,
-                        "window_breadth_thresh": window_breadth_cutoff,
-                        "pvalue": pvalue,
-                        "threads": threads_per_window,
-                        "mode": mode,
-                        "hyphy_exe": hyphy_exe,
-                        "hyphy_basedir": hyphy_basedir,
-                        "fastree_exe": fastree_exe}
+            start_window_nucpos = start_nucpos
 
-        while start_window_nucpos < last_window_start_nucpos or busy_slave_2_request:
 
-            # Assign work to slaves
-            while start_window_nucpos < last_window_start_nucpos and available_slaves:
-                end_window_nucpos = start_window_nucpos + window_size - 1
-                process_args["start_nucpos"] = start_window_nucpos
-                process_args["end_nucpos"] = end_window_nucpos
-                slave_rank = available_slaves.pop(0)
-                LOGGER.debug(
-                    "Sending window=" + str(start_window_nucpos) + "-" + str(end_window_nucpos) + " to slave=" + str(
-                        slave_rank))
-                str_process_args = ', '.join('{}:{}'.format(key, val) for key, val in process_args.items())
-                LOGGER.debug("Sending process_args to slave=" + str(slave_rank) + " " + str_process_args)
-                comm.isend(obj=process_args, dest=slave_rank, tag=TAG_WORK)  # non-blocking
-                request = comm.irecv(dest=slave_rank, tag=MPI.ANY_TAG)  # non-blocking
-                busy_slave_2_request[slave_rank] = request
 
-                start_window_nucpos += window_slide
+            while start_window_nucpos < last_window_start_nucpos or busy_slave_2_request:
 
-            # Check on slaves
-            time.sleep(1)
-            done_slave_ranks = []
-            for slave_rank, request in busy_slave_2_request.iteritems():
-                mpi_status = MPI.Status()
-                is_done, err_msg = request.test(status=mpi_status)
-                if is_done:
-                    source = mpi_status.Get_source()
-                    if mpi_status.Get_source() != slave_rank:
-                        raise RuntimeError(
-                            "Inconsistent request source=" + str(source) + " vs slave rank=" + str(slave_rank))
+                # Assign work to slaves
+                while start_window_nucpos < last_window_start_nucpos and available_slaves:
+                    end_window_nucpos = start_window_nucpos + window_size - 1
+
+                    window_args = {"msa_fasta_filename": msa_fasta_filename,
+                            "window_depth_cutoff": window_depth_cutoff,
+                            "window_breadth_cutoff": window_breadth_cutoff,
+                            "start_window_nucpos": start_window_nucpos,
+                            "end_window_nucpos": end_window_nucpos,
+                            "pvalue": pvalue,
+                            "threads_per_window": threads_per_window,
+                            "mode": mode,
+                            "hyphy_exe": hyphy_exe,
+                            "hyphy_basedir": hyphy_basedir,
+                            "fastree_exe": fastree_exe}
+                    slave_rank = available_slaves.pop(0)
+
+                    str_window_args = ', '.join('{}:{}'.format(key, val) for key, val in window_args.items())
+                    LOGGER.debug("Sending window_args to slave=" + str(slave_rank) + " " + str_window_args)
+
+                    comm.isend(obj=window_args, dest=slave_rank, tag=TAG_WORK)  # non-blocking
+                    request = comm.irecv(dest=slave_rank, tag=MPI.ANY_TAG)  # non-blocking
+
+                    # The memory containing the window arguments must be kept intact until the slave says they're done
+                    # otherwise race condition can occur when memory is overwritten and slave no longer has access to args.
+                    # However, mpi4py will auto-allocate memory to contain the slave response message.
+                    busy_slave_2_request[slave_rank] = WindowSlaveInfo(slave_rank=slave_rank, work_arguments=window_args,
+                                                                       mpi_request=request)
+
+                    start_window_nucpos += window_slide
+
+                # Check on slaves
+                if busy_slave_2_request:
+                    requests = [window_slave_info.mpi_request for window_slave_info in busy_slave_2_request.values()]
+                    mpi_status = MPI.Status()
+                    idx, err_msg = MPI.Request.waitany(requests=requests, status=mpi_status)
+                    done_slave_rank = mpi_status.Get_source()
+                    available_slaves.extend([done_slave_rank])
+                    busy_slave_2_request.pop(done_slave_rank)
                     if err_msg:
-                        LOGGER.error("Received error from slave=" + str(source) + " err_msg=" + str(err_msg))
+                        LOGGER.error("Received error from slave=" + str(done_slave_rank) + " err_msg=" + str(err_msg))
                     else:
-                        LOGGER.debug("Received success from slave=" + str(source))
-                    done_slave_ranks.extend([slave_rank])
+                        LOGGER.debug("Received success from slave=" + str(done_slave_rank))
 
-            # Update available and busy slaves
-            for slave_rank in done_slave_ranks:
-                busy_slave_2_request.pop(slave_rank)
-                available_slaves.extend([slave_rank])
+            LOGGER.debug("Done Launching " + str(total_windows) + " total windows")
 
-            #LOGGER.debug("Waiting for slaves " + ",".join(str(x) for x in busy_slave_2_request.keys()))
+            LOGGER.debug("About to Kill Slaves")
+            for slave_rank in range(1, pool_size):
+                comm.isend(obj=None, dest=slave_rank, tag=TAG_DIE)
+            LOGGER.debug("Done Killing slaves.")
 
-        LOGGER.debug("Done Launching " + str(total_windows) + " total windows")
+            LOGGER.debug("About to tabulate results")
+            tabulate_results(ref, ref_len, sam_filename, out_dir,
+                         map_qual_cutoff, read_qual_cutoff, max_prop_n,
+                         start_nucpos, end_nucpos,
+                         window_size, window_depth_cutoff, window_breadth_cutoff,
+                         pvalue, output_dnds_tsv_filename,
+                         mode, window_slide)
+            LOGGER.debug("Done tabulating results")
 
-        LOGGER.debug("About to Kill Slaves")
-        for slave_rank in range(1, pool_size):
-            comm.isend(dest=slave_rank, tag=TAG_DIE)
-        LOGGER.debug("Done Killing slaves.")
+        else:  # slave process does the work
+            is_die = False
+            while not is_die:
+                try:
+                    mpi_status = MPI.Status()
+                    window_args = comm.recv(source=MASTER_RANK, tag=MPI.ANY_TAG, status=mpi_status)  # block till the master tells me to do something
 
-        LOGGER.debug("About to tabulate results")
-        tabulate_results(ref, ref_len, sam_filename, out_dir,
-                     map_qual_cutoff, read_qual_cutoff, max_prop_n,
-                     start_nucpos, end_nucpos,
-                     window_size, window_depth_cutoff, window_breadth_cutoff,
-                     pvalue, output_dnds_tsv_filename,
-                     mode, window_slide)
-        LOGGER.debug("Done tabulating results")
 
-    else:  # slave process does the work
-        is_die = False
-        while not is_die:
-            try:
-                mpi_status = MPI.Status()
-                process_args = comm.recv(source=MASTER_RANK, tag=MPI.ANY_TAG, status=mpi_status)  # block till the master tells me to do something
-                if mpi_status.Get_tag() == TAG_DIE:  # master wants me to die
-                    is_die = True
-                else:  # master wants me to work
-                    str_process_args = ', '.join('{}:{}'.format(key, val) for key, val in process_args.items())
-                    LOGGER.debug("Received process_args=" + str_process_args)
-                    eval_window(**process_args)
-                    comm.send(dest=MASTER_RANK, tag=TAG_WORK)  # Tell master that I'm done
-            except Exception, e:
-                LOGGER.exception("Failure in slave=" + str(rank))
-                err_msg = traceback.format_exc()
-                comm.send(obj=err_msg, dest=MASTER_RANK, tag=TAG_WORK)  # Tell master that I encountered an exception
+                    if mpi_status.Get_tag() == TAG_DIE:  # master wants me to die
+                        is_die = True
+                        LOGGER.debug("Master wants me to die - I was rank " + str(rank))
+                    else:  # master wants me to work
+                        str_window_args = ', '.join('{}:{}'.format(key, val) for key, val in window_args.items())
+                        LOGGER.debug("Received window_args=" + str_window_args)
+                        eval_window(**window_args)
+                        comm.send(obj=None, dest=MASTER_RANK, tag=TAG_WORK)  # Tell master that I'm done
+                except Exception, e:
+                    LOGGER.exception("Failure in slave=" + str(rank))
+                    err_msg = traceback.format_exc()
+                    comm.send(obj=err_msg, dest=MASTER_RANK, tag=TAG_WORK)  # Tell master that I encountered an exception
+    except Exception, e:
+        LOGGER.exception("Uncaught Exception.  Aborting")
+        comm.Abort()
 
 
 def main():
@@ -552,16 +580,17 @@ def main():
 
     # if the user has mpi4py installed, then runs the MPI version
     # otherwise runs the multiprocessing version on current node
-    do_mpi = False
-    if args.mpi:
-        try:
-            from mpi4py import MPI
-            # Ignore the concurrent_windows commandline arg and uses the number of processors indicated by mpirun command
-            eval_windows_args.pop("concurrent_windows", None)
-            LOGGER.debug("Running MPI Version. Ignoring --concurrent_windows flag.  Using mpirun node arguments.")
-            do_mpi = True
-        except ImportError:
-            LOGGER.warn("You must install mpi4py module in order to leverage multiple nodes.  Running on single node.")
+    # do_mpi = False
+    do_mpi = True
+    # if args.mpi:
+    #     try:
+    #         from mpi4py import MPI
+    #         # Ignore the concurrent_windows commandline arg and uses the number of processors indicated by mpirun command
+    #         eval_windows_args.pop("concurrent_windows", None)
+    #         LOGGER.debug("Running MPI Version. Ignoring --concurrent_windows flag.  Using mpirun node arguments.")
+    #         do_mpi = True
+    #     except ImportError:
+    #         LOGGER.warn("You must install mpi4py module in order to leverage multiple nodes.  Running on single node.")
 
     eval_windows_args.pop("mpi", None)  # this is not used in eval_windows* methods
     if do_mpi:
