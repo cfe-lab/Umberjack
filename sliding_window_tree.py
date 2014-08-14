@@ -6,17 +6,14 @@ import Utility
 import logging
 import argparse
 import pool_traceback
-import re
-import time
 import traceback
-from array import array
 
-#sys.path.append("./pycharm-debug.egg")
-#import pydevd
+
+
 from mpi4py import MPI
 
 
-#pydevd.settrace('192.168.69.216', port=4444, stdoutToServer=True, stderrToServer=True)
+
 
 
 LOGGER = logging.getLogger(__name__)
