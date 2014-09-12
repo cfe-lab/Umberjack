@@ -225,10 +225,10 @@ def eval_window(msa_fasta_filename, window_depth_cutoff, window_breadth_cutoff, 
     fastree_treefilename = msa_window_filename_prefix + ".tree"
     fasttree_stdouterr_filename = msa_window_filename_prefix + ".fasttree.stdouterr.txt"
     LOGGER.debug("Start Fasttree for window " + fastree_treefilename)
+    if total_slice_seq < 0:
+        total_slice_seq = Utility.get_total_seq_from_fasta(msa_window_fasta_filename)
     if not os.path.exists(fastree_treefilename) or os.path.getsize(fastree_treefilename) <= 0:
         # Check whether the msa sliced fasta has enough reads to make a good tree
-        if total_slice_seq < 0:
-            total_slice_seq = Utility.get_total_seq_from_fasta(msa_window_fasta_filename)
         if total_slice_seq < window_depth_cutoff:
             LOGGER.warn("MSA Window " + msa_window_fasta_filename + " does not satisfy window depth constraints")
         else:
@@ -252,6 +252,7 @@ def eval_window(msa_fasta_filename, window_depth_cutoff, window_breadth_cutoff, 
                  hyphy_filename_prefix=msa_window_filename_prefix,
                  mode=mode, codon_fasta_filename=msa_window_fasta_filename, tree_filename=fastree_treefilename,
                  pvalue=pvalue)
+
 
 
 # TODO:  clean my parameters
@@ -337,16 +338,16 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, rea
     for start_window_nucpos in range(start_nucpos, last_window_start_nucpos + 1, window_slide):
         end_window_nucpos = start_window_nucpos + window_size - 1
         window_args = {"msa_fasta_filename": msa_fasta_filename,
-                        "window_depth_thresh": window_depth_cutoff,
-                        "window_breadth_thresh": window_breadth_cutoff,
-                        "start_nucpos": start_window_nucpos,
-                        "end_nucpos": end_window_nucpos,
-                        "pvalue": pvalue,
-                        "threads": threads_per_window,
-                        "mode": mode,
-                        "hyphy_exe": hyphy_exe,
-                        "hyphy_basedir": hyphy_basedir,
-                        "fastree_exe": fastree_exe}
+                       "window_depth_cutoff": window_depth_cutoff,
+                       "window_breadth_cutoff": window_breadth_cutoff,
+                       "start_window_nucpos": start_window_nucpos,
+                       "end_window_nucpos": end_window_nucpos,
+                       "pvalue": pvalue,
+                       "threads_per_window": threads_per_window,
+                       "mode": mode,
+                       "hyphy_exe": hyphy_exe,
+                       "hyphy_basedir": hyphy_basedir,
+                       "fastree_exe": fastree_exe}
         process_result = pool.apply_async(eval_window, (), window_args)
         process_results.append(process_result)
 
@@ -442,23 +443,23 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
 
 
 
-            while start_window_nucpos < last_window_start_nucpos or busy_slave_2_request:
+            while start_window_nucpos <= last_window_start_nucpos or busy_slave_2_request:
 
                 # Assign work to slaves
-                while start_window_nucpos < last_window_start_nucpos and available_slaves:
+                while start_window_nucpos <= last_window_start_nucpos and available_slaves:
                     end_window_nucpos = start_window_nucpos + window_size - 1
 
                     window_args = {"msa_fasta_filename": msa_fasta_filename,
-                            "window_depth_cutoff": window_depth_cutoff,
-                            "window_breadth_cutoff": window_breadth_cutoff,
-                            "start_window_nucpos": start_window_nucpos,
-                            "end_window_nucpos": end_window_nucpos,
-                            "pvalue": pvalue,
-                            "threads_per_window": threads_per_window,
-                            "mode": mode,
-                            "hyphy_exe": hyphy_exe,
-                            "hyphy_basedir": hyphy_basedir,
-                            "fastree_exe": fastree_exe}
+                                   "window_depth_cutoff": window_depth_cutoff,
+                                   "window_breadth_cutoff": window_breadth_cutoff,
+                                   "start_window_nucpos": start_window_nucpos,
+                                   "end_window_nucpos": end_window_nucpos,
+                                   "pvalue": pvalue,
+                                   "threads_per_window": threads_per_window,
+                                   "mode": mode,
+                                   "hyphy_exe": hyphy_exe,
+                                   "hyphy_basedir": hyphy_basedir,
+                                   "fastree_exe": fastree_exe}
                     slave_rank = available_slaves.pop(0)
 
                     str_window_args = ', '.join('{}:{}'.format(key, val) for key, val in window_args.items())
@@ -497,11 +498,11 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
 
             LOGGER.debug("About to tabulate results")
             tabulate_results(ref, ref_len, sam_filename, out_dir,
-                         map_qual_cutoff, read_qual_cutoff, max_prop_n,
-                         start_nucpos, end_nucpos,
-                         window_size, window_depth_cutoff, window_breadth_cutoff,
-                         pvalue, output_dnds_tsv_filename,
-                         mode, window_slide)
+                             map_qual_cutoff, read_qual_cutoff, max_prop_n,
+                             start_nucpos, end_nucpos,
+                             window_size, window_depth_cutoff, window_breadth_cutoff,
+                             pvalue, output_dnds_tsv_filename,
+                             mode, window_slide)
             LOGGER.debug("Done tabulating results")
 
         else:  # slave process does the work
@@ -577,17 +578,16 @@ def main():
 
     # if the user has mpi4py installed, then runs the MPI version
     # otherwise runs the multiprocessing version on current node
-    # do_mpi = False
-    do_mpi = True
-    # if args.mpi:
-    #     try:
-    #         from mpi4py import MPI
-    #         # Ignore the concurrent_windows commandline arg and uses the number of processors indicated by mpirun command
-    #         eval_windows_args.pop("concurrent_windows", None)
-    #         LOGGER.debug("Running MPI Version. Ignoring --concurrent_windows flag.  Using mpirun node arguments.")
-    #         do_mpi = True
-    #     except ImportError:
-    #         LOGGER.warn("You must install mpi4py module in order to leverage multiple nodes.  Running on single node.")
+    do_mpi = False
+    if args.mpi:
+        try:
+            from mpi4py import MPI
+            # Ignore the concurrent_windows commandline arg and uses the number of processors indicated by mpirun command
+            eval_windows_args.pop("concurrent_windows", None)
+            LOGGER.debug("Running MPI Version. Ignoring --concurrent_windows flag.  Using mpirun node arguments.")
+            do_mpi = True
+        except ImportError:
+            LOGGER.warn("You must install mpi4py module in order to leverage multiple nodes.  Running on single node.")
 
     eval_windows_args.pop("mpi", None)  # this is not used in eval_windows* methods
     if do_mpi:

@@ -91,8 +91,8 @@ def get_total_seq_from_fasta(fasta_filename):
     :param fasta_filename: full filepath to fasta
     """
     count = 0
-    with open(fasta_filename) as fh:
-        for line in enumerate(fh):
+    with open(fasta_filename, 'rU') as fh:
+        for line in fh:
             if line[0] == '>':
                 count += 1
     return count
