@@ -522,7 +522,7 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_dnds_tsv
     return seq_dnds_info
 
 
-def tabulate_nuc_subst(out_dir, ref, ref_nuc_len, output_csv_filename, comments):
+def tabulate_nuc_subst(nucmodelfit_dir, output_csv_filename, comments):
     # Hyphy creates a *.nucmodelfit file that contains the best fit model (according to AIC) with this entry.  Parse it.
     #       Model averaged rates relative to AG (REV estimates):
     #           AC =   0.1902	(  0.1781)
@@ -531,24 +531,37 @@ def tabulate_nuc_subst(out_dir, ref, ref_nuc_len, output_csv_filename, comments)
     #           CT =   1.2453	(  1.2953)
     #           GT =   0.4195	(  0.4246)
     import fnmatch
-    # /home/tnguyen/gitrepo/MutationPatterns/out/140415_M01841_0059_000000000-A64EA/HIV1B-nef/E84407AK-PR-RT_S89.HIV1B-nef.msa.1_300.nucmodelfit
-    for root, dirs, filenames in os.walk(out_dir):
-        for nucmodelfit_filename in fnmatch.filter(filenames, '*.nucmodelfit'):
-            with open(os.path.join(root, nucmodelfit_filename), 'r') as fh_fit, open(output_csv_filename,'w') as fh_nucmodelcsv:
-                is_found_rates = False
-                fh_nucmodelcsv.write("ID,Ref,StartBase,EndBase,Rate\n")
-                fh_nucmodelcsv.write("#" + comments)
-                for line in fh_fit:
-                    if not is_found_rates and "Model averaged rates relative to AG" in line:
-                        is_found_rates = True
-                        continue
+    # .../out/140415_M01841_0059_000000000-A64EA/HIV1B-nef/E84407AK-PR-RT_S89.HIV1B-nef.msa.1_300.nucmodelfit
+    with  open(output_csv_filename,'w') as fh_nucmodelcsv:
+        fh_nucmodelcsv.write("#" + comments + "\n")
+        fh_nucmodelcsv.write("ID,Ref,Window_Start,Window_End,StartBase,EndBase,Mutation,Rate\n")
+        for root, dirs, filenames in os.walk(nucmodelfit_dir):
+            for nucmodelfit_filename in fnmatch.filter(filenames, '*.nucmodelfit'):
+                with open(os.path.join(root, nucmodelfit_filename), 'r') as fh_fit:
+                    is_found_rates = False
+                    # TODO:  make more general
+                    sample_id, ref, msa, window, ext = os.path.basename(nucmodelfit_filename).split(".")
+                    window_start, window_end = window.split("_")
 
-                    if is_found_rates:
+                    for line in fh_fit:
                         line = line.rstrip().lstrip()
-                        match = re.findall(r'([ACGT][ACGT])\b=\b(\d+\.\d+)\s*\(\s*(\d+\.\d+)\s*\)', line, re.IGNORECASE)
-                        if not match:
-                            raise ValueError("Line should contain model rates but it doesn't: " + line)
-                        subst, rate, reverse_rate = match[0]  # list of 1 tuple
-                        init_base, end_base = list(subst)
-                        fh_nucmodelcsv.write(init_base + "," + end_base + "," + rate + "\n")
-                        fh_nucmodelcsv.write(end_base + "," + init_base + "," + reverse_rate + "\n")
+                        if not len(line):
+                            continue
+                        if not is_found_rates and "Model averaged rates relative to AG" in line:
+                            is_found_rates = True
+                            continue
+
+
+                        if is_found_rates:
+                            if line.find("Model averaged selection") >= 0:
+                                break  # end of rates
+
+                            match = re.findall(r'([ACGT][ACGT])\s*=\s*(\d+\.\d+)\s*\(\s*(\d+\.\d+)\s*\)', line, re.IGNORECASE)
+                            if not match:
+                                raise ValueError("Line should contain model rates but it doesn't: " + line)
+                            subst, sym_rate, nonsym_rate = match[0]  # list of 1 tuple
+                            init_base, end_base = list(subst)
+                            mutation = init_base + end_base
+                            fh_nucmodelcsv.write(",".join(str(x) for x in [sample_id, ref,
+                                                                           window_start, window_end,
+                                                                           init_base, end_base, mutation, nonsym_rate]) + "\n")

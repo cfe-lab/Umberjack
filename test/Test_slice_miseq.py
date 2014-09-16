@@ -88,6 +88,9 @@ class TestSliceMiSeq(unittest.TestCase):
 
 
 
-
+    def tabulate_nuc_subst(self):
+        slice_miseq.tabulate_nuc_subst(output_csv_filename="/home/thuy/gitrepo/MutationPatterns/out/140415_M01841_0059_000000000-A64EA/all_nuc_subst.csv",
+                                       comments="",
+                                       nucmodelfit_dir="/home/thuy/gitrepo/MutationPatterns/out/140415_M01841_0059_000000000-A64EA")
 if __name__ == '__main__':
     unittest.main()
