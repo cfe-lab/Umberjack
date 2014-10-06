@@ -43,7 +43,7 @@ class TestSlidingWindowTree(unittest.TestCase):
                                                                window_breadth_cutoff=MIN_WINDOW_BREADTH_COV_FRACTION,
                                                                pvalue=PVALUE, threads_per_window=THREADS_PER_WINDOW,
                                                                concurrent_windows=WINDOW_PROCS,
-                                                               output_dnds_tsv_filename=ACTUAL_DNDS_FILENAME)
+                                                               output_csv_filename=ACTUAL_DNDS_FILENAME)
 
         subprocess.check_call(["Rscript", "-e", "library(knitr); setwd('./simulations/R'); getwd(); spin('sliding_window_tree_unit_test.R')"],
                               shell=False, env=os.environ)

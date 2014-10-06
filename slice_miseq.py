@@ -3,6 +3,17 @@ import Utility
 import csv
 import glob
 import re
+import logging
+import fasttree.fasttree_handler as fasttree
+import sys
+import re
+
+LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel(logging.DEBUG)
+console_handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter('%(asctime)s - [%(levelname)s] [%(name)s] [%(process)d] %(message)s')
+console_handler.setFormatter(formatter)
+LOGGER.addHandler(console_handler)
 
 # Columns in the HyPhy dN/dS tab-separates values file
 HYPHY_TSV_DN_COL = 'dN'
@@ -368,35 +379,41 @@ def create_slice_msa_fasta(fasta_filename, out_fasta_filename, start_pos, end_po
     :param int end_pos: 1-based end position of region to extract
     :param float breadth_thresh: fraction of sequence that be A,C,T,or G within start_pos and end_pos inclusive.
     """
-
+    LOGGER.debug("Start Create Sliced MSA-Fasta " + out_fasta_filename)
     total_seq = 0
-    with open(fasta_filename, 'r') as fasta_fh, open(out_fasta_filename, 'w') as slice_fasta_fh:
-        header = ""
-        seq = ""
-        for line in fasta_fh:
-            line = line.rstrip()
-            if line:
-                line = line.split()[0]  # remove trailing whitespace and any test after the first whitespace
+    if not os.path.exists(out_fasta_filename) or os.path.getsize(out_fasta_filename) <= 0:
+        with open(fasta_filename, 'r') as fasta_fh, open(out_fasta_filename, 'w') as slice_fasta_fh:
+            header = ""
+            seq = ""
+            for line in fasta_fh:
+                line = line.rstrip()
+                if line:
+                    line = line.split()[0]  # remove trailing whitespace and any test after the first whitespace
 
-                if line[0] == '>':  # previous sequence is finished.  Write out previous sequence
-                    window_seq = __get_window_seq(seq=seq, start_pos=start_pos, end_pos=end_pos, breadth_thresh=breadth_thresh)
-                    if window_seq:
-                        slice_fasta_fh.write(header + "\n")
-                        slice_fasta_fh.write(window_seq + "\n")
-                        total_seq += 1
+                    if line[0] == '>':  # previous sequence is finished.  Write out previous sequence
+                        window_seq = __get_window_seq(seq=seq, start_pos=start_pos, end_pos=end_pos, breadth_thresh=breadth_thresh)
+                        if window_seq:
+                            slice_fasta_fh.write(header + "\n")
+                            slice_fasta_fh.write(window_seq + "\n")
+                            total_seq += 1
 
-                    seq = ""
-                    header = line
+                        seq = ""
+                        header = line
 
-                else:   # cache current sequence so that entire sequence is on one line
-                    seq += line
+                    else:   # cache current sequence so that entire sequence is on one line
+                        seq += line
 
-        window_seq = __get_window_seq(seq=seq, start_pos=start_pos, end_pos=end_pos, breadth_thresh=breadth_thresh)
-        if window_seq:
-            slice_fasta_fh.write(header + "\n")
-            slice_fasta_fh.write(window_seq + "\n")
-            total_seq += 1
+            window_seq = __get_window_seq(seq=seq, start_pos=start_pos, end_pos=end_pos, breadth_thresh=breadth_thresh)
+            if window_seq:
+                slice_fasta_fh.write(header + "\n")
+                slice_fasta_fh.write(window_seq + "\n")
+                total_seq += 1
 
+        LOGGER.debug("Done Create Sliced MSA-Fasta " + out_fasta_filename +
+                         ".  Wrote " + str(total_seq) + " to file")
+    else:
+        LOGGER.warn("Found existing Sliced MSA-Fasta " + out_fasta_filename + ". Not regenerating.")
+        total_seq = Utility.get_total_seq_from_fasta(out_fasta_filename)
     return total_seq
 
 
@@ -472,7 +489,7 @@ def get_seq_dnds_info(dnds_tsv_dir, pvalue_thresh, ref, ref_codon_len):
     return seq_dnds_info
 
 
-def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_dnds_tsv_filename, comments):
+def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_csv_filename, comments):
     """
     Aggregate selection information from multiple windows for each codon site.
     Output selection information into a tab separated file with the following columns:
@@ -491,14 +508,14 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_dnds_tsv
     :param str ref: name of reference contig
     :param int ref_nuc_len:  length of reference contig in nucleotides
     :param float pvalue_thresh: p-value threshold for significant selection
-    :param str output_dnds_tsv_filename: full filepath of aggregated selection tsv to write to
+    :param str output_csv_filename: full filepath of aggregated selection tsv to write to
     :param str comments: any comments to add at the top of the aggregated selection tsv
     """
     seq_dnds_info = get_seq_dnds_info(dnds_tsv_dir=dnds_tsv_dir, pvalue_thresh=pvalue_thresh, ref=ref,
                                                     ref_codon_len=ref_nuc_len/Utility.NUC_PER_CODON)
 
     SMOOTH_DIST = 15
-    with open(output_dnds_tsv_filename, 'w') as dnds_fh:
+    with open(output_csv_filename, 'w') as dnds_fh:
         dnds_fh.write("# " + comments + "\n")
         dnds_fh.write("Ref\tSite\tdNdSWeightBySubst\tdN_minus_dS\tWindows\tCodons\tNonSyn\tSyn\tSubst\tdNdSWeightByReads\tmultisitedNdS\n")
         for site in range(1, seq_dnds_info.get_seq_len() + 1):
@@ -531,12 +548,17 @@ def tabulate_nuc_subst(nucmodelfit_dir, output_csv_filename, comments):
     #           CT =   1.2453	(  1.2953)
     #           GT =   0.4195	(  0.4246)
     import fnmatch
-    # .../out/140415_M01841_0059_000000000-A64EA/HIV1B-nef/E84407AK-PR-RT_S89.HIV1B-nef.msa.1_300.nucmodelfit
+    # .../out/RunABC/HIV1B-nef/ABC_S89.HIV1B-nef.msa.1_300.nucmodelfit
     with  open(output_csv_filename,'w') as fh_nucmodelcsv:
         fh_nucmodelcsv.write("#" + comments + "\n")
         fh_nucmodelcsv.write("ID,Ref,Window_Start,Window_End,StartBase,EndBase,Mutation,Rate\n")
         for root, dirs, filenames in os.walk(nucmodelfit_dir):
             for nucmodelfit_filename in fnmatch.filter(filenames, '*.nucmodelfit'):
+
+                # ASSUME that multiple sequence aligned file used as input for the nucleotide model fit file is in the same folder
+                # TODO:  be more general
+                msa_slice_fasta_filename = nucmodelfit_filename.replace(".nucmodelfit", ".fasta")
+                #nongap_by_window_pos = Utility.get_total_nongap_nuc_by_pos(msa_fasta_filename=msa_slice_fasta_filename)
                 with open(os.path.join(root, nucmodelfit_filename), 'r') as fh_fit:
                     is_found_rates = False
                     # TODO:  make more general
@@ -565,3 +587,45 @@ def tabulate_nuc_subst(nucmodelfit_dir, output_csv_filename, comments):
                             fh_nucmodelcsv.write(",".join(str(x) for x in [sample_id, ref,
                                                                            window_start, window_end,
                                                                            init_base, end_base, mutation, nonsym_rate]) + "\n")
+
+
+def tabulate_rates(fasttree_output_dir, output_csv_filename, comments):
+    """
+    Collects all the GTR model rates from all the fasttree logs in a directory and puts them into output_csv_filename.
+    ASSUME that multiple sequence aligned file is in the same folder
+    :param output_dir:
+    :return:
+    """
+    import fnmatch
+    # .../out/RunABC/HIV1B-nef/ABC_S89.HIV1B-nef.msa.1_300.fasttree.log
+    with  open(output_csv_filename,'w') as fh_out:
+        fh_out.write("#" + comments + "\n")
+        fh_out.write("ID,Ref,Window_Start,Window_End,Window_Reads,Non_Gap_Window_Start,Mutation,Rate\n")
+        for root, dirs, filenames in os.walk(fasttree_output_dir):
+            for fasttree_log in fnmatch.filter(filenames, '*.fasttree.log'):
+                fullpath_fasttree_log = os.path.join(root, fasttree_log)
+                AC, AG, AT, CG, CT, GT = fasttree.extract_gtr_rates(fullpath_fasttree_log)
+                rates = {"AC":AC, "AG":AG, "AT":AT, "CG":CG, "CT":CT, "GT":GT}
+
+                msa_slice_fasta_filename = fullpath_fasttree_log.replace(".fasttree.log", ".fasta")
+                # sample_id.ref.msa.window_start_window_end.fasta
+                name_split = os.path.basename(msa_slice_fasta_filename).split(".")
+                window = name_split[-2]
+                ref = name_split[-4]  # TODO:  what if reference has . in it?
+                sample_id = ".".join(name_split[0:-5])
+                window_start, window_end = window.split("_")
+                nongap_window_start = Utility.get_total_nongap_nuc_by_pos(msa_slice_fasta_filename, 0)
+                reads = Utility.get_total_seq_from_fasta(msa_slice_fasta_filename)
+
+
+                for mutation, rate in rates.iteritems():
+                    fh_out.write(",".join([sample_id,
+                                  ref,
+                                  window_start,
+                                  window_end,
+                                  str(reads),
+                                  str(nongap_window_start),
+                                  mutation,
+                                  str(rate)]) + "\n")
+
+

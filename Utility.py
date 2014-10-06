@@ -97,6 +97,60 @@ def get_total_seq_from_fasta(fasta_filename):
                 count += 1
     return count
 
+def get_total_nongap_nuc_by_pos(msa_fasta_filename, pos):
+    """
+    Gets list where each element is the total number of sequences with nongap at that position.
+    ASSUME that fasta sequences start at ORF start.
+    ASSUME that fasta sequences are multiple sequence aligned.
+
+    :param msa_fasta_filename:
+    :param int pos:  0-based position index into multiple sequence alignment columns.
+    :return:
+    """
+    pos_total_nongap = 0
+    with open(msa_fasta_filename, 'r') as fh:
+        seq = ""
+        for line in fh:
+            line = line.rstrip()
+            if line[0] == '>' and seq:
+                pos_total_nongap += 1 if seq[pos] != "N" and seq[pos] != "n" and seq[pos] != "-" else 0
+                seq = ""
+            else:
+                seq += line
+
+        pos_total_nongap += 1 if seq[pos] != "N" and seq[pos] != "n" and seq[pos] != "-" else 0
+
+    return pos_total_nongap
+
+def get_total_nongap_nuc_all_pos(msa_fasta_filename):
+    """
+    Gets list where each element is the total number of sequences with nongap at that position.
+    ASSUME that fasta sequences start at ORF start.
+    ASSUME that fasta sequences are multiple sequence aligned.
+
+    :param msa_fasta_filename:
+    :return:
+    """
+
+    longest_seq_size = get_longest_seq_size_from_fasta(msa_fasta_filename)
+    total_nongap_by_pos = [0] * longest_seq_size
+    with open(msa_fasta_filename, 'r') as fh:
+        seq = ""
+        for line in fh:
+            line = line.rstrip()
+            if line[0] == '>':
+                for pos, nuc in enumerate(seq):
+                    total_nongap_by_pos[pos] += 1 if nuc != "N" and nuc != "n" and nuc != "-" else 0
+
+                seq = ""
+            else:
+                seq += line
+
+        for pos, nuc in enumerate(seq):
+            total_nongap_by_pos[pos] += 1 if nuc != "N" and nuc != "n" and nuc != "-" else 0
+
+    return total_nongap_by_pos
+
 
 def get_total_codons_by_pos(msa_fasta_filename):
     """

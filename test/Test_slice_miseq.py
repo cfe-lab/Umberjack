@@ -79,8 +79,8 @@ class TestSliceMiSeq(unittest.TestCase):
                                  "window depth thresh=" + str(MIN_WINDOW_DEPTH_COV) + "," +
                                  "window breadth fraction=" + str(MIN_WINDOW_BREADTH_COV_FRACTION) + "," +
                                  "pvalue=" + str(PVALUE))
-            slice_miseq.tabulate_dnds(dnds_tsv_dir=DNDS_DIR, pvalue_thresh=PVALUE, ref=REF, ref_nuc_len=REF_LEN,
-                                  comments=dnds_tsv_comments, output_dnds_tsv_filename=ACTUAL_DNDS_FILENAME)
+            slice_miseq.tabulate_dnds(dnds_tsv_dir=DNDS_DIR, ref=REF, ref_nuc_len=REF_LEN, pvalue_thresh=PVALUE,
+                                      output_csv_filename=ACTUAL_DNDS_FILENAME, comments=dnds_tsv_comments)
 
         # Check that the file exists
         self.assertTrue(os.path.exists(ACTUAL_DNDS_FILENAME) and os.path.getsize(ACTUAL_DNDS_FILENAME) > 0,
