@@ -612,7 +612,7 @@ def tabulate_rates(fasttree_output_dir, output_csv_filename, comments):
                 name_split = os.path.basename(msa_slice_fasta_filename).split(".")
                 window = name_split[-2]
                 ref = name_split[-4]  # TODO:  what if reference has . in it?
-                sample_id = ".".join(name_split[0:-5])
+                sample_id = ".".join(name_split[0:-4])
                 window_start, window_end = window.split("_")
                 nongap_window_start = Utility.get_total_nongap_nuc_by_pos(msa_slice_fasta_filename, 0)
                 reads = Utility.get_total_seq_from_fasta(msa_slice_fasta_filename)
