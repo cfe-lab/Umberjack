@@ -489,7 +489,7 @@ def get_seq_dnds_info(dnds_tsv_dir, pvalue_thresh, ref, ref_codon_len):
     return seq_dnds_info
 
 
-def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_csv_filename, comments):
+def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_csv_filename, comments, smooth_dist=0):
     """
     Aggregate selection information from multiple windows for each codon site.
     Output selection information into a tab separated file with the following columns:
@@ -514,7 +514,7 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_csv_file
     seq_dnds_info = get_seq_dnds_info(dnds_tsv_dir=dnds_tsv_dir, pvalue_thresh=pvalue_thresh, ref=ref,
                                                     ref_codon_len=ref_nuc_len/Utility.NUC_PER_CODON)
 
-    SMOOTH_DIST = 15
+    MOOTH_DIST = 0
     with open(output_csv_filename, 'w') as dnds_fh:
         dnds_fh.write("# " + comments + "\n")
         dnds_fh.write("Ref\tSite\tdNdSWeightBySubst\tdN_minus_dS\tWindows\tCodons\tNonSyn\tSyn\tSubst\tdNdSWeightByReads\tmultisitedNdS\n")
@@ -528,8 +528,8 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_csv_file
             subs = seq_dnds_info.get_site_ave_subs(site_1based=site)
             site_dnds_weight_by_reads = seq_dnds_info.get_weighted_byreads_ave_dnds(site_1based=site)
 
-            smooth_dist_start = max(site-SMOOTH_DIST, 1)
-            smooth_dist_end = min(site+SMOOTH_DIST, seq_dnds_info.get_seq_len())
+            smooth_dist_start = max(site-smooth_dist, 1)
+            smooth_dist_end = min(site+smooth_dist, seq_dnds_info.get_seq_len())
             multisite_dnds = seq_dnds_info.get_multisite_ave_dnds(site_start_1based=smooth_dist_start, site_end_1based=smooth_dist_end)
 
             line = "\t".join([ref, str(site), str(site_dnds), str(site_dn_minus_ds), str(window), str(reads),  str(nonsyn), str(syn), str(subs),
@@ -627,5 +627,3 @@ def tabulate_rates(fasttree_output_dir, output_csv_filename, comments):
                                   str(nongap_window_start),
                                   mutation,
                                   str(rate)]) + "\n")
-
-
