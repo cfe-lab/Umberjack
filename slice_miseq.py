@@ -342,7 +342,7 @@ class SeqDnDsInfo:
             total_exp_nonsyn += self.dnds_seq[site_0based].total_exp_nonsyn_subs
             total_exp_syn += self.dnds_seq[site_0based].total_exp_syn_subs
 
-        if total_syn == 0 and total_nonsyn == 0:
+        if total_syn == 0 or total_exp_nonsyn == 0:
             return None
         else:
             return (total_nonsyn / total_exp_nonsyn) * (total_exp_syn / total_syn)
@@ -525,7 +525,7 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_csv_file
     seq_dnds_info = get_seq_dnds_info(dnds_tsv_dir=dnds_tsv_dir, pvalue_thresh=pvalue_thresh, ref=ref,
                                                     ref_codon_len=ref_nuc_len/Utility.NUC_PER_CODON)
 
-    MOOTH_DIST = 0
+    smooth_dist = 15  # TODO:  this is a hack  remove it.
     with open(output_csv_filename, 'w') as dnds_fh:
         dnds_fh.write("# " + comments + "\n")
         dnds_fh.write("Ref\tSite\tdNdSWeightBySubst\tdN_minus_dS\tWindows\tCodons\tNonSyn\tSyn\tSubst\tdNdSWeightByReads\tmultisitedNdS\n")
