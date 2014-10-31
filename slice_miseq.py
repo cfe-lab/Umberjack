@@ -73,9 +73,11 @@ class _SiteDnDsInfo:
             return None
         else:
             total_weighted_site_dnds_over_all_windows = 0.0
-            total_subs_at_site_over_all_windows = self.total_syn_subs + self.total_nonsyn_subs
+            total_subs_at_site_over_all_windows = 0.0
             for (site_dnds, subs_at_site_in_window, reads) in self.window_dnds_subs:
-                total_weighted_site_dnds_over_all_windows += (site_dnds * subs_at_site_in_window)
+                if not site_dnds is None:   # sometimes there are zero observed synonymous substitutions.  Thus dn/ds = None.
+                    total_weighted_site_dnds_over_all_windows += (site_dnds * subs_at_site_in_window)
+                    total_subs_at_site_over_all_windows += subs_at_site_in_window
             return total_weighted_site_dnds_over_all_windows / total_subs_at_site_over_all_windows
 
     def get_weighted_byreads_ave_dnds(self):
@@ -88,9 +90,14 @@ class _SiteDnDsInfo:
             return None
         else:
             total_weighted_site_dnds_over_all_windows = 0.0
+            total_reads_at_site_over_all_windows = 0.0
             for (site_dnds, subs_at_site_in_window, reads_in_window) in self.window_dnds_subs:
-                total_weighted_site_dnds_over_all_windows += (site_dnds * reads_in_window)
-            return total_weighted_site_dnds_over_all_windows / self.total_reads
+                # sometimes there are zero observed synonymous substitutions, thus dn/ds = None.  Don't include those in average dn/ds
+                if not site_dnds is None:
+                    total_weighted_site_dnds_over_all_windows += (site_dnds * reads_in_window)
+                    total_reads_at_site_over_all_windows += reads_in_window
+            # Don't use self.total_reads because that counts the reads even for window-sites where dn/ds = None
+            return total_weighted_site_dnds_over_all_windows / total_reads_at_site_over_all_windows
 
 
     def get_ave_dnds(self):
