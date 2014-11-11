@@ -313,9 +313,15 @@ class SeqDnDsInfo:
         if site_start_1based > site_end_1based:
             raise ValueError("Codon range start must be before range end")
 
-        total_sites = site_end_1based - site_start_1based + 1
+        total_sites = 0.0
         for site_0based in range(site_start_1based-1, site_end_1based):
-            total_dnds += self.dnds_seq[site_0based].get_weighted_ave_dnds()
+            site_weighted_ave_dnds = self.dnds_seq[site_0based].get_weighted_ave_dnds()
+            if site_weighted_ave_dnds is not None:
+                total_dnds += site_weighted_ave_dnds
+                total_sites += 1
+
+        if not total_sites:
+            return None
 
         return total_dnds / total_sites
 
@@ -500,7 +506,7 @@ def get_seq_dnds_info(dnds_tsv_dir, pvalue_thresh, ref, ref_codon_len):
     return seq_dnds_info
 
 
-def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_csv_filename, comments, smooth_dist=0):
+def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_csv_filename, comments, smooth_dist=50):
     """
     Aggregate selection information from multiple windows for each codon site.
     Output selection information into a tab separated file with the following columns:
@@ -525,28 +531,37 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_csv_file
     seq_dnds_info = get_seq_dnds_info(dnds_tsv_dir=dnds_tsv_dir, pvalue_thresh=pvalue_thresh, ref=ref,
                                                     ref_codon_len=ref_nuc_len/Utility.NUC_PER_CODON)
 
-    smooth_dist = 15  # TODO:  this is a hack  remove it.
+    smooth_dist = smooth_dist  # TODO:  this is a hack  remove it.
+
     with open(output_csv_filename, 'w') as dnds_fh:
         dnds_fh.write("# " + comments + "\n")
-        dnds_fh.write("Ref\tSite\tdNdSWeightBySubst\tdN_minus_dS\tWindows\tCodons\tNonSyn\tSyn\tSubst\tdNdSWeightByReads\tmultisitedNdS\n")
+        writer = csv.DictWriter(dnds_fh,
+                                fieldnames=["Ref", "Site", "aveDnDs", "dNdSWeightBySubst", "dN_minus_dS", "Windows",
+                                            "Codons", "NonSyn", "Syn", "Subst", "dNdSWeightByReads",
+                                            "multisiteAvedNdS", "multisitedNdSWeightBySubst"])
+
+        writer.writeheader()
         for site in range(1, seq_dnds_info.get_seq_len() + 1):
-            site_dnds = seq_dnds_info.get_weighted_site_ave_dnds(site_1based=site)
-            site_dn_minus_ds = seq_dnds_info.get_site_ave_dn_minus_ds(site_1based=site)
-            window = seq_dnds_info.get_site_window_cov(site_1based=site)
-            reads = seq_dnds_info.get_site_ave_read_cov(site_1based=site)
-            nonsyn = seq_dnds_info.get_site_ave_nonsyn_subs(site_1based=site)
-            syn = seq_dnds_info.get_site_ave_syn_subs(site_1based=site)
-            subs = seq_dnds_info.get_site_ave_subs(site_1based=site)
-            site_dnds_weight_by_reads = seq_dnds_info.get_weighted_byreads_ave_dnds(site_1based=site)
+            outrow = {}
+            outrow["Ref"] = ref
+            outrow["Site"] = site
+            outrow["aveDnDs"] = seq_dnds_info.get_site_ave_dnds(site_1based=site)
+            outrow["dNdSWeightBySubst"] = seq_dnds_info.get_weighted_site_ave_dnds(site_1based=site)
+            outrow["dN_minus_dS"] = seq_dnds_info.get_site_ave_dn_minus_ds(site_1based=site)
+            outrow["Windows"] = seq_dnds_info.get_site_window_cov(site_1based=site)
+            outrow["Codons"] = seq_dnds_info.get_site_ave_read_cov(site_1based=site)
+            outrow["NonSyn"] = seq_dnds_info.get_site_ave_nonsyn_subs(site_1based=site)
+            outrow["Syn"] = seq_dnds_info.get_site_ave_syn_subs(site_1based=site)
+            outrow["Subst"] = seq_dnds_info.get_site_ave_subs(site_1based=site)
+            outrow["dNdSWeightByReads"] = seq_dnds_info.get_weighted_byreads_ave_dnds(site_1based=site)
+            outrow["dNdSWeightByReads"] = seq_dnds_info.get_weighted_byreads_ave_dnds(site_1based=site)
 
             smooth_dist_start = max(site-smooth_dist, 1)
             smooth_dist_end = min(site+smooth_dist, seq_dnds_info.get_seq_len())
-            multisite_dnds = seq_dnds_info.get_multisite_ave_dnds(site_start_1based=smooth_dist_start, site_end_1based=smooth_dist_end)
+            outrow["multisiteAvedNdS"] = seq_dnds_info.get_multisite_ave_dnds(site_start_1based=smooth_dist_start, site_end_1based=smooth_dist_end)
+            outrow["multisitedNdSWeightBySubst"] = seq_dnds_info.get_multisite_weighted_ave_dnds(site_start_1based=smooth_dist_start, site_end_1based=smooth_dist_end)
 
-            line = "\t".join([ref, str(site), str(site_dnds), str(site_dn_minus_ds), str(window), str(reads),  str(nonsyn), str(syn), str(subs),
-                              str(site_dnds_weight_by_reads),
-                              str(multisite_dnds)])
-            dnds_fh.write(line + "\n")
+            writer.writerow(outrow)
     return seq_dnds_info
 
 

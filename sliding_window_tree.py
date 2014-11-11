@@ -134,7 +134,7 @@ def eval_window(msa_fasta_filename, window_depth_cutoff, window_breadth_cutoff, 
 # TODO:  clean my parameters
 def tabulate_results(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
                      end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, pvalue, output_csv_filename,
-                     mode, window_slide):
+                     mode, window_slide, smooth_dist):
 
     comments = ("ref=" + ref + ","
                              "ref_len=" + str(ref_len) + "," +
@@ -153,7 +153,7 @@ def tabulate_results(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
         LOGGER.debug("Start Ave Dn/DS for all windows for ref " + ref + " " + output_csv_filename)
         seq_dnds_info = slice_miseq.tabulate_dnds(dnds_tsv_dir=out_dir, ref=ref, ref_nuc_len=ref_len,
                                                   pvalue_thresh=pvalue, output_csv_filename=output_csv_filename,
-                                                  comments=comments)
+                                                  comments=comments, smooth_dist=smooth_dist)
         LOGGER.debug("Done Ave Dn/DS for all windows  for ref " + ref + ".  Wrote to " + output_csv_filename)
         return seq_dnds_info
     elif mode == MODE_GTR_RATE:
@@ -166,7 +166,7 @@ def tabulate_results(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
 
 def eval_windows_async(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
                        end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, pvalue, threads_per_window,
-                       concurrent_windows, output_csv_filename=None, mode="DNDS", window_slide=3,
+                       concurrent_windows, output_csv_filename=None, mode="DNDS", window_slide=3, smooth_dist=50,
                        hyphy_exe=hyphy.HYPHY_EXE, hyphy_basedir=hyphy.HYPHY_BASEDIR, fastree_exe=fasttree.FASTTREE_EXE):
     """
     Launch a separate process to analyze each window.
@@ -242,7 +242,7 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, rea
 
     tabulate_results(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
                      end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, pvalue,
-                     output_csv_filename, mode, window_slide)
+                     output_csv_filename, mode, window_slide, smooth_dist)
 
 
 class WindowSlaveInfo:
@@ -263,7 +263,7 @@ class WindowSlaveInfo:
 
 def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
                      end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, pvalue, threads_per_window,
-                     output_csv_filename=None, mode="DNDS", window_slide=3, hyphy_exe=hyphy.HYPHY_EXE,
+                     output_csv_filename=None, mode="DNDS", window_slide=3, smooth_dist=50, hyphy_exe=hyphy.HYPHY_EXE,
                      hyphy_basedir=hyphy.HYPHY_BASEDIR, fastree_exe=fasttree.FASTTREE_EXE):
     """
     Launch a separate process to analyze each window via MPI.  Similar to eval_windows_async, but uses MPI.
@@ -383,7 +383,7 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
             LOGGER.debug("About to tabulate results")
             tabulate_results(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n,
                              start_nucpos, end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, pvalue,
-                             output_csv_filename, mode, window_slide)
+                             output_csv_filename, mode, window_slide, smooth_dist)
             LOGGER.debug("Done tabulating results")
 
         else:  # slave process does the work
@@ -427,6 +427,7 @@ def main():
                         help="maximum fraction of Ns allowed in the merged paired-end read below which the paired-end read is ignored")
     parser.add_argument("--window_size", type=int, help="window size in nucleotides")
     parser.add_argument("--window_slide", type=int, help="Number of bases to slide each window by")
+    parser.add_argument("--smooth_dist", type=int, help="Site dn/ds is smoothed by this many codons on either side")
     parser.add_argument("--window_breadth_cutoff", type=float,
                         help="fraction of window that merged paired-end read must cover with non-gap and non-N nucleotides.  Below this threshold, the read is omitted from the window.")
     parser.add_argument("--window_depth_cutoff", type=int,
@@ -451,6 +452,7 @@ def main():
     parser.add_argument("--mpi", help="Runs in MPI mode with multiple processes on multiple nodes." +
                                       "If python module mpi4py is not installed, then runs multiple processes on single node. " +
                                       "Default: false")
+
 
     args = parser.parse_args()
     eval_windows_args = {}
