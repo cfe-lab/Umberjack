@@ -554,7 +554,6 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_csv_file
             outrow["Syn"] = seq_dnds_info.get_site_ave_syn_subs(site_1based=site)
             outrow["Subst"] = seq_dnds_info.get_site_ave_subs(site_1based=site)
             outrow["dNdSWeightByReads"] = seq_dnds_info.get_weighted_byreads_ave_dnds(site_1based=site)
-            outrow["dNdSWeightByReads"] = seq_dnds_info.get_weighted_byreads_ave_dnds(site_1based=site)
 
             smooth_dist_start = max(site-smooth_dist, 1)
             smooth_dist_end = min(site+smooth_dist, seq_dnds_info.get_seq_len())
@@ -625,7 +624,9 @@ def tabulate_rates(fasttree_output_dir, output_csv_filename, comments):
     import fnmatch
     # .../out/RunABC/HIV1B-nef/ABC_S89.HIV1B-nef.msa.1_300.fasttree.log
     with  open(output_csv_filename,'w') as fh_out:
+
         fh_out.write("#" + comments + "\n")
+        #writer = csv.DictWriter(fh_out, fieldnames=["ID","Ref","Window_Start","Window_End","Window_Reads","Non_Gap_Window_Start","Mutation,Rate"])
         fh_out.write("ID,Ref,Window_Start,Window_End,Window_Reads,Non_Gap_Window_Start,Mutation,Rate\n")
         for root, dirs, filenames in os.walk(fasttree_output_dir):
             for fasttree_log in fnmatch.filter(filenames, '*.fasttree.log'):

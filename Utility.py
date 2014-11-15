@@ -97,6 +97,34 @@ def get_total_seq_from_fasta(fasta_filename):
                 count += 1
     return count
 
+
+def get_total_nongap_all_pos(msa_fasta_filename, gap_chars=["N", "n", "-"]):
+    """
+    Gets the total sequences that do not contain a gap character at each position
+    :param msa_fasta_filename: multiple sequence aligned fasta
+    :param gap_chars: list of gap characters
+    :return list:  list of total sequences without gap character at each position.  Each element in the list is a position in the msa fasta.
+    """
+    longest_seq_size = get_longest_seq_size_from_fasta(msa_fasta_filename)
+    total_nongap_by_pos = [0] * longest_seq_size
+    with open(msa_fasta_filename, 'r') as fh:
+        seq = ""
+        for line in fh:
+            line = line.rstrip()
+            if line[0] == '>':
+                for pos, character in enumerate(seq):
+                    total_nongap_by_pos[pos] += 1 if character not in  gap_chars else 0
+
+                seq = ""
+            else:
+                seq += line
+
+        for pos, character in enumerate(seq):
+            total_nongap_by_pos[pos] += 1 if character not in  gap_chars else 0
+
+    return total_nongap_by_pos
+
+
 def get_total_nongap_nuc_by_pos(msa_fasta_filename, pos):
     """
     Gets list where each element is the total number of sequences with nongap at that position.
