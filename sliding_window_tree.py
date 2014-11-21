@@ -27,9 +27,9 @@ ENV_OMP_NUM_THREADS = 'OMP_NUM_THREADS'
 
 
 # For MPI
-MASTER_RANK = 0
+PRIMARY_RANK = 0
 TAG_WORK = 1
-TAG_DIE = 2
+TAG_TERMINATE = 2
 
 
 
@@ -365,7 +365,7 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, rea
         try:
             process_result.get()
         except Exception, e:
-            LOGGER.error("Error in one of slave processes:\n" + e.message)
+            LOGGER.error("Error in one of replica processes:\n" + e.message)
 
     LOGGER.debug("Done waiting for window queue.  About to tabulate results.")
 
@@ -377,17 +377,17 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, rea
                      mode, window_slide)
 
 
-class WindowSlaveInfo:
+class WindowReplicaInfo:
     """
-    Keeps track of the slave information
+    Keeps track of the replica information
     """
-    def __init__(self, slave_rank, work_arguments, mpi_request):
+    def __init__(self, replica_rank, work_arguments, mpi_request):
         """
-        :param slave_rank: integer slave rank (starts from 1)
-        :param dict work_arguments:  dict of arguments sent to the slave to do work
-        :param mpi_request: mpi request returned by slave
+        :param replica_rank: integer replica rank (starts from 1)
+        :param dict work_arguments:  dict of arguments sent to the replica to do work
+        :param mpi_request: mpi request returned by replica
         """
-        self.slave_rank = slave_rank
+        self.replica_rank = replica_rank
         self.work_arguments = work_arguments
         self.mpi_request = mpi_request
 
@@ -428,7 +428,7 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
         LOGGER.debug("I am rank=" + str(rank))
         LOGGER.debug("I am on machine=" + str(MPI.Get_processor_name()))
 
-        if rank == MASTER_RANK:
+        if rank == PRIMARY_RANK:
             pool_size = comm.Get_size()
             LOGGER.debug("Pool size = " + str(pool_size))
 
@@ -443,17 +443,17 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
             total_windows = (last_window_start_nucpos - start_nucpos + 1) / Utility.NUC_PER_CODON
             LOGGER.debug("Launching " + str(total_windows) + " total windows")
 
-            available_slaves = range(1, pool_size)
-            busy_slave_2_request = {}
+            available_replicas = range(1, pool_size)
+            busy_replica_2_request = {}
 
             start_window_nucpos = start_nucpos
 
 
 
-            while start_window_nucpos <= last_window_start_nucpos or busy_slave_2_request:
+            while start_window_nucpos <= last_window_start_nucpos or busy_replica_2_request:
 
-                # Assign work to slaves
-                while start_window_nucpos <= last_window_start_nucpos and available_slaves:
+                # Assign work to replicas
+                while start_window_nucpos <= last_window_start_nucpos and available_replicas:
                     end_window_nucpos = start_window_nucpos + window_size - 1
 
                     window_args = {"msa_fasta_filename": msa_fasta_filename,
@@ -467,41 +467,41 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
                                    "hyphy_exe": hyphy_exe,
                                    "hyphy_basedir": hyphy_basedir,
                                    "fastree_exe": fastree_exe}
-                    slave_rank = available_slaves.pop(0)
+                    replica_rank = available_replicas.pop(0)
 
                     str_window_args = ', '.join('{}:{}'.format(key, val) for key, val in window_args.items())
-                    LOGGER.debug("Sending window_args to slave=" + str(slave_rank) + " " + str_window_args)
+                    LOGGER.debug("Sending window_args to replica=" + str(replica_rank) + " " + str_window_args)
 
-                    comm.isend(obj=window_args, dest=slave_rank, tag=TAG_WORK)  # non-blocking
-                    request = comm.irecv(dest=slave_rank, tag=MPI.ANY_TAG)  # non-blocking
+                    comm.isend(obj=window_args, dest=replica_rank, tag=TAG_WORK)  # non-blocking
+                    request = comm.irecv(dest=replica_rank, tag=MPI.ANY_TAG)  # non-blocking
 
-                    # The memory containing the window arguments must be kept intact until the slave says they're done
-                    # otherwise race condition can occur when memory is overwritten and slave no longer has access to args.
-                    # However, mpi4py will auto-allocate memory to contain the slave response message.
-                    busy_slave_2_request[slave_rank] = WindowSlaveInfo(slave_rank=slave_rank, work_arguments=window_args,
+                    # The memory containing the window arguments must be kept intact until the replica says they're done
+                    # otherwise race condition can occur when memory is overwritten and replica no longer has access to args.
+                    # However, mpi4py will auto-allocate memory to contain the replica response message.
+                    busy_replica_2_request[replica_rank] = WindowReplicaInfo(replica_rank=replica_rank, work_arguments=window_args,
                                                                        mpi_request=request)
 
                     start_window_nucpos += window_slide
 
-                # Check on slaves
-                if busy_slave_2_request:
-                    requests = [window_slave_info.mpi_request for window_slave_info in busy_slave_2_request.values()]
+                # Check on replicas
+                if busy_replica_2_request:
+                    requests = [window_replica_info.mpi_request for window_replica_info in busy_replica_2_request.values()]
                     mpi_status = MPI.Status()
                     idx, err_msg = MPI.Request.waitany(requests=requests, status=mpi_status)
-                    done_slave_rank = mpi_status.Get_source()
-                    available_slaves.extend([done_slave_rank])
-                    busy_slave_2_request.pop(done_slave_rank)
+                    done_replica_rank = mpi_status.Get_source()
+                    available_replicas.extend([done_replica_rank])
+                    busy_replica_2_request.pop(done_replica_rank)
                     if err_msg:
-                        LOGGER.error("Received error from slave=" + str(done_slave_rank) + " err_msg=" + str(err_msg))
+                        LOGGER.error("Received error from replica=" + str(done_replica_rank) + " err_msg=" + str(err_msg))
                     else:
-                        LOGGER.debug("Received success from slave=" + str(done_slave_rank))
+                        LOGGER.debug("Received success from replica=" + str(done_replica_rank))
 
             LOGGER.debug("Done Launching " + str(total_windows) + " total windows")
 
-            LOGGER.debug("About to Kill Slaves")
-            for slave_rank in range(1, pool_size):
-                comm.isend(obj=None, dest=slave_rank, tag=TAG_DIE)
-            LOGGER.debug("Done Killing slaves.")
+            LOGGER.debug("Terminating replicas...")
+            for replica_rank in range(1, pool_size):
+                comm.isend(obj=None, dest=replica_rank, tag=TAG_TERMINATE)
+            LOGGER.debug("Done terminating replicas.")
 
             LOGGER.debug("About to tabulate results")
             tabulate_results(ref, ref_len, sam_filename, out_dir,
@@ -512,26 +512,27 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
                              mode, window_slide)
             LOGGER.debug("Done tabulating results")
 
-        else:  # slave process does the work
-            is_die = False
-            while not is_die:
+        else:  # replica process does the work
+            is_terminated = False
+            while not is_terminated:
                 try:
                     mpi_status = MPI.Status()
-                    window_args = comm.recv(source=MASTER_RANK, tag=MPI.ANY_TAG, status=mpi_status)  # block till the master tells me to do something
+                    # block till the primary tells me to do something
+                    window_args = comm.recv(source=PRIMARY_RANK, tag=MPI.ANY_TAG, status=mpi_status)
 
 
-                    if mpi_status.Get_tag() == TAG_DIE:  # master wants me to die
-                        is_die = True
-                        LOGGER.debug("Master wants me to die - I was rank " + str(rank))
-                    else:  # master wants me to work
+                    if mpi_status.Get_tag() == TAG_TERMINATE:
+                        is_terminated = True
+                        LOGGER.debug("Replica of rank %d directed to terminate by primary" % rank)
+                    else:
                         str_window_args = ', '.join('{}:{}'.format(key, val) for key, val in window_args.items())
                         LOGGER.debug("Received window_args=" + str_window_args)
                         eval_window(**window_args)
-                        comm.send(obj=None, dest=MASTER_RANK, tag=TAG_WORK)  # Tell master that I'm done
+                        comm.send(obj=None, dest=PRIMARY_RANK, tag=TAG_WORK)
                 except Exception, e:
-                    LOGGER.exception("Failure in slave=" + str(rank))
+                    LOGGER.exception("Failure in replica=" + str(rank))
                     err_msg = traceback.format_exc()
-                    comm.send(obj=err_msg, dest=MASTER_RANK, tag=TAG_WORK)  # Tell master that I encountered an exception
+                    comm.send(obj=err_msg, dest=PRIMARY_RANK, tag=TAG_WORK)
     except Exception, e:
         LOGGER.exception("Uncaught Exception.  Aborting")
         comm.Abort()
