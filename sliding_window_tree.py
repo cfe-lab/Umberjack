@@ -72,27 +72,39 @@ def create_full_msa_fasta(sam_filename, out_dir, ref, ref_len, mapping_cutoff, r
 
 def do_hyphy(hyphy_exe, hyphy_basedir, threads, hyphy_filename_prefix, mode, codon_fasta_filename, tree_filename,
              pvalue):
+    """
+    Wrapper for HyPhy template batch analysis QuickSelectionDetection.bf
+    :param hyphy_exe: path to HYPHY executable
+    :param hyphy_basedir: working directory for HYPHY (e.g., root of /TemplateBatchFiles)
+    :param threads: Number of threads to run HYPHYMP
+    :param hyphy_filename_prefix:
+    :param mode: type of analysis
+    :param codon_fasta_filename:
+    :param tree_filename:
+    :param pvalue:
+    :return:
+    """
     if mode == "DNDS":
         hyphy_modelfit_filename = hyphy_filename_prefix + ".nucmodelfit"
         hyphy_dnds_tsv_filename = hyphy_filename_prefix + ".dnds.tsv"
         LOGGER.debug("Start HyPhy for window " + hyphy_dnds_tsv_filename)
         if not os.path.exists(hyphy_dnds_tsv_filename) or os.path.getsize(hyphy_dnds_tsv_filename) <= 0:
-            hyphy_input_str = "\n".join(["1",  # Universal
-                                         "1",  # New analysis
+            hyphy_input_str = "\n".join(["Universal",  # genetic code
+                                         "New Analysis",  # New analysis
                                          os.path.abspath(codon_fasta_filename),  # codon fasta
-                                         "2",  #(2):[Custom] Use any reversible nucleotide model crossed with MG94.
-                                         "012345",  # GTR
+                                         "Default",  # nucleotide model option (HKY85)
+                                         #"010020",  # TN93
                                          os.path.abspath(tree_filename),  # tree file
                                          os.path.abspath(hyphy_modelfit_filename),  # model fit output file
-                                         "3",  #(3):[Estimate] Estimate from data with branch corrections(slower).
-                                         "1",  # Single Acnestor Counting
-                                         "1",  # Full tree
-                                         "1",  # Averaged
+                                         "Estimate dN/dS only",  # constrain rConstr parameter (faster)
+                                         "Single Ancestor Counting",  # analysis method
+                                         "Full tree",  # SLAC option
+                                         "Averaged",  # treatment of ambiguities
                                          "1",  # Approximate extended binomial distro
                                          str(pvalue),  # pvalue threshold
                                          "2",  # Export to file
                                          os.path.abspath(hyphy_dnds_tsv_filename),  # dN/dS tsv output file
-                                         "2\n"])  # Count approximate numbers of dN, dS rate classes supported by data
+                                         "1\n"])  # Rate class estimator [Skip]
 
             # Feed window tree into hyphy to find dnds for the window
             hyphy_log = hyphy_filename_prefix + ".hyphy.log"
@@ -378,6 +390,7 @@ class WindowSlaveInfo:
         self.slave_rank = slave_rank
         self.work_arguments = work_arguments
         self.mpi_request = mpi_request
+
 
 def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
                      end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, pvalue, threads_per_window,
