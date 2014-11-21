@@ -10,12 +10,6 @@ import traceback
 
 
 
-from mpi4py import MPI
-
-
-
-
-
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
 console_handler = logging.StreamHandler(sys.stdout)
@@ -531,46 +525,64 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--sam_filename", help="full filepath to sam alignment file")
-    parser.add_argument("--ref", help="name of reference contig")
-    parser.add_argument("--ref_len", type=int, help="length of reference contig in nucleotide bases")
-    parser.add_argument("--out_dir",
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("sam_filename", help="full filepath to sam alignment file")
+    parser.add_argument("ref", help="Name of reference contig.  Must be one of refnames in SAM file.")
+    #parser.add_argument("--ref_len", type=int, help="length of reference contig in nucleotide bases")
+    parser.add_argument("--out_dir", default='.',
                         help="output directory in which the pipeline will write all its intermediate files")
-    parser.add_argument("--map_qual_cutoff", type=int,
+    parser.add_argument("--map_qual_cutoff", type=int, default=20,
                         help="mapping quality threshold below which alignments are ignored")
-    parser.add_argument("--read_qual_cutoff", type=int,
+    parser.add_argument("--read_qual_cutoff", type=int, default=20,
                         help="read quality threshold below which bases are converted to Ns")
-    parser.add_argument("--max_prop_n", type=float,
-                        help="maximum fraction of Ns allowed in the merged paired-end read below which the paired-end read is ignored")
-    parser.add_argument("--window_size", type=int, help="window size in nucleotides")
-    parser.add_argument("--window_slide", type=int, help="Number of bases to slide each window by")
-    parser.add_argument("--window_breadth_cutoff", type=float,
-                        help="fraction of window that merged paired-end read must cover with non-gap and non-N nucleotides.  Below this threshold, the read is omitted from the window.")
-    parser.add_argument("--window_depth_cutoff", type=int,
-                        help="1-based start nucleotide position in the reference contig.  The first window will start at this position.")
-    parser.add_argument("--start_nucpos", type=int,
-                        help="1-based start nucleotide position in the reference contig.  The first window will start at this position.")
-    parser.add_argument("--end_nucpos", type=int,
-                        help="1-based end nucleotide position in the reference contig.  The last window will start at or before this position.")
-    parser.add_argument("--pvalue", type=float,
-                        help=" p-value threshold for determining selection significantly different from neutral evolution.")
-    parser.add_argument("--threads_per_window", type=int,
-                        help="threads allotted per window.  Default: 1")
-    parser.add_argument("--concurrent_windows", type=int, help="Max number of windows to process concurrently.  " +
-                                                               "Ignored when --mpi is defined.  Default: 1")
-    parser.add_argument("--output_dnds_tsv_filename",
-                        help="full filepath of final tab-separated values file containing selection information for each codon site in the reference from averaged over multiple windows")
-    parser.add_argument("--hyphy_exe", help="full filepath of HYPHYMP executable.  Default: taken PATH")
+    parser.add_argument("--max_prop_n", type=float, default=0.1,
+                        help="maximum fraction of Ns allowed in the merged paired-end read below which the paired-end"
+                             " read is ignored")
+    parser.add_argument("--window_size", type=int, default=400, help="window size in nucleotides")
+    parser.add_argument("--window_slide", type=int, default=50, help="Number of bases to slide each window by")
+    parser.add_argument("--window_breadth_cutoff", type=float, default=0.8,
+                        help="fraction of window that merged paired-end read must cover with non-gap and non-N"
+                             " nucleotides.  Below this threshold, the read is omitted from the window.")
+    parser.add_argument("--window_depth_cutoff", type=int, default=50,
+                        help="Minimum number of reads within a valid window.")
+    parser.add_argument("--start_nucpos", type=int, default=1,
+                        help="1-based start nucleotide position in the reference contig.  The first window will start"
+                             " at this position.")
+    parser.add_argument("--end_nucpos", type=int, default=None,
+                        help="1-based end nucleotide position in the reference contig.  The last window will start at"
+                             " or before this position.")
+    parser.add_argument("--pvalue", type=float, default=0.05,
+                        help=" p-value threshold for determining selection significantly different from neutral"
+                             " evolution.")
+    parser.add_argument("--threads_per_window", type=int, default=1,
+                        help="threads allotted per window.")
+    parser.add_argument("--concurrent_windows", type=int, default=1,
+                        help="Max number of windows to process concurrently. Ignored when --mpi is defined.")
+    parser.add_argument("--output_dnds_tsv_filename", default='dnds.tsv',
+                        help="full filepath of final tab-separated values file containing selection information for"
+                             " each codon site in the reference from averaged over multiple windows")
+    parser.add_argument("--hyphy_exe", help="full filepath of HYPHYMP executable.  Default: taken from PATH")
     parser.add_argument("--hyphy_basedir",
-                        help="full filepath of HyPhy base directory containing template batch files.  Default: /usr/local/lib/hyphy/TemplateBatchFiles/")
+                        help="full filepath of HyPhy base directory containing template batch files.  Default:"
+                             " /usr/local/lib/hyphy/TemplateBatchFiles/")
     parser.add_argument("--fastree_exe", help="full filepath of FastTreeMP executable.  Default: taken from PATH")
-    parser.add_argument("--mode", help="DNDS or NUC_SUBST.  Default: DNDS")
-    parser.add_argument("--mpi", help="Runs in MPI mode with multiple processes on multiple nodes." +
-                                      "If python module mpi4py is not installed, then runs multiple processes on single node. " +
-                                      "Default: false")
+    parser.add_argument("--mode", default='DNDS', help="DNDS: Execute dN/dS analysis for positive (diversifying "
+                                                       "selection in codon alignment.  NUC_SUBST: Profile "
+                                                       "nucleotide substitution rate biases under generalized "
+                                                       "non-reversible (6-paramter) model.")
+
+    parser.add_argument("--mpi", action='store_true',
+                        help="Runs in MPI mode with multiple processes on multiple nodes. "
+                             "If python module mpi4py is not installed, then runs multiple processes on single "
+                             "node. Default: false")
 
     args = parser.parse_args()
+
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit()
+
+    # deep copy of arguments excluding empty values
     eval_windows_args = {}
     for key, val in vars(args).iteritems():
         if val:
