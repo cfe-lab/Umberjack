@@ -3,6 +3,17 @@ import Utility
 import csv
 import glob
 import re
+import logging
+import fasttree.fasttree_handler as fasttree
+import sys
+import re
+
+LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel(logging.DEBUG)
+console_handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter('%(asctime)s - [%(levelname)s] [%(name)s] [%(process)d] %(message)s')
+console_handler.setFormatter(formatter)
+LOGGER.addHandler(console_handler)
 
 # Columns in the HyPhy dN/dS tab-separates values file
 HYPHY_TSV_DN_COL = 'dN'
@@ -50,7 +61,36 @@ class _SiteDnDsInfo:
         self.total_nonsyn_subs += nonsyn_subs
         self.total_exp_syn_subs += exp_syn_subs
         self.total_exp_nonsyn_subs += exp_nonsyn_subs
-        self.window_dnds_subs.append([dnds, syn_subs + nonsyn_subs, reads])
+        self.window_dnds_subs.append([dnds, syn_subs, nonsyn_subs, reads])
+
+    def get_simple_ave_dnds_weighted_by_reads(self):
+        """
+        Finds average of (observed Nonsyn substitutions/observedsynonumous substitions) for all windows covering this site.
+        Does not normalize by expected subst.
+        Weight average by bnongap reads in window
+        :return:
+        """
+        if not self.window_dnds_subs:
+            return None
+        else:
+            total_weighted_site_dnds_over_all_windows = 0.0
+            total_reads_at_site_over_all_windows = 0.0
+            total_windows = 0.0
+            # for (site_dnds, site_syn_subst, site_nonsyn_subst, reads) in self.window_dnds_subs:
+            #     if site_syn_subst != 0:   # sometimes there are zero observed synonymous substitutions.  Thus dn/ds = None.
+            #         total_weighted_site_dnds_over_all_windows += ((site_nonsyn_subst/site_syn_subst) * reads)
+            #         total_reads_at_site_over_all_windows += reads
+            # if not total_reads_at_site_over_all_windows:
+            #     return None
+            # return total_weighted_site_dnds_over_all_windows / total_reads_at_site_over_all_windows
+            for (site_dnds, site_syn_subst, site_nonsyn_subst, reads) in self.window_dnds_subs:
+                if site_syn_subst != 0:   # sometimes there are zero observed synonymous substitutions.  Thus dn/ds = None.
+                    total_weighted_site_dnds_over_all_windows += (site_nonsyn_subst/site_syn_subst)
+                    total_windows += 1
+            if not total_windows:
+                return None
+            return total_weighted_site_dnds_over_all_windows / total_windows
+
 
     def get_weighted_ave_dnds(self):
         """
@@ -62,24 +102,35 @@ class _SiteDnDsInfo:
             return None
         else:
             total_weighted_site_dnds_over_all_windows = 0.0
-            total_subs_at_site_over_all_windows = self.total_syn_subs + self.total_nonsyn_subs
-            for (site_dnds, subs_at_site_in_window, reads) in self.window_dnds_subs:
-                total_weighted_site_dnds_over_all_windows += (site_dnds * subs_at_site_in_window)
+            total_subs_at_site_over_all_windows = 0
+            for (site_dnds, site_syn_subst, site_nonsyn_subst, reads) in self.window_dnds_subs:
+                if not site_dnds is None:   # sometimes there are zero observed synonymous substitutions.  Thus dn/ds = None.
+                    total_weighted_site_dnds_over_all_windows += (site_dnds * (site_syn_subst+site_nonsyn_subst))
+                    total_subs_at_site_over_all_windows += (site_syn_subst+site_nonsyn_subst)
+            if not total_subs_at_site_over_all_windows:
+                return None
             return total_weighted_site_dnds_over_all_windows / total_subs_at_site_over_all_windows
 
     def get_weighted_byreads_ave_dnds(self):
         """
         Return weighted average dN/dS from all windows for the codon site.
-        Average weighted by number of substitutions for the codon site in the window.
+        Average weighted by number of non-gap reads for the codon site in the window.
         :rtype : float
         """
         if not self.window_dnds_subs:
             return None
         else:
             total_weighted_site_dnds_over_all_windows = 0.0
-            for (site_dnds, subs_at_site_in_window, reads_in_window) in self.window_dnds_subs:
-                total_weighted_site_dnds_over_all_windows += (site_dnds * reads_in_window)
-            return total_weighted_site_dnds_over_all_windows / self.total_reads
+            total_reads_at_site_over_all_windows = 0
+            for (site_dnds, site_syn_subst, site_nonsyn_subst, reads_in_window) in self.window_dnds_subs:
+                # sometimes there are zero observed synonymous substitutions, thus dn/ds = None.  Don't include those in average dn/ds
+                if not site_dnds is None:
+                    total_weighted_site_dnds_over_all_windows += (site_dnds * reads_in_window)
+                    total_reads_at_site_over_all_windows += reads_in_window
+            # Don't use self.total_reads because that counts the reads even for window-sites where dn/ds = None
+            if not total_reads_at_site_over_all_windows:
+                return None
+            return total_weighted_site_dnds_over_all_windows / total_reads_at_site_over_all_windows
 
 
     def get_ave_dnds(self):
@@ -177,6 +228,15 @@ class SeqDnDsInfo:
         self.dnds_seq[site_1based-1].add_dnds(dnds=dnds, dn_minus_ds=dn_minus_ds, reads=reads,
                                               syn_subs=syn_subs, nonsyn_subs=nonsyn_subs,
                                               exp_syn_subs=exp_syn_subs, exp_nonsyn_subs=exp_nonsyn_subs)
+
+
+    def get_site_simple_ave_dnds_weighted_by_reads(self, site_1based):
+        """
+        simple average(non syns / syn)  weighted by total sub at site
+        :param site_1based:
+        :return:
+        """
+        return self.dnds_seq[site_1based-1].get_simple_ave_dnds_weighted_by_reads()
 
     def get_site_ave_dnds(self, site_1based):
         """
@@ -280,7 +340,7 @@ class SeqDnDsInfo:
         """
         return self.dnds_seq[site_1based-1].get_weighted_byreads_ave_dnds()
 
-    def get_multisite_weighted_ave_dnds(self, site_start_1based, site_end_1based):
+    def get_multisite_weighted_bysubst_ave_dnds(self, site_start_1based, site_end_1based):
         """
         Gets the average dN/dS weighted by substiutions across a range of codon sites over all windows covering the codon range
         :param site_start_1based:
@@ -291,15 +351,21 @@ class SeqDnDsInfo:
         if site_start_1based > site_end_1based:
             raise ValueError("Codon range start must be before range end")
 
-        total_sites = site_end_1based - site_start_1based + 1
+        total_sites = 0.0
         for site_0based in range(site_start_1based-1, site_end_1based):
-            total_dnds += self.dnds_seq[site_0based].get_weighted_ave_dnds()
+            site_weighted_ave_dnds = self.dnds_seq[site_0based].get_weighted_ave_dnds()
+            if site_weighted_ave_dnds is not None:
+                total_dnds += site_weighted_ave_dnds
+                total_sites += 1
+
+        if not total_sites:
+            return None
 
         return total_dnds / total_sites
 
-    def get_multisite_ave_dnds(self, site_start_1based, site_end_1based):
+    def get_multisite_weighted_byreads_ave_dnds(self, site_start_1based, site_end_1based):
         """
-        Gets the average dN/dS across a range of codon sites over all windows covering the codon range.
+        Gets the average dN/dS weighted by reads across a range of codon sites over all windows covering the codon range
         :param site_start_1based:
         :param site_end_1based:
         :return:
@@ -308,22 +374,57 @@ class SeqDnDsInfo:
         if site_start_1based > site_end_1based:
             raise ValueError("Codon range start must be before range end")
 
-        total_nonsyn = 0.0
-        total_syn = 0.0
-        total_exp_nonsyn = 0.0
-        total_exp_syn = 0.0
-
-
+        total_sites = 0.0
         for site_0based in range(site_start_1based-1, site_end_1based):
-            total_nonsyn += self.dnds_seq[site_0based].total_nonsyn_subs
-            total_syn += self.dnds_seq[site_0based].total_syn_subs
-            total_exp_nonsyn += self.dnds_seq[site_0based].total_exp_nonsyn_subs
-            total_exp_syn += self.dnds_seq[site_0based].total_exp_syn_subs
+            site_weighted_ave_dnds = self.dnds_seq[site_0based].get_weighted_ave_dnds()
+            if site_weighted_ave_dnds is not None:
+                total_dnds += site_weighted_ave_dnds
+                total_sites += 1
 
-        if total_syn == 0 and total_nonsyn == 0:
+        if not total_sites:
+            return None
+
+        return total_dnds / total_sites
+
+    def get_multisite_ave_dnds(self, site_start_1based, site_end_1based):
+        """
+        Finds the average for the set of site-average dN/dS in the specified codon range.
+        :param site_start_1based:
+        :param site_end_1based:
+        :return:
+        """
+        total_dnds = 0.0
+        if site_start_1based > site_end_1based:
+            raise ValueError("Codon range start must be before range end")
+
+        # total_nonsyn = 0.0
+        # total_syn = 0.0
+        # total_exp_nonsyn = 0.0
+        # total_exp_syn = 0.0
+        #
+        #
+        # for site_0based in range(site_start_1based-1, site_end_1based):
+        #     total_nonsyn += self.dnds_seq[site_0based].total_nonsyn_subs
+        #     total_syn += self.dnds_seq[site_0based].total_syn_subs
+        #     total_exp_nonsyn += self.dnds_seq[site_0based].total_exp_nonsyn_subs
+        #     total_exp_syn += self.dnds_seq[site_0based].total_exp_syn_subs
+        #
+        # if total_syn == 0 or total_exp_nonsyn == 0:
+        #     return None
+        # else:
+        #     return (total_nonsyn / total_exp_nonsyn) * (total_exp_syn / total_syn)
+        total_site_ave_dnds = 0.0
+        total_sites = 0
+        for site_0based in range(site_start_1based-1, site_end_1based):
+            site_ave_dnds = self.dnds_seq[site_0based].get_ave_dnds()
+            if site_ave_dnds is not None:
+                total_site_ave_dnds += site_ave_dnds
+                total_sites += 1
+
+        if total_sites == 0:
             return None
         else:
-            return (total_nonsyn / total_exp_nonsyn) * (total_exp_syn / total_syn)
+            return total_site_ave_dnds / total_sites
 
 
 def __get_window_seq(seq, start_pos, end_pos, breadth_thresh=0.0):
@@ -368,35 +469,41 @@ def create_slice_msa_fasta(fasta_filename, out_fasta_filename, start_pos, end_po
     :param int end_pos: 1-based end position of region to extract
     :param float breadth_thresh: fraction of sequence that be A,C,T,or G within start_pos and end_pos inclusive.
     """
-
+    LOGGER.debug("Start Create Sliced MSA-Fasta " + out_fasta_filename)
     total_seq = 0
-    with open(fasta_filename, 'r') as fasta_fh, open(out_fasta_filename, 'w') as slice_fasta_fh:
-        header = ""
-        seq = ""
-        for line in fasta_fh:
-            line = line.rstrip()
-            if line:
-                line = line.split()[0]  # remove trailing whitespace and any test after the first whitespace
+    if not os.path.exists(out_fasta_filename) or os.path.getsize(out_fasta_filename) <= 0:
+        with open(fasta_filename, 'r') as fasta_fh, open(out_fasta_filename, 'w') as slice_fasta_fh:
+            header = ""
+            seq = ""
+            for line in fasta_fh:
+                line = line.rstrip()
+                if line:
+                    line = line.split()[0]  # remove trailing whitespace and any test after the first whitespace
 
-                if line[0] == '>':  # previous sequence is finished.  Write out previous sequence
-                    window_seq = __get_window_seq(seq=seq, start_pos=start_pos, end_pos=end_pos, breadth_thresh=breadth_thresh)
-                    if window_seq:
-                        slice_fasta_fh.write(header + "\n")
-                        slice_fasta_fh.write(window_seq + "\n")
-                        total_seq += 1
+                    if line[0] == '>':  # previous sequence is finished.  Write out previous sequence
+                        window_seq = __get_window_seq(seq=seq, start_pos=start_pos, end_pos=end_pos, breadth_thresh=breadth_thresh)
+                        if window_seq:
+                            slice_fasta_fh.write(header + "\n")
+                            slice_fasta_fh.write(window_seq + "\n")
+                            total_seq += 1
 
-                    seq = ""
-                    header = line
+                        seq = ""
+                        header = line
 
-                else:   # cache current sequence so that entire sequence is on one line
-                    seq += line
+                    else:   # cache current sequence so that entire sequence is on one line
+                        seq += line
 
-        window_seq = __get_window_seq(seq=seq, start_pos=start_pos, end_pos=end_pos, breadth_thresh=breadth_thresh)
-        if window_seq:
-            slice_fasta_fh.write(header + "\n")
-            slice_fasta_fh.write(window_seq + "\n")
-            total_seq += 1
+            window_seq = __get_window_seq(seq=seq, start_pos=start_pos, end_pos=end_pos, breadth_thresh=breadth_thresh)
+            if window_seq:
+                slice_fasta_fh.write(header + "\n")
+                slice_fasta_fh.write(window_seq + "\n")
+                total_seq += 1
 
+        LOGGER.debug("Done Create Sliced MSA-Fasta " + out_fasta_filename +
+                         ".  Wrote " + str(total_seq) + " to file")
+    else:
+        LOGGER.warn("Found existing Sliced MSA-Fasta " + out_fasta_filename + ". Not regenerating.")
+        total_seq = Utility.get_total_seq_from_fasta(out_fasta_filename)
     return total_seq
 
 
@@ -472,7 +579,7 @@ def get_seq_dnds_info(dnds_tsv_dir, pvalue_thresh, ref, ref_codon_len):
     return seq_dnds_info
 
 
-def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_dnds_tsv_filename, comments):
+def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_csv_filename, comments, smooth_dist=50):
     """
     Aggregate selection information from multiple windows for each codon site.
     Output selection information into a tab separated file with the following columns:
@@ -491,38 +598,48 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_dnds_tsv
     :param str ref: name of reference contig
     :param int ref_nuc_len:  length of reference contig in nucleotides
     :param float pvalue_thresh: p-value threshold for significant selection
-    :param str output_dnds_tsv_filename: full filepath of aggregated selection tsv to write to
+    :param str output_csv_filename: full filepath of aggregated selection tsv to write to
     :param str comments: any comments to add at the top of the aggregated selection tsv
     """
     seq_dnds_info = get_seq_dnds_info(dnds_tsv_dir=dnds_tsv_dir, pvalue_thresh=pvalue_thresh, ref=ref,
                                                     ref_codon_len=ref_nuc_len/Utility.NUC_PER_CODON)
 
-    SMOOTH_DIST = 15
-    with open(output_dnds_tsv_filename, 'w') as dnds_fh:
+    smooth_dist = smooth_dist  # TODO:  this is a hack  remove it.
+
+    with open(output_csv_filename, 'w') as dnds_fh:
         dnds_fh.write("# " + comments + "\n")
-        dnds_fh.write("Ref\tSite\tdNdSWeightBySubst\tdN_minus_dS\tWindows\tCodons\tNonSyn\tSyn\tSubst\tdNdSWeightByReads\tmultisitedNdS\n")
+        writer = csv.DictWriter(dnds_fh,
+                                fieldnames=["Ref", "Site", "aveDnDs", "dNdSWeightBySubst", "dN_minus_dS", "Windows",
+                                            "Codons", "NonSyn", "Syn", "Subst", "dNdSWeightByReads",
+                                            "multisiteAvedNdS", "multisitedNdSWeightBySubst", "simpleDnDs"])
+
+        writer.writeheader()
         for site in range(1, seq_dnds_info.get_seq_len() + 1):
-            site_dnds = seq_dnds_info.get_weighted_site_ave_dnds(site_1based=site)
-            site_dn_minus_ds = seq_dnds_info.get_site_ave_dn_minus_ds(site_1based=site)
-            window = seq_dnds_info.get_site_window_cov(site_1based=site)
-            reads = seq_dnds_info.get_site_ave_read_cov(site_1based=site)
-            nonsyn = seq_dnds_info.get_site_ave_nonsyn_subs(site_1based=site)
-            syn = seq_dnds_info.get_site_ave_syn_subs(site_1based=site)
-            subs = seq_dnds_info.get_site_ave_subs(site_1based=site)
-            site_dnds_weight_by_reads = seq_dnds_info.get_weighted_byreads_ave_dnds(site_1based=site)
+            outrow = {}
+            outrow["Ref"] = ref
+            outrow["Site"] = site
+            outrow["aveDnDs"] = seq_dnds_info.get_site_ave_dnds(site_1based=site)
+            outrow["dNdSWeightBySubst"] = seq_dnds_info.get_weighted_site_ave_dnds(site_1based=site)
+            outrow["dN_minus_dS"] = seq_dnds_info.get_site_ave_dn_minus_ds(site_1based=site)
+            outrow["Windows"] = seq_dnds_info.get_site_window_cov(site_1based=site)
+            outrow["Codons"] = seq_dnds_info.get_site_ave_read_cov(site_1based=site)
+            outrow["NonSyn"] = seq_dnds_info.get_site_ave_nonsyn_subs(site_1based=site)
+            outrow["Syn"] = seq_dnds_info.get_site_ave_syn_subs(site_1based=site)
+            outrow["Subst"] = seq_dnds_info.get_site_ave_subs(site_1based=site)
+            outrow["dNdSWeightByReads"] = seq_dnds_info.get_weighted_byreads_ave_dnds(site_1based=site)
 
-            smooth_dist_start = max(site-SMOOTH_DIST, 1)
-            smooth_dist_end = min(site+SMOOTH_DIST, seq_dnds_info.get_seq_len())
-            multisite_dnds = seq_dnds_info.get_multisite_ave_dnds(site_start_1based=smooth_dist_start, site_end_1based=smooth_dist_end)
+            smooth_dist_start = max(site-smooth_dist, 1)
+            smooth_dist_end = min(site+smooth_dist, seq_dnds_info.get_seq_len())
+            outrow["multisiteAvedNdS"] = seq_dnds_info.get_multisite_ave_dnds(site_start_1based=smooth_dist_start, site_end_1based=smooth_dist_end)
+            outrow["multisitedNdSWeightBySubst"] = seq_dnds_info.get_multisite_weighted_bysubst_ave_dnds(site_start_1based=smooth_dist_start, site_end_1based=smooth_dist_end)
+            outrow["simpleDnDs"] = seq_dnds_info.get_site_simple_ave_dnds_weighted_by_reads(site_1based=site)
 
-            line = "\t".join([ref, str(site), str(site_dnds), str(site_dn_minus_ds), str(window), str(reads),  str(nonsyn), str(syn), str(subs),
-                              str(site_dnds_weight_by_reads),
-                              str(multisite_dnds)])
-            dnds_fh.write(line + "\n")
+
+            writer.writerow(outrow)
     return seq_dnds_info
 
 
-def tabulate_nuc_subst(out_dir, ref, ref_nuc_len, output_csv_filename, comments):
+def tabulate_nuc_subst(nucmodelfit_dir, output_csv_filename, comments):
     # Hyphy creates a *.nucmodelfit file that contains the best fit model (according to AIC) with this entry.  Parse it.
     #       Model averaged rates relative to AG (REV estimates):
     #           AC =   0.1902	(  0.1781)
@@ -531,24 +648,84 @@ def tabulate_nuc_subst(out_dir, ref, ref_nuc_len, output_csv_filename, comments)
     #           CT =   1.2453	(  1.2953)
     #           GT =   0.4195	(  0.4246)
     import fnmatch
-    # /home/tnguyen/gitrepo/MutationPatterns/out/140415_M01841_0059_000000000-A64EA/HIV1B-nef/E84407AK-PR-RT_S89.HIV1B-nef.msa.1_300.nucmodelfit
-    for root, dirs, filenames in os.walk(out_dir):
-        for nucmodelfit_filename in fnmatch.filter(filenames, '*.nucmodelfit'):
-            with open(os.path.join(root, nucmodelfit_filename), 'r') as fh_fit, open(output_csv_filename,'w') as fh_nucmodelcsv:
-                is_found_rates = False
-                fh_nucmodelcsv.write("ID,Ref,StartBase,EndBase,Rate\n")
-                fh_nucmodelcsv.write("#" + comments)
-                for line in fh_fit:
-                    if not is_found_rates and "Model averaged rates relative to AG" in line:
-                        is_found_rates = True
-                        continue
+    # .../out/RunABC/HIV1B-nef/ABC_S89.HIV1B-nef.msa.1_300.nucmodelfit
+    with  open(output_csv_filename,'w') as fh_nucmodelcsv:
+        fh_nucmodelcsv.write("#" + comments + "\n")
+        fh_nucmodelcsv.write("ID,Ref,Window_Start,Window_End,StartBase,EndBase,Mutation,Rate\n")
+        for root, dirs, filenames in os.walk(nucmodelfit_dir):
+            for nucmodelfit_filename in fnmatch.filter(filenames, '*.nucmodelfit'):
 
-                    if is_found_rates:
+                # ASSUME that multiple sequence aligned file used as input for the nucleotide model fit file is in the same folder
+                # TODO:  be more general
+                msa_slice_fasta_filename = nucmodelfit_filename.replace(".nucmodelfit", ".fasta")
+                #nongap_by_window_pos = Utility.get_total_nongap_nuc_by_pos(msa_fasta_filename=msa_slice_fasta_filename)
+                with open(os.path.join(root, nucmodelfit_filename), 'r') as fh_fit:
+                    is_found_rates = False
+                    # TODO:  make more general
+                    sample_id, ref, msa, window, ext = os.path.basename(nucmodelfit_filename).split(".")
+                    window_start, window_end = window.split("_")
+
+                    for line in fh_fit:
                         line = line.rstrip().lstrip()
-                        match = re.findall(r'([ACGT][ACGT])\b=\b(\d+\.\d+)\s*\(\s*(\d+\.\d+)\s*\)', line, re.IGNORECASE)
-                        if not match:
-                            raise ValueError("Line should contain model rates but it doesn't: " + line)
-                        subst, rate, reverse_rate = match[0]  # list of 1 tuple
-                        init_base, end_base = list(subst)
-                        fh_nucmodelcsv.write(init_base + "," + end_base + "," + rate + "\n")
-                        fh_nucmodelcsv.write(end_base + "," + init_base + "," + reverse_rate + "\n")
+                        if not len(line):
+                            continue
+                        if not is_found_rates and "Model averaged rates relative to AG" in line:
+                            is_found_rates = True
+                            continue
+
+
+                        if is_found_rates:
+                            if line.find("Model averaged selection") >= 0:
+                                break  # end of rates
+
+                            match = re.findall(r'([ACGT][ACGT])\s*=\s*(\d+\.\d+)\s*\(\s*(\d+\.\d+)\s*\)', line, re.IGNORECASE)
+                            if not match:
+                                raise ValueError("Line should contain model rates but it doesn't: " + line)
+                            subst, sym_rate, nonsym_rate = match[0]  # list of 1 tuple
+                            init_base, end_base = list(subst)
+                            mutation = init_base + end_base
+                            fh_nucmodelcsv.write(",".join(str(x) for x in [sample_id, ref,
+                                                                           window_start, window_end,
+                                                                           init_base, end_base, mutation, nonsym_rate]) + "\n")
+
+
+def tabulate_rates(fasttree_output_dir, output_csv_filename, comments):
+    """
+    Collects all the GTR model rates from all the fasttree logs in a directory and puts them into output_csv_filename.
+    ASSUME that multiple sequence aligned file is in the same folder
+    :param output_dir:
+    :return:
+    """
+    import fnmatch
+    # .../out/RunABC/HIV1B-nef/ABC_S89.HIV1B-nef.msa.1_300.fasttree.log
+    with  open(output_csv_filename,'w') as fh_out:
+
+        fh_out.write("#" + comments + "\n")
+        #writer = csv.DictWriter(fh_out, fieldnames=["ID","Ref","Window_Start","Window_End","Window_Reads","Non_Gap_Window_Start","Mutation,Rate"])
+        fh_out.write("ID,Ref,Window_Start,Window_End,Window_Reads,Non_Gap_Window_Start,Mutation,Rate\n")
+        for root, dirs, filenames in os.walk(fasttree_output_dir):
+            for fasttree_log in fnmatch.filter(filenames, '*.fasttree.log'):
+                fullpath_fasttree_log = os.path.join(root, fasttree_log)
+                AC, AG, AT, CG, CT, GT = fasttree.extract_gtr_rates(fullpath_fasttree_log)
+                rates = {"AC":AC, "AG":AG, "AT":AT, "CG":CG, "CT":CT, "GT":GT}
+
+                msa_slice_fasta_filename = fullpath_fasttree_log.replace(".fasttree.log", ".fasta")
+                # sample_id.ref.msa.window_start_window_end.fasta
+                name_split = os.path.basename(msa_slice_fasta_filename).split(".")
+                window = name_split[-2]
+                ref = name_split[-4]  # TODO:  what if reference has . in it?
+                sample_id = ".".join(name_split[0:-4])
+                window_start, window_end = window.split("_")
+                nongap_window_start = Utility.get_total_nongap_nuc_by_pos(msa_slice_fasta_filename, 0)
+                reads = Utility.get_total_seq_from_fasta(msa_slice_fasta_filename)
+
+
+                for mutation, rate in rates.iteritems():
+                    fh_out.write(",".join([sample_id,
+                                  ref,
+                                  window_start,
+                                  window_end,
+                                  str(reads),
+                                  str(nongap_window_start),
+                                  mutation,
+                                  str(rate)]) + "\n")
