@@ -21,8 +21,8 @@ SMOOTH_DIST <- 10
 # TODO:  find expected dn-ds
 
 
-#actual_dnds_filename <- "../out/consensus/mut100_1x_errfree_window400/actual_dnds_by_site.tsv"
-actual_dnds_filename <- "../out/consensus/mut100_1x_window400/actual_dnds_by_site.tsv"
+actual_dnds_filename <- "../out/consensus/mut100_1x_errfree_window400/actual_dnds_by_site.csv"
+#actual_dnds_filename <- "../out/consensus/mut100_1x_window400/actual_dnds_by_site.csv"
 expected_dnds_filename <- "../data/indelible/sample_genomes.100.rates.csv"
 
 dnds_file <- file(actual_dnds_filename, open="rt")
@@ -77,11 +77,32 @@ expected_dnds$MultisiteAveDnDs <- apply(expected_dnds, 1, function(row) {
 #' **Scatterplot actual vs expected dn ds together**
 
 fullDat <- data.frame(actual_dnds, Expected=expected_dnds$Omega, ExpectedMultisite=expected_dnds$MultisiteAveDnDs)
-#fullDat <- na.omit(fullDat)
+fullDat <- na.omit(fullDat)
 summary(fullDat)
 
-#+ fig.width=24
-ggplot(fullDat, aes(x=aveDnDs, y=Expected)) + 
+ggplot(fullDat[!is.na(fullDat$aveDnDs),], aes(x=aveDnDs, y=Expected)) + 
+  geom_point() +
+  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
+  xlab("\nInferred") + 
+  ylab("Expected\n") + 
+  theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
+  scale_x_continuous(breaks=seq(0, 3, 0.5), limits=c(0, max(fullDat$aveDnDs, fullDat$Expected))) +
+  scale_y_continuous(breaks=seq(0, 3, 0.5), limits=c(0, max(fullDat$aveDnDs, fullDat$Expected))) +
+  coord_fixed(ratio=1) + 
+  ggtitle("Inferred vs Expected dn/ds, Inferred dn/ds Weighted by Substitutions")
+
+ggplot(fullDat[!is.na(fullDat$simpleDnDs),], aes(x=simpleDnDs, y=Expected)) + 
+  geom_point() +
+  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
+  xlab("\nInferred") + 
+  ylab("Expected\n") + 
+  theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
+  scale_x_continuous(breaks=seq(0, max(fullDat$simpleDnDs), 0.5), limits=c(0, max(fullDat$simpleDnDs, fullDat$Expected))) +
+  scale_y_continuous(breaks=seq(0, max(fullDat$simpleDnDs), 0.5), limits=c(0, max(fullDat$simpleDnDs, fullDat$Expected))) +
+  coord_fixed(ratio=1) + 
+  ggtitle("Inferred vs Expected dn/ds, Inferred dn/ds Weighted by Substitutions")
+
+ggplot(fullDat[!is.na(fullDat$dNdSWeightBySubst),], aes(x=dNdSWeightBySubst, y=Expected)) + 
   geom_point() +
   geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
   xlab("\nInferred") + 
@@ -92,25 +113,14 @@ ggplot(fullDat, aes(x=aveDnDs, y=Expected)) +
   coord_fixed(ratio=1) + 
   ggtitle("Inferred vs Expected dn/ds, Inferred dn/ds Weighted by Substitutions")
 
-ggplot(fullDat, aes(x=dNdSWeightBySubst, y=Expected)) + 
+ggplot(fullDat[!is.na(fullDat$dNdSWeightByReads),], aes(x=dNdSWeightByReads, y=Expected)) + 
   geom_point() +
   geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
   xlab("\nInferred") + 
   ylab("Expected\n") + 
   theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
-  scale_x_continuous(breaks=seq(0, 3, 0.5), limits=c(0, max(fullDat$dNdSWeightBySubst, fullDat$Expected))) +
-  scale_y_continuous(breaks=seq(0, 3, 0.5), limits=c(0, max(fullDat$dNdSWeightBySubst, fullDat$Expected))) +
-  coord_fixed(ratio=1) + 
-  ggtitle("Inferred vs Expected dn/ds, Inferred dn/ds Weighted by Substitutions")
-
-ggplot(fullDat, aes(x=dNdSWeightByReads, y=Expected)) + 
-  geom_point() +
-  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
-  xlab("\nInferred") + 
-  ylab("Expected\n") + 
-  theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
-  scale_x_continuous(breaks=seq(0, 3, 0.5), limits=c(0, max(fullDat$dNdSWeightBySubst, fullDat$Expected))) +
-  scale_y_continuous(breaks=seq(0, 3, 0.5), limits=c(0, max(fullDat$dNdSWeightBySubst, fullDat$Expected))) +
+  scale_x_continuous(breaks=seq(0, 3, 0.5), limits=c(0, max(fullDat$dNdSWeightByReads, fullDat$Expected))) +
+  scale_y_continuous(breaks=seq(0, 3, 0.5), limits=c(0, max(fullDat$dNdSWeightByReads, fullDat$Expected))) +
   coord_fixed(ratio=1) + 
   ggtitle("Inferred vs Expected dn/ds, Inferred dn/ds Weighted by Substitutions")
 
@@ -138,14 +148,15 @@ ggplot(fullDat, aes(x=multisitedNdSWeightBySubst, y=ExpectedMultisite)) +
 fullDatBySource <- reshape2:::melt.data.frame(data=fullDat, na.rm = FALSE, id.vars=c("Ref", "Site"),
                                               measure.vars=c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", 
                                                              "multisiteAvedNdS", "multisitedNdSWeightBySubst", 
-                                                             "Expected", "ExpectedMultisite"),
+                                                             "Expected", "ExpectedMultisite", "simpleDnDs"),
                                               variable.name="source", value.name="dnds")
 head(fullDatBySource)
 tail(fullDatBySource)
 str(fullDatBySource)
 summary(fullDatBySource)
-ggplot(fullDatBySource[fullDatBySource$source %in% c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", "Expected"),], 
-       aes(x=Site, y=dnds, color=source) ) + 
+#ggplot(fullDatBySource[fullDatBySource$source %in% c("aveDnDs", "simpleDnDs", "Expected"),], 
+ggplot(fullDatBySource[fullDatBySource$source %in% c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", "simpleDnDs", "Expected"),], 
+       aes(x=Site, y=dnds, color=source, size=2) ) + 
   geom_smooth() + 
   xlab("Codon Site") + 
   ylab("dN/dS") + 
@@ -155,7 +166,8 @@ ggplot(fullDatBySource[fullDatBySource$source %in% c("aveDnDs", "dNdSWeightBySub
 
 #' **Line Plot of Site dn/ds across the genome**
 #' 
-ggplot(fullDatBySource[fullDatBySource$source %in% c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", "Expected"),], 
+#+ fig.width=20
+ggplot(fullDatBySource[fullDatBySource$source %in% c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", "simpleDnDs", "Expected"),], 
        aes(x=Site, y=dnds, color=source) ) + 
   geom_line() + 
   xlab("Codon Site Along Genome") + 
@@ -166,7 +178,8 @@ ggplot(fullDatBySource[fullDatBySource$source %in% c("aveDnDs", "dNdSWeightBySub
 
 
 #' **Smoothed Scatterplot of MultiSite dn/ds across the genome**
-#+ fig.width=28
+#' 
+#+ fig.width=20
 ggplot(fullDatBySource[fullDatBySource$source %in% c("multisiteAvedNdS", "multisitedNdSWeightBySubst", "ExpectedMultisite"),], 
        aes(x=Site, y=dnds, color=source) ) + 
   geom_smooth() + 
@@ -178,6 +191,7 @@ ggplot(fullDatBySource[fullDatBySource$source %in% c("multisiteAvedNdS", "multis
 
 #' **Line Plot of MultiSite dn/ds across the genome**
 #' 
+#+ fig.width=20
 ggplot(fullDatBySource[fullDatBySource$source %in% c("multisiteAvedNdS", "multisitedNdSWeightBySubst", "ExpectedMultisite"),], 
        aes(x=Site, y=dnds, color=source) ) + 
   geom_line() + 
@@ -188,6 +202,8 @@ ggplot(fullDatBySource[fullDatBySource$source %in% c("multisiteAvedNdS", "multis
         legend.text=element_text(size=24), legend.title=element_blank())
 
 #' **Point Plot of dn/ds across the genome**
+#' 
+#+ fig.width=20
 ggplot(fullDatBySource, aes(x=Site, y=dnds, color=source) ) + geom_point() + 
   xlab("Codon Site Along Genome") + 
   ylab("dN/dS") + 
@@ -195,42 +211,48 @@ ggplot(fullDatBySource, aes(x=Site, y=dnds, color=source) ) + geom_point() +
 
 
 #' **Plot the Codon Coverage across genome**
-#+ fig.width=24
+#' 
+#+ fig.width=20
 ggplot(actual_dnds, aes(x=Site, y=Codons) ) + geom_line() + 
   xlab("Codon Site Along Genome") + 
   ylab("Sequences with Unambiguous Codons") + 
   ggtitle("Codon Coverage Across Genome")
 
 #' **Plot the nonsynonymous substitutions across genome**
-#+ fig.width=24
+#' 
+#+ fig.width=20
 ggplot(actual_dnds, aes(x=Site, y=NonSyn) ) + geom_line() + 
   xlab("Codon Site Along Genome") + 
   ylab("Nonsynonymous Substitutions") + 
   ggtitle("Total Genome Nonsynonymous Substitutions Across Population")
 
 #' **Plot the synonymous substitutions across genome**
-#+ fig.width=24
+#' 
+#+ fig.width=20
 ggplot(actual_dnds, aes(x=Site, y=Syn) ) + geom_line() + 
   xlab("Codon Site Along Genome") + 
   ylab("Synonymous Substitutions") + 
   ggtitle("Total Genome Synonymous Substitutions Across Population")
 
 #' **Plot the substitutions across genome**
-#+ fig.width=24
+#' 
+#+ fig.width=20
 ggplot(actual_dnds, aes(x=Site, y=Subst) ) + geom_line() + 
   xlab("Codon Site Along Genome") + 
   ylab("Substitutions") + 
   ggtitle("Total Genome Substitutions Across Population")
 
 #' **Plot the Windows across genome**
-#+ fig.width=24
+#' 
+#+ fig.width=20
 ggplot(actual_dnds, aes(x=Site, y=Windows) ) + geom_line() + 
   xlab("Codon Site Along Genome") + 
   ylab("Windows") + 
   ggtitle("Windows Across Genome")
 
 #' **Plot the expected mutation rate across the genome**
-#+ fig.width=24
+#' 
+#+ fig.width=20
 ggplot(expected_dnds, aes(x=Site, y=Scaling_factor*BASE_MUTATION_RATE) ) + geom_line() + 
   xlab("Codon Site Along Genome") + 
   ylab("Mutation Rate Scaling Factor") + 
@@ -238,7 +260,8 @@ ggplot(expected_dnds, aes(x=Site, y=Scaling_factor*BASE_MUTATION_RATE) ) + geom_
   ggtitle("Mutation Rate Along Genome")
 
 #' **Plot the Expected Omega rate across the genome**
-#+ fig.width=24
+#' 
+#+ fig.width=20
 ggplot(expected_dnds, aes(x=Site, y=Omega) ) + geom_line() + 
   xlab("Codon Site Along Genome") + 
   ylab("dn/dS Expected") + 
@@ -249,51 +272,62 @@ htest <-  wilcox.test(fullDat$dNdSWeightBySubst, fullDat$Expected, paired=TRUE, 
 print (htest)
 
 
-#+ **Find how correlated the actual ave dn/ds  vs expected dn/ds are**
+#' **Find how correlated the actual ave dn/ds  vs expected dn/ds are**
 dnds_cor <- cor(fullDat$aveDnDs, fullDat$Expected, method="spearman", use="complete.obs")
 print(dnds_cor)
 
-#+ **Find how correlated the actual dn/ds weighted by substitutions vs expected dn/ds are**
+
+#' **Find how correlated the actual simple  dn/ds  vs expected dn/ds are**
+dnds_cor <- cor(fullDat$simpleDnDs, fullDat$Expected, method="spearman", use="complete.obs")
+print(dnds_cor)
+
+
+#' **Find how correlated the actual dn/ds weighted by substitutions vs expected dn/ds are**
 dnds_cor <- cor(fullDat$dNdSWeightBySubst, fullDat$Expected, method="spearman", use="complete.obs")
 print(dnds_cor)
 
-#+ **Find how correlated the actual dn-ds vs expected dn/ds are**
+#' **Find how correlated the actual dn-ds vs expected dn/ds are**
 dnds_cor <- cor(fullDat$dN_minus_dS, fullDat$Expected, method="spearman", use="complete.obs")
 print(dnds_cor)
 
-#+ **Find how correlated the actual dn/ds weighted by reads vs expected dn/ds are**
+#' **Find how correlated the actual dn/ds weighted by reads vs expected dn/ds are**
 dnds_cor <- cor(fullDat$dNdSWeightByReads, fullDat$Expected, method="spearman", use="complete.obs")
 print(dnds_cor)
 
-#+ **Find how correlated the actual dn/ds smoothed over surrounding sites vs expected dn/ds are**
+#' **Find how correlated the actual dn/ds smoothed over surrounding sites vs expected dn/ds are**
 dnds_cor <- cor(fullDat$multisiteAvedNdS, fullDat$ExpectedMultisite, method="spearman", use="complete.obs")
 print(dnds_cor)
 
-#+ **Find how correlated the actual dn/ds smoothed over surrounding sites weighted by substitutions vs expected dn/ds are**
+# **Find how correlated the actual dn/ds smoothed over surrounding sites weighted by substitutions vs expected dn/ds are**
 dnds_cor <- cor(fullDat$multisitedNdSWeightBySubst, fullDat$ExpectedMultisite, method="spearman", use="complete.obs")
 print(dnds_cor)
 
 
-#+ **Find how concordance correlated the actual ave dn/ds  vs expected dn/ds are**
+#' **Find how concordance correlated the actual ave dn/ds  vs expected dn/ds are**
 dnds_ccc <- epi.ccc(fullDat$aveDnDs, fullDat$Expected)
 print(dnds_ccc$rho.c)
 
-#+ **Find how concordance correlated the actual dn/ds weighted by substitutions vs expected dn/ds are**
+#' **Find how concordance correlated the actual simple  dn/ds  vs expected dn/ds are**
+dnds_ccc <- epi.ccc(fullDat$simpleDnDs, fullDat$Expected)
+print(dnds_ccc$rho.c)
+
+
+#' **Find how concordance correlated the actual dn/ds weighted by substitutions vs expected dn/ds are**
 dnds_ccc <-  epi.ccc(fullDat$dNdSWeightBySubst, fullDat$Expected)
 print(dnds_ccc$rho.c)
 
-#+ **Find how concordance correlated the actual dn-ds vs expected dn/ds are**
+#' **Find how concordance correlated the actual dn-ds vs expected dn/ds are**
 dnds_ccc <-  epi.ccc(fullDat$dN_minus_dS, fullDat$Expected)
 print(dnds_ccc$rho.c)
 
-#+ **Find how concordance correlated the actual dn/ds weighted by reads vs expected dn/ds are**
+#' **Find how concordance correlated the actual dn/ds weighted by reads vs expected dn/ds are**
 dnds_ccc <-  epi.ccc(fullDat$dNdSWeightByReads, fullDat$Expected)
 print(dnds_ccc$rho.c)
 
-#+ **Find how concordance correlated the actual dn/ds smoothed over surrounding sites vs expected dn/ds are**
+#' **Find how concordance correlated the actual dn/ds smoothed over surrounding sites vs expected dn/ds are**
 dnds_ccc <-  epi.ccc(fullDat$multisiteAvedNdS, fullDat$ExpectedMultisite)
 print(dnds_ccc$rho.c)
 
-#+ **Find how concordance correlated the actual dn/ds smoothed over surrounding sites weighted by substitutions vs expected dn/ds are**
+#' **Find how concordance correlated the actual dn/ds smoothed over surrounding sites weighted by substitutions vs expected dn/ds are**
 dnds_ccc <-  epi.ccc(fullDat$multisitedNdSWeightBySubst, fullDat$ExpectedMultisite)
 print(dnds_ccc$rho.c)
