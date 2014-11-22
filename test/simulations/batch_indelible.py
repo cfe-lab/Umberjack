@@ -6,13 +6,14 @@ import sys
 import os
 
 treefile = sys.argv[1]
+global_scaling_factors = sys.argv[2].split(",")
 handle = open(treefile, 'rU')
 
 tree_string = handle.readline()
 handle.close()
 
 # factor to stretch entire tree by (mutation rate)
-global_scaling_factors = [20.0, 50.0]#[1.0, 2.0, 5.0, 10.0]
+#global_scaling_factors = [20.0, 50.0]#[1.0, 2.0, 5.0, 10.0]
 #omegas = [0.01, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0]
 
 # Gamma(shape=1.5, rate=3), histogram with 50 breaks
