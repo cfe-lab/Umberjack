@@ -61,7 +61,36 @@ class _SiteDnDsInfo:
         self.total_nonsyn_subs += nonsyn_subs
         self.total_exp_syn_subs += exp_syn_subs
         self.total_exp_nonsyn_subs += exp_nonsyn_subs
-        self.window_dnds_subs.append([dnds, syn_subs + nonsyn_subs, reads])
+        self.window_dnds_subs.append([dnds, syn_subs, nonsyn_subs, reads])
+
+    def get_simple_ave_dnds_weighted_by_reads(self):
+        """
+        Finds average of (observed Nonsyn substitutions/observedsynonumous substitions) for all windows covering this site.
+        Does not normalize by expected subst.
+        Weight average by bnongap reads in window
+        :return:
+        """
+        if not self.window_dnds_subs:
+            return None
+        else:
+            total_weighted_site_dnds_over_all_windows = 0.0
+            total_reads_at_site_over_all_windows = 0.0
+            total_windows = 0.0
+            # for (site_dnds, site_syn_subst, site_nonsyn_subst, reads) in self.window_dnds_subs:
+            #     if site_syn_subst != 0:   # sometimes there are zero observed synonymous substitutions.  Thus dn/ds = None.
+            #         total_weighted_site_dnds_over_all_windows += ((site_nonsyn_subst/site_syn_subst) * reads)
+            #         total_reads_at_site_over_all_windows += reads
+            # if not total_reads_at_site_over_all_windows:
+            #     return None
+            # return total_weighted_site_dnds_over_all_windows / total_reads_at_site_over_all_windows
+            for (site_dnds, site_syn_subst, site_nonsyn_subst, reads) in self.window_dnds_subs:
+                if site_syn_subst != 0:   # sometimes there are zero observed synonymous substitutions.  Thus dn/ds = None.
+                    total_weighted_site_dnds_over_all_windows += (site_nonsyn_subst/site_syn_subst)
+                    total_windows += 1
+            if not total_windows:
+                return None
+            return total_weighted_site_dnds_over_all_windows / total_windows
+
 
     def get_weighted_ave_dnds(self):
         """
@@ -74,10 +103,10 @@ class _SiteDnDsInfo:
         else:
             total_weighted_site_dnds_over_all_windows = 0.0
             total_subs_at_site_over_all_windows = 0
-            for (site_dnds, subs_at_site_in_window, reads) in self.window_dnds_subs:
+            for (site_dnds, site_syn_subst, site_nonsyn_subst, reads) in self.window_dnds_subs:
                 if not site_dnds is None:   # sometimes there are zero observed synonymous substitutions.  Thus dn/ds = None.
-                    total_weighted_site_dnds_over_all_windows += (site_dnds * subs_at_site_in_window)
-                    total_subs_at_site_over_all_windows += subs_at_site_in_window
+                    total_weighted_site_dnds_over_all_windows += (site_dnds * (site_syn_subst+site_nonsyn_subst))
+                    total_subs_at_site_over_all_windows += (site_syn_subst+site_nonsyn_subst)
             if not total_subs_at_site_over_all_windows:
                 return None
             return total_weighted_site_dnds_over_all_windows / total_subs_at_site_over_all_windows
@@ -85,7 +114,7 @@ class _SiteDnDsInfo:
     def get_weighted_byreads_ave_dnds(self):
         """
         Return weighted average dN/dS from all windows for the codon site.
-        Average weighted by number of substitutions for the codon site in the window.
+        Average weighted by number of non-gap reads for the codon site in the window.
         :rtype : float
         """
         if not self.window_dnds_subs:
@@ -93,7 +122,7 @@ class _SiteDnDsInfo:
         else:
             total_weighted_site_dnds_over_all_windows = 0.0
             total_reads_at_site_over_all_windows = 0
-            for (site_dnds, subs_at_site_in_window, reads_in_window) in self.window_dnds_subs:
+            for (site_dnds, site_syn_subst, site_nonsyn_subst, reads_in_window) in self.window_dnds_subs:
                 # sometimes there are zero observed synonymous substitutions, thus dn/ds = None.  Don't include those in average dn/ds
                 if not site_dnds is None:
                     total_weighted_site_dnds_over_all_windows += (site_dnds * reads_in_window)
@@ -200,6 +229,15 @@ class SeqDnDsInfo:
                                               syn_subs=syn_subs, nonsyn_subs=nonsyn_subs,
                                               exp_syn_subs=exp_syn_subs, exp_nonsyn_subs=exp_nonsyn_subs)
 
+
+    def get_site_simple_ave_dnds_weighted_by_reads(self, site_1based):
+        """
+        simple average(non syns / syn)  weighted by total sub at site
+        :param site_1based:
+        :return:
+        """
+        return self.dnds_seq[site_1based-1].get_simple_ave_dnds_weighted_by_reads()
+
     def get_site_ave_dnds(self, site_1based):
         """
         Get the average dN/dS at the codon site over all windows.
@@ -302,7 +340,7 @@ class SeqDnDsInfo:
         """
         return self.dnds_seq[site_1based-1].get_weighted_byreads_ave_dnds()
 
-    def get_multisite_weighted_ave_dnds(self, site_start_1based, site_end_1based):
+    def get_multisite_weighted_bysubst_ave_dnds(self, site_start_1based, site_end_1based):
         """
         Gets the average dN/dS weighted by substiutions across a range of codon sites over all windows covering the codon range
         :param site_start_1based:
@@ -325,9 +363,9 @@ class SeqDnDsInfo:
 
         return total_dnds / total_sites
 
-    def get_multisite_ave_dnds(self, site_start_1based, site_end_1based):
+    def get_multisite_weighted_byreads_ave_dnds(self, site_start_1based, site_end_1based):
         """
-        Gets the average dN/dS across a range of codon sites over all windows covering the codon range.
+        Gets the average dN/dS weighted by reads across a range of codon sites over all windows covering the codon range
         :param site_start_1based:
         :param site_end_1based:
         :return:
@@ -336,22 +374,57 @@ class SeqDnDsInfo:
         if site_start_1based > site_end_1based:
             raise ValueError("Codon range start must be before range end")
 
-        total_nonsyn = 0.0
-        total_syn = 0.0
-        total_exp_nonsyn = 0.0
-        total_exp_syn = 0.0
-
-
+        total_sites = 0.0
         for site_0based in range(site_start_1based-1, site_end_1based):
-            total_nonsyn += self.dnds_seq[site_0based].total_nonsyn_subs
-            total_syn += self.dnds_seq[site_0based].total_syn_subs
-            total_exp_nonsyn += self.dnds_seq[site_0based].total_exp_nonsyn_subs
-            total_exp_syn += self.dnds_seq[site_0based].total_exp_syn_subs
+            site_weighted_ave_dnds = self.dnds_seq[site_0based].get_weighted_ave_dnds()
+            if site_weighted_ave_dnds is not None:
+                total_dnds += site_weighted_ave_dnds
+                total_sites += 1
 
-        if total_syn == 0 or total_exp_nonsyn == 0:
+        if not total_sites:
+            return None
+
+        return total_dnds / total_sites
+
+    def get_multisite_ave_dnds(self, site_start_1based, site_end_1based):
+        """
+        Finds the average for the set of site-average dN/dS in the specified codon range.
+        :param site_start_1based:
+        :param site_end_1based:
+        :return:
+        """
+        total_dnds = 0.0
+        if site_start_1based > site_end_1based:
+            raise ValueError("Codon range start must be before range end")
+
+        # total_nonsyn = 0.0
+        # total_syn = 0.0
+        # total_exp_nonsyn = 0.0
+        # total_exp_syn = 0.0
+        #
+        #
+        # for site_0based in range(site_start_1based-1, site_end_1based):
+        #     total_nonsyn += self.dnds_seq[site_0based].total_nonsyn_subs
+        #     total_syn += self.dnds_seq[site_0based].total_syn_subs
+        #     total_exp_nonsyn += self.dnds_seq[site_0based].total_exp_nonsyn_subs
+        #     total_exp_syn += self.dnds_seq[site_0based].total_exp_syn_subs
+        #
+        # if total_syn == 0 or total_exp_nonsyn == 0:
+        #     return None
+        # else:
+        #     return (total_nonsyn / total_exp_nonsyn) * (total_exp_syn / total_syn)
+        total_site_ave_dnds = 0.0
+        total_sites = 0
+        for site_0based in range(site_start_1based-1, site_end_1based):
+            site_ave_dnds = self.dnds_seq[site_0based].get_ave_dnds()
+            if site_ave_dnds is not None:
+                total_site_ave_dnds += site_ave_dnds
+                total_sites += 1
+
+        if total_sites == 0:
             return None
         else:
-            return (total_nonsyn / total_exp_nonsyn) * (total_exp_syn / total_syn)
+            return total_site_ave_dnds / total_sites
 
 
 def __get_window_seq(seq, start_pos, end_pos, breadth_thresh=0.0):
@@ -538,7 +611,7 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_csv_file
         writer = csv.DictWriter(dnds_fh,
                                 fieldnames=["Ref", "Site", "aveDnDs", "dNdSWeightBySubst", "dN_minus_dS", "Windows",
                                             "Codons", "NonSyn", "Syn", "Subst", "dNdSWeightByReads",
-                                            "multisiteAvedNdS", "multisitedNdSWeightBySubst"])
+                                            "multisiteAvedNdS", "multisitedNdSWeightBySubst", "simpleDnDs"])
 
         writer.writeheader()
         for site in range(1, seq_dnds_info.get_seq_len() + 1):
@@ -558,7 +631,9 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, pvalue_thresh, output_csv_file
             smooth_dist_start = max(site-smooth_dist, 1)
             smooth_dist_end = min(site+smooth_dist, seq_dnds_info.get_seq_len())
             outrow["multisiteAvedNdS"] = seq_dnds_info.get_multisite_ave_dnds(site_start_1based=smooth_dist_start, site_end_1based=smooth_dist_end)
-            outrow["multisitedNdSWeightBySubst"] = seq_dnds_info.get_multisite_weighted_ave_dnds(site_start_1based=smooth_dist_start, site_end_1based=smooth_dist_end)
+            outrow["multisitedNdSWeightBySubst"] = seq_dnds_info.get_multisite_weighted_bysubst_ave_dnds(site_start_1based=smooth_dist_start, site_end_1based=smooth_dist_end)
+            outrow["simpleDnDs"] = seq_dnds_info.get_site_simple_ave_dnds_weighted_by_reads(site_1based=site)
+
 
             writer.writerow(outrow)
     return seq_dnds_info
