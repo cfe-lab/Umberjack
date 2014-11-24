@@ -1,7 +1,6 @@
 import slice_miseq
 import sam_handler
 import os, sys
-import subprocess
 import Utility
 import logging
 import argparse
@@ -161,9 +160,9 @@ def tabulate_results(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
         LOGGER.debug("Done all windows  for ref " + ref)
 
 
-def eval_windows_async(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
+def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
                        end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, pvalue, threads_per_window,
-                       concurrent_windows, output_csv_filename=None, mode="DNDS", window_slide=3, smooth_dist=50,
+                       concurrent_windows, output_csv_filename=None, mode="DNDS", window_slide=3, smooth_dist=10,
                        hyphy_exe=hyphy.HYPHY_EXE, hyphy_basedir=hyphy.HYPHY_BASEDIR, fastree_exe=fasttree.FASTTREE_EXE):
     """
     Launch a separate process to analyze each window.
@@ -172,7 +171,6 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, rea
     The maximum number of CPU cores required on a single node = threads_per_window x concurrent_windows.
 
     :param str ref:  reference name
-    :param int ref_len:  length of reference in nucleotide bases
     :param str sam_filename:  full filepath to sam file of read alignments against the reference
     :param str out_dir:  output directory
     :param int map_qual_cutoff:  mapping quality threshold below which alignments are thrown out
@@ -197,10 +195,13 @@ def eval_windows_async(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, rea
 
     pool = pool_traceback.LoggingPool(processes=concurrent_windows)
 
+    ref_len = sam_handler.get_ref_len(sam_filename, ref)
+
     # Create a pseudo multiple-sequence aligned fasta file
     msa_fasta_filename = create_full_msa_fasta(sam_filename=sam_filename, out_dir=out_dir, ref=ref, ref_len=ref_len,
                                                mapping_cutoff=map_qual_cutoff, read_qual_cutoff=read_qual_cutoff,
                                                max_prop_N=max_prop_n)
+
 
     # All nucleotide positions are 1-based
     last_window_start_nucpos = min(end_nucpos, ref_len - window_size + 1)
@@ -261,7 +262,7 @@ class WindowReplicaInfo:
 
 def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
                      end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, pvalue, threads_per_window,
-                     output_csv_filename=None, mode="DNDS", window_slide=3, smooth_dist=50, hyphy_exe=hyphy.HYPHY_EXE,
+                     output_csv_filename=None, mode="DNDS", window_slide=3, smooth_dist=10, hyphy_exe=hyphy.HYPHY_EXE,
                      hyphy_basedir=hyphy.HYPHY_BASEDIR, fastree_exe=fasttree.FASTTREE_EXE):
     """
     Launch a separate process to analyze each window via MPI.  Similar to eval_windows_async, but uses MPI.
@@ -287,7 +288,7 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
     :param str fastree_exe:  full filepath to FastTreeMP executable
     """
 
-    # from mpi4py import MPI
+    from mpi4py import MPI  # TODO:  remove this before checking in
 
     try:
         comm = MPI.COMM_WORLD
@@ -340,8 +341,8 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
                     LOGGER.debug("Sending window_args to replica=" + str(replica_rank) + " " + str_window_args)
 
 
-                    send_request = comm.isend(obj=window_args, dest=slave_rank, tag=TAG_WORK)  # non-blocking
-                    rcv_request = comm.irecv(dest=slave_rank, tag=MPI.ANY_TAG)  # non-blocking
+                    send_request = comm.isend(obj=window_args, dest=replica_rank, tag=TAG_WORK)  # non-blocking
+                    rcv_request = comm.irecv(dest=replica_rank, tag=MPI.ANY_TAG)  # non-blocking
 
                     # MPI.Comm.isend() stores a copy of the pickled (i.e. serialized) windows_args dict
                     # in the buffer of a new MPI.Request object  (send_request)
@@ -445,9 +446,9 @@ def main():
                         help="threads allotted per window.")
     parser.add_argument("--concurrent_windows", type=int, default=1,
                         help="Max number of windows to process concurrently. Ignored when --mpi is defined.")
-    parser.add_argument("--output_dnds_tsv_filename", default='dnds.tsv',
-                        help="full filepath of final tab-separated values file containing selection information for"
-                             " each codon site in the reference from averaged over multiple windows")
+    parser.add_argument("--output_csv_filename", default='dnds.tsv',
+                        help="In DNDS mode, the full filepath of final tab-separated values file containing selection information for"
+                             " each codon site in the reference from averaged over multiple windows.")
     parser.add_argument("--hyphy_exe", help="full filepath of HYPHYMP executable.  Default: taken from PATH")
     parser.add_argument("--hyphy_basedir",
                         help="full filepath of HyPhy base directory containing template batch files.  Default:"

@@ -370,3 +370,15 @@ def get_ave_coverage_from_bam (bam_filename, ref, pos_start, pos_end):
 
     ave_coverage = round(float(total_coverage) / (pos_end - pos_start + 1), 0)
     return ave_coverage
+
+
+def get_ref_len(sam_filename, ref):
+    with open(sam_filename, 'rU') as fh:
+        for line in fh:
+            if line.startswith("@SQ"):
+                fields = line.split("\t")
+                if line.find("SN:" + ref) >= 0:
+                    line_reflen_match = re.search(r"\tLN:(\d+)", line)
+                    return int(line_reflen_match.group(1))
+
+    return None
