@@ -1,16 +1,15 @@
-import slice_miseq
-import sam_handler
-import os, sys
-import Utility
+import os
+import sys
 import logging
 import argparse
-import pool_traceback
 import traceback
+
+from sam import sam_handler
+import slice_miseq
+import Utility
+import pool_traceback
 import hyphy.hyphy_handler as hyphy
 import fasttree.fasttree_handler as fasttree
-
-
-
 
 
 LOGGER = logging.getLogger(__name__)

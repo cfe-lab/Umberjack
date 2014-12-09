@@ -1,6 +1,7 @@
 import re
 import logging
 import sys
+import sam_constants
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
@@ -10,10 +11,7 @@ console_handler.setFormatter(formatter)
 LOGGER.addHandler(console_handler)
 
 
-PHRED_SANGER_OFFSET = 33
-CIGAR_RE = re.compile('[0-9]+[MIDNSHPX=]')
-SEQ_PAD_CHAR = '-'
-QUAL_PAD_CHAR = ' '     # This is the ASCII character right blow lowest PHRED quality score in Sanger qualities  (-1)
+
 
 
 class SamRecord:
@@ -79,13 +77,13 @@ class SamRecord:
 
         # Modify the slice start so that it starts at or after the sequence start
         if slice_start_wrt_ref_1based is not None:
-            slice_start_wrt_ref_1based = max(self.get_seq_start_wrt_ref(), slice_start_wrt_ref_1based,)
+            slice_start_wrt_ref_1based = max(self.get_seq_start_wrt_ref(), slice_start_wrt_ref_1based)
         else:
             slice_start_wrt_ref_1based = self.get_seq_start_wrt_ref()
 
         # Modify the slice end so that it ends at or before the sequence end
         if slice_end_wrt_ref_1based is not None:
-            slice_end_wrt_ref_1based = min(self.get_seq_end_wrt_ref(), slice_end_wrt_ref_1based,)
+            slice_end_wrt_ref_1based = min(self.get_seq_end_wrt_ref(), slice_end_wrt_ref_1based)
         else:
             slice_end_wrt_ref_1based = self.get_seq_end_wrt_ref()
 
@@ -101,8 +99,8 @@ class SamRecord:
         if do_mask_low_qual:
             masked_seq = ""
             for i, base in enumerate(result_seq):
-                base_qual = ord(result_qual[i])-PHRED_SANGER_OFFSET
-                if base != SEQ_PAD_CHAR and base_qual < q_cutoff:
+                base_qual = ord(result_qual[i])-sam_constants.PHRED_SANGER_OFFSET
+                if base != sam_constants.SEQ_PAD_CHAR and base_qual < q_cutoff:
                     masked_seq += "N"
                 else:
                     masked_seq += base
@@ -124,7 +122,7 @@ class SamRecord:
                     if do_mask_low_qual:
                         masked_insert_seq = ""
                         for i, ichar in enumerate(insert_seq):
-                            iqual = ord(insert_qual[i])-PHRED_SANGER_OFFSET
+                            iqual = ord(insert_qual[i])-sam_constants.PHRED_SANGER_OFFSET
                             if iqual >= q_cutoff:  # Only include inserts with high quality
                                 masked_insert_seq += ichar
                     else:
@@ -138,7 +136,7 @@ class SamRecord:
             result_seq_with_inserts += result_seq[last_insert_pos_0based_wrt_result_seq+1:len(result_seq)]
             result_qual_with_inserts += result_qual[last_insert_pos_0based_wrt_result_seq+1:len(result_qual)]
 
-            LOGGER.debug("qname=" + self.qname + " total_insert_1mate_only=0" +
+            LOGGER.debug("qname=" + self.qname + " total_insert_1mate_only=" + str(total_inserts) +
                          " total_nonconflict_inserts=0" +
                          " total_conflict_inserts=0" +
                          " total_inserts=" + str(total_inserts))
@@ -149,9 +147,9 @@ class SamRecord:
         if do_pad_wrt_ref:
             slice_len = slice_end_wrt_ref_1based - slice_start_wrt_ref_1based + 1
             left_pad_len = slice_start_wrt_ref_1based  - 1
-            right_pad_len = self.ref_len - left_pad_len - slice_len
-            padded_seq = (SEQ_PAD_CHAR * left_pad_len) + self.nopad_noinsert_seq + (SEQ_PAD_CHAR * right_pad_len)
-            padded_qual = (QUAL_PAD_CHAR * left_pad_len) + self.nopad_noinsert_seq + (QUAL_PAD_CHAR * right_pad_len)
+            right_pad_len = self.ref_len - slice_end_wrt_ref_1based
+            padded_seq = (sam_constants.SEQ_PAD_CHAR * left_pad_len) + result_seq + (sam_constants.SEQ_PAD_CHAR * right_pad_len)
+            padded_qual = (sam_constants.QUAL_PAD_CHAR * left_pad_len) + result_qual + (sam_constants.QUAL_PAD_CHAR * right_pad_len)
 
             result_seq = padded_seq
             result_qual = padded_qual
@@ -190,14 +188,10 @@ class SamRecord:
         self.ref_pos_to_insert_seq_qual = {}
         self.ref_align_len = 0
         self.seq_align_len = 0
-        tokens = CIGAR_RE.findall(self.cigar)
+        tokens = sam_constants.CIGAR_RE.findall(self.cigar)
 
-        # Account for removing soft clipped bases on left
-        shift = 0
-        if tokens[0].endswith('S'):
-            shift = int(tokens[0][:-1])
-        pos_wrt_seq_0based = 0  # position wrt sequence
-        pos_wrt_ref_1based = self.pos  # position wrt
+        pos_wrt_seq_0based = 0  # position with respect to sequence, 0based
+        pos_wrt_ref_1based = self.pos  # position with respect to reference, 1based
         for token in tokens:
             length = int(token[:-1])
             # Matching sequence: carry it over
@@ -210,8 +204,8 @@ class SamRecord:
                 self.seq_align_len += length
             # Deletion relative to reference: pad with gaps
             elif token[-1] == 'D' or token[-1] == 'P' or token[-1] == 'N':
-                self.nopad_noinsert_seq += SEQ_PAD_CHAR*length
-                self.nopad_noinsert_qual += QUAL_PAD_CHAR*length  # Assign fake placeholder score (Q=-1)
+                self.nopad_noinsert_seq += sam_constants.SEQ_PAD_CHAR*length
+                self.nopad_noinsert_qual += sam_constants.QUAL_PAD_CHAR*length  # Assign fake placeholder score (Q=-1)
                 self.ref_align_len += length
             # Insertion relative to reference: skip it (excise it)
             elif token[-1] == 'I':
