@@ -2,6 +2,7 @@ import re
 import logging
 import sys
 import sam_constants
+import align_stats
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
@@ -54,7 +55,7 @@ class SamRecord:
 
 
     def get_seq_qual(self, do_pad_wrt_ref=False, do_pad_wrt_slice=False, do_mask_low_qual=False, q_cutoff=10,
-                     slice_start_wrt_ref_1based=None, slice_end_wrt_ref_1based=None, do_insert_wrt_ref=False):
+                     slice_start_wrt_ref_1based=None, slice_end_wrt_ref_1based=None, do_insert_wrt_ref=False, stats=None):
         """
         Gets the sequence for the sam record.
         :param do_pad_wrt_slice: Ignored if do_pad_wrt_ref=True.  If True, then pads with gaps with respect to the slice.
@@ -66,21 +67,24 @@ class SamRecord:
         :param int q_cutoff:  quality cutoff
         :param int slice_start_wrt_ref_1based:  If None, then whole sequence returned.   Otherwise, the slice 1-based start position with respect to the reference.
         :param int slice_end_wrt_ref_1based:  If None, then whole sequence returned.  Otherwise the slice end 1-based position with respect to the reference.
+        :param AlignStats stats:  keeps track of stats.  Only counts inserts and quality if you allow inserts and mask quality.
         :return tuple (str, str):  (sequence, quality)
         """
+        if not stats:
+            stats = align_stats.AlignStats()
+
         # NB:  the original seq from sam file includes softclips.  Remove them with apply_cigar()
         if not self.nopad_noinsert_seq or not self.nopad_noinsert_qual:
             self.__parse_cigar()
+
+
+        result_seq = ""
+        result_qual = ""
 
         if slice_start_wrt_ref_1based and slice_end_wrt_ref_1based and slice_start_wrt_ref_1based > slice_end_wrt_ref_1based:
             raise ValueError("slice start must be <= slice end")
         elif (not slice_start_wrt_ref_1based and slice_end_wrt_ref_1based) or (slice_start_wrt_ref_1based and not slice_end_wrt_ref_1based):
             raise  ValueError("Either define both slice start and end or don't define either")
-
-        result_seq = self.nopad_noinsert_seq
-        result_qual = self.nopad_noinsert_qual
-
-        # Slice
 
         # Does slice start after the sequence ends or does the slice end before the sequence starts?
         # Then just return empty string or padded gaps wrt ref or slice as desired.
@@ -94,19 +98,29 @@ class SamRecord:
                 slice_len = slice_end_wrt_ref_1based - slice_start_wrt_ref_1based + 1
                 result_seq = sam_constants.SEQ_PAD_CHAR * slice_len
                 result_qual = sam_constants.QUAL_PAD_CHAR * slice_len
-            return result_seq, result_qual
+            return result_seq, result_qual, stats
 
-        # The sequence overlaps the slice.
-        # Modify the slice start so that it starts at or after the sequence start.
+        # If not specifed, then the slice is the entire length of the reference
         if not slice_start_wrt_ref_1based:
             slice_start_wrt_ref_1based = 1
         if not slice_end_wrt_ref_1based:
             slice_end_wrt_ref_1based = self.ref_len
 
+        # Slice
+        result_seq = self.nopad_noinsert_seq
+        result_qual = self.nopad_noinsert_qual
+
+        # If we got here, then the sequence overlaps the slice.
+        # 1-based start position with respect to reference of intersection of read and slice
+        read_slice_intersect_start_wrt_ref = max(self.get_seq_start_wrt_ref(), slice_start_wrt_ref_1based)
+        # 1-based end position with respect to reference of intersection of read and slice
+        read_slice_intersect_end_wrt_ref = min(self.get_seq_end_wrt_ref(), slice_end_wrt_ref_1based)
+
+
         # 0-based start position of slice wrt result_seq
-        slice_start_wrt_result_seq_0based = max(self.get_seq_start_wrt_ref(), slice_start_wrt_ref_1based) - self.get_seq_start_wrt_ref()
+        slice_start_wrt_result_seq_0based = read_slice_intersect_start_wrt_ref - self.get_seq_start_wrt_ref()
         # 0-based end position of slice wrt result_seq
-        slice_end_wrt_result_seq_0based = self.get_ref_align_len() - 1 - (self.get_seq_end_wrt_ref() - min(self.get_seq_end_wrt_ref(), slice_end_wrt_ref_1based))
+        slice_end_wrt_result_seq_0based = self.get_ref_align_len() - 1 - (self.get_seq_end_wrt_ref() - read_slice_intersect_end_wrt_ref)
         result_seq = result_seq[slice_start_wrt_result_seq_0based:slice_end_wrt_result_seq_0based+1]
         result_qual = result_qual[slice_start_wrt_result_seq_0based:slice_end_wrt_result_seq_0based+1]
 
@@ -115,39 +129,45 @@ class SamRecord:
             masked_seq = ""
             for i, base in enumerate(result_seq):
                 base_qual = ord(result_qual[i])-sam_constants.PHRED_SANGER_OFFSET
-                if base != sam_constants.SEQ_PAD_CHAR and base_qual < q_cutoff:
-                    masked_seq += "N"
+                if base != sam_constants.SEQ_PAD_CHAR:
+                    stats.total_match_1mate += 1
+                    if base_qual < q_cutoff:
+                        masked_seq += "N"
+                        stats.total_match_1mate_lo_qual += 1
+                    else:
+                        masked_seq += base
+                        stats.total_match_1mate_hi_qual += 1
                 else:
                     masked_seq += base
+
             result_seq = masked_seq
 
         # Add Insertions
         if do_insert_wrt_ref:
-            total_inserts = 0
-            total_insert_1mate_only_lowqual = 0
             result_seq_with_inserts = ""
             result_qual_with_inserts = ""
             last_insert_pos_0based_wrt_result_seq = -1  # 0-based position wrt result_seq before the previous insertion
             # insert_pos_wrt_ref: 1-based reference position before the insertion
             for insert_1based_pos_wrt_ref, (insert_seq, insert_qual) in self.ref_pos_to_insert_seq_qual.iteritems():
                 if slice_start_wrt_ref_1based <= insert_1based_pos_wrt_ref < slice_end_wrt_ref_1based:
-                    total_inserts += 1
-                    # insert_pos_0based_wrt_result_seq:  0-based position wrt result_seq right before the insertion
-                    insert_pos_0based_wrt_result_seq =  insert_1based_pos_wrt_ref - max(self.get_seq_start_wrt_ref(), slice_start_wrt_ref_1based)
+                    stats.total_insert_blocks += 1
+                    stats.total_inserts += len(insert_seq)
+                    stats.total_insert_1mate += len(insert_seq)
+                    # 0-based position wrt result_seq right before the insertion
+                    insert_pos_0based_wrt_result_seq =  insert_1based_pos_wrt_ref - read_slice_intersect_start_wrt_ref
 
                     if do_mask_low_qual:
                         masked_insert_seq = ""
-                        is_low_qual = False
                         for i, ichar in enumerate(insert_seq):
                             iqual = ord(insert_qual[i])-sam_constants.PHRED_SANGER_OFFSET
                             if iqual >= q_cutoff:  # Only include inserts with high quality
                                 masked_insert_seq += ichar
+                                stats.total_insert_1mate_hi_qual += 1
                             else:
-                                is_low_qual = True
-                        if is_low_qual:
-                            total_insert_1mate_only_lowqual += 1
+                                stats.total_insert_1mate_lo_qual += 1
                     else:
                         masked_insert_seq = insert_seq
+
 
                     result_seq_with_inserts += result_seq[last_insert_pos_0based_wrt_result_seq+1:insert_pos_0based_wrt_result_seq+1] + masked_insert_seq
                     result_qual_with_inserts += result_qual[last_insert_pos_0based_wrt_result_seq+1:insert_pos_0based_wrt_result_seq+1] + insert_qual
@@ -157,12 +177,12 @@ class SamRecord:
             result_seq_with_inserts += result_seq[last_insert_pos_0based_wrt_result_seq+1:len(result_seq)]
             result_qual_with_inserts += result_qual[last_insert_pos_0based_wrt_result_seq+1:len(result_qual)]
 
-            if total_inserts:
-                LOGGER.debug("qname=" + self.qname + " total_insert_1mate_only=" + str(total_inserts) +
-                             " total_insert_1mate_only_lowqual=" + str(total_insert_1mate_only_lowqual) +
+            if self.ref_pos_to_insert_seq_qual:
+                LOGGER.debug("qname=" + self.qname + " total_insert_1mate_only=" + str(stats.total_inserts) +
+                             " total_insert_1mate_only_lowqual=" + str(stats.total_insert_1mate_lo_qual) +
                              " total_nonconflict_inserts=0" +
                              " total_conflict_inserts=0" +
-                             " total_inserts=" + str(total_inserts))
+                             " total_inserts=" + str(stats.total_inserts))
             result_seq = result_seq_with_inserts
             result_qual = result_qual_with_inserts
 
@@ -187,7 +207,7 @@ class SamRecord:
             result_qual = padded_qual
 
 
-        return result_seq, result_qual
+        return result_seq, result_qual, stats
 
 
     def get_insert_dict(self):
