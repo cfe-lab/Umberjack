@@ -5,9 +5,8 @@ import subprocess
 import logging
 import math
 import sam_constants
-import align_stats
 
-from sam import sam_record
+
 
 
 # Matches 1+ occurrences of a number, followed by a letter from {MIDNSHPX=}
@@ -161,359 +160,376 @@ def merge_pairs(seq1, seq2, qual1, qual2, q_cutoff=10):
 
     return mseq
 
-
-def merge_read_inserts(mate1_record, mate2_record, sliced_mseq, q_cutoff, q_cutoff_overlap,
-                       slice_start_wrt_ref_1based, slice_end_wrt_ref_1based, stats=None):
-    """
-    Assumes that sliced_mseq only contains the sliced portion of the merged read sequence.
-
-    :param mate1_record:
-    :param mate2_record:
-    :param sliced_mseq:
-    :param q_cutoff:
-    :param slice_start_wrt_ref_1based:
-    :param slice_end_wrt_ref_1based:
-    :return:
-    """
-    # track stats about inserts
-    if not stats:
-        stats = align_stats.AlignStats()
-
-    seq1_start_wrt_ref_1based = mate1_record.get_seq_start_wrt_ref()  # 1-based position wrt reference for start of unclipped portion of sequence1
-    seq1_end_wrt_ref_1based =  mate1_record.get_seq_end_wrt_ref()  # 1-based position wrt reference for end of unclipped portion of sequence1
-    seq2_start_wrt_ref_1based = mate2_record.get_seq_start_wrt_ref()  # 1-based position wrt reference for start of unclipped portion of sequence2
-    seq2_end_wrt_ref_1based = mate2_record.get_seq_end_wrt_ref()  # 1-based position wrt reference for end of unclipped portion of sequence2
-
-    rpos_to_insert_seq_qual1 = mate1_record.get_insert_dict()
-    rpos_to_insert_seq_qual2 = mate2_record.get_insert_dict()
-    merge_rpos_to_insert = dict()
-
-    # For the positions in which the mates overlap, check if the inserts are the same in both mates
-    # insert_pos1_wrt_ref_1based is the 1-based position wrt ref before after the insertion
-    for insert_pos1_wrt_ref_1based, (insert_seq1, insert_qual1) in rpos_to_insert_seq_qual1.iteritems():
-        # ignore inserts outside of the slice
-        if insert_pos1_wrt_ref_1based <  slice_start_wrt_ref_1based or insert_pos1_wrt_ref_1based >= slice_end_wrt_ref_1based:
-            continue
-        stats.total_inserts += len(insert_seq1)
-        stats.total_insert_blocks += 1
-        # Does this insert overlap with mate 2?
-        if seq2_start_wrt_ref_1based <= insert_pos1_wrt_ref_1based < seq2_end_wrt_ref_1based:
-            insert_seq2, insert_qual2 = rpos_to_insert_seq_qual2.get(insert_pos1_wrt_ref_1based, ("", ""))
-            if insert_seq2:
-                del rpos_to_insert_seq_qual2[insert_pos1_wrt_ref_1based]  # Do not reprocess the insert from mate 2
-
-            # If insert is same in both mates, then keep it.  But Mask it with "N" if the combined mate q score does not meet q_cutoff_overlap.
-            if insert_seq1 == insert_seq2:
-                masked_insert_seq = ""
-                for i, ichar in enumerate(insert_seq1):
-                    stats.total_insert_agree += 1
-                    iqual1 = ord(insert_qual1[i])-PHRED_SANGER_OFFSET
-                    iqual2 = ord(insert_qual2[i])-PHRED_SANGER_OFFSET
-                    if iqual1 + iqual2 >= q_cutoff_overlap:
-                        masked_insert_seq += ichar
-                        stats.total_insert_agree_hi_qual += 1
-                    else:
-                        masked_insert_seq += "N"
-                        stats.total_insert_agree_lo_qual += 1
-                merge_rpos_to_insert[insert_pos1_wrt_ref_1based] = masked_insert_seq
-
-            # If the mates don't have the same insert, then exclude the full insert block and keep track of stats
-            else:
-                for i, ichar1 in enumerate(insert_seq1):
-                    iqual1 = ord(insert_qual1[i])-PHRED_SANGER_OFFSET
-                    if i < len(insert_seq2):
-                        ichar2 = insert_seq2[i]
-                        iqual2 = ord(insert_qual2[i])-PHRED_SANGER_OFFSET
-                    else:
-                        ichar2 = sam_constants.SEQ_PAD_CHAR
-                        iqual2 = ord(sam_constants.QUAL_PAD_CHAR)-PHRED_SANGER_OFFSET
-
-                    if ichar1 == ichar2:
-                        stats.total_insert_agree += 1
-                        if iqual1 + iqual2 >= q_cutoff_overlap:
-                            stats.total_insert_agree_hi_qual += 1
-                        else:
-                            stats.total_insert_agree_lo_qual += 1
-                    else:
-                        stats.total_insert_conflict += 1
-                        if iqual1 + iqual2 >= q_cutoff_overlap:
-                            stats.total_insert_conflict_hi_qual += 1
-                        else:
-                            stats.total_insert_conflict_lo_qual += 1
-                #LOGGER.debug("Conflict with inserts in " + mate1_record.qname + " at ref position " + str(insert_pos1_wrt_ref_1based) +
-                #             " insert1=" + insert_seq1 + " insert2=" + insert_seq2)
-
-        else:
-            # If the the insert is in a region that does not overlap with the mate, ignore it if it's low quality
-            masked_insert_seq = ""
-            for i, ichar in enumerate(insert_seq1):
-                stats.total_insert_1mate += 1
-                iqual = ord(insert_qual1[i])-PHRED_SANGER_OFFSET
-                if iqual >= q_cutoff:
-                    masked_insert_seq += ichar
-                    stats.total_insert_1mate_hi_qual += 1
-                else:
-                    stats.total_insert_1mate_lo_qual += 1
-
-
-            merge_rpos_to_insert[insert_pos1_wrt_ref_1based] = masked_insert_seq
-
-    for insert_pos2_wrt_ref_1based, (insert_seq2, insert_qual2) in rpos_to_insert_seq_qual2.iteritems():
-        # ignore inserts outside of slice
-        if insert_pos2_wrt_ref_1based <  slice_start_wrt_ref_1based or insert_pos2_wrt_ref_1based >= slice_end_wrt_ref_1based:
-            continue
-        stats.total_inserts += len(insert_seq2)
-        stats.total_insert_blocks += 1
-        # Does this insert overlap with mate1?
-        if seq1_start_wrt_ref_1based <= insert_pos2_wrt_ref_1based < seq1_end_wrt_ref_1based:
-            insert_seq1, insert_qual1 = rpos_to_insert_seq_qual1.get(insert_pos2_wrt_ref_1based, ("", ""))
-            if insert_seq1:
-                raise ValueError("Shouldn't have gotten here")
-
-            # If the mates don't have the same insert, exlude the insert block, keep track of stats.
-            else:
-                for i, ichar2 in enumerate(insert_seq2):
-                    iqual2 = ord(insert_qual2[i])-PHRED_SANGER_OFFSET
-                    stats.total_insert_conflict += 1
-                    if iqual2 >= q_cutoff:
-                        stats.total_insert_conflict_hi_qual += 1
-                    else:
-                        stats.total_insert_conflict_lo_qual += 1
-                #LOGGER.debug("Conflict with inserts in " + mate1_record.qname + " at ref position " + str(rpos_insert2) +
-                #             " insert1=" + insert_seq1 + " insert2=" + insert_seq2)
-
-        else:
-            # If the the insert is in a region that does not overlap with the mate, keep it only if quality is high
-            masked_insert_seq = ""
-            for i, ichar in enumerate(insert_qual2):
-                stats.total_insert_1mate += 1
-                iqual = ord(insert_qual2[i])-PHRED_SANGER_OFFSET
-                if iqual >= q_cutoff:
-                    masked_insert_seq += ichar
-                    stats.total_insert_1mate_hi_qual += 1
-                else:
-                    stats.total_insert_1mate_lo_qual += 1
-
-            merge_rpos_to_insert[insert_pos2_wrt_ref_1based] = masked_insert_seq
-
-
-    mseq_with_inserts = ""
-    last_insert_pos_0based_wrt_mseq = -1  # 0-based position wrt result_seq before the previous insertion
-    # insert_pos_wrt_ref: 1-based reference position before the insertion
-    for insert_1based_pos_wrt_ref, insert_seq in merge_rpos_to_insert.iteritems():
-        # 0-based position wrt sliced_mseq right before the insertion
-        insert_pos_0based_wrt_mseq =  insert_1based_pos_wrt_ref - slice_start_wrt_ref_1based
-        mseq_with_inserts += sliced_mseq[last_insert_pos_0based_wrt_mseq+1:insert_pos_0based_wrt_mseq+1] + insert_seq
-        last_insert_pos_0based_wrt_mseq = insert_pos_0based_wrt_mseq
-
-    # TODO:  assume that bowtie will not let inserts at beginning/end of align, but check
-    mseq_with_inserts += sliced_mseq[last_insert_pos_0based_wrt_mseq+1:len(sliced_mseq)]
-
-    if merge_rpos_to_insert:
-        LOGGER.debug("qname=" + mate1_record.qname + " total_insert_1mate=" + str(stats.total_insert_1mate) +
-                     " total_insert_1mate_lowqual=" + str(stats.total_insert_1mate_lo_qual) +
-                     " total_nonconflict_inserts=" + str(stats.total_insert_agree) +
-                     " total_conflict_inserts=" + str(stats.total_insert_conflict) +
-                     " total_inserts=" + str(stats.total_inserts))
-    return mseq_with_inserts, stats
-
-
-
-
-def merge_sam_reads(mate1_record, mate2_record, q_cutoff=10, do_insert_wrt_ref=False, do_pad_wrt_ref=True,
-                    do_pad_wrt_slice=False, slice_end_wrt_ref_1based=None, slice_start_wrt_ref_1based=None, stats=None):
-    """
-    Merge two sequences that overlap over some portion (paired-end
-    reads).  Using the positional information in the SAM file, we will
-    know where the sequences lie relative to one another.  In the case
-    that the base in one read has no complement in the other read
-    (in partial overlap region), take that base at face value.
-
-    Allows insertions.
-
-    :param do_pad_wrt_slice:
-    :return:  merged paired-end read
-    :rtype : str
-    :param int q_cutoff: quality cutoff below which a base is converted to N if there is no consensus between the mates.
-    :param bool do_insert_wrt_ref: whether insertions with respect to reference is allowed.
-    """
-
-    mseq = ''
-    if not stats:
-        stats = align_stats.AlignStats()
-
-    # If the slice does not intersect either mate,
-    # Then just return empty string or padded gaps wrt ref or slice as desired.
-    mate_region_start = min(mate1_record.get_seq_start_wrt_ref(), mate2_record.get_seq_start_wrt_ref())
-    mate_region_end = max(mate1_record.get_seq_end_wrt_ref(), mate2_record.get_seq_end_wrt_ref())
-    if ((slice_start_wrt_ref_1based and slice_start_wrt_ref_1based > mate_region_end) or
-            (slice_end_wrt_ref_1based and slice_end_wrt_ref_1based < mate_region_start)):
-
-        if do_pad_wrt_ref:
-            mseq = sam_constants.SEQ_PAD_CHAR * mate1_record.ref_len
-        elif do_pad_wrt_slice:
-            slice_len = slice_end_wrt_ref_1based - slice_start_wrt_ref_1based + 1
-            mseq = sam_constants.SEQ_PAD_CHAR * slice_len
-        return mseq, stats
-
-    if not slice_start_wrt_ref_1based:
-        slice_start_wrt_ref_1based = 1
-    if not slice_end_wrt_ref_1based:
-        slice_end_wrt_ref_1based = mate1_record.ref_len
-
-    # 1-based position with respect to reference of the start of intersection of the read fragment and slice
-    read_slice_intersect_start_wrt_ref = max(mate_region_start, slice_start_wrt_ref_1based)
-    # 1-based position with respect to reference of the end of intersection of read fragment and slice
-    read_slice_intersect_end_wrt_ref = min(mate_region_end, slice_end_wrt_ref_1based)
-
-    # Extract portion of reads that fit within the intersection of the read fragment & slice.
-    # Pad the extracted sequences just enough so that they line up within the intersection.
-    # Do not pad with respect to the reference yet.  Do not pad with respect to the slice yet.
-    # Pop out insertions with respect to the reference so that it is easier to find the sequence coordinates wrt ref.
-    # Keep track of the insertions and the ref pos right before the insertion.
-    seq1, qual1, stats = mate1_record.get_seq_qual(do_pad_wrt_ref=False,
-                                                   do_pad_wrt_slice=True,
-                                                   do_mask_low_qual=False,
-                                                   q_cutoff=q_cutoff,
-                                                   do_insert_wrt_ref=False,
-                                                   slice_start_wrt_ref_1based=read_slice_intersect_start_wrt_ref,
-                                                   slice_end_wrt_ref_1based=read_slice_intersect_end_wrt_ref,
-                                                   stats=stats)
-    seq2, qual2, stats = mate2_record.get_seq_qual(do_pad_wrt_ref=False,
-                                                   do_pad_wrt_slice=True,
-                                                   do_mask_low_qual=False,
-                                                   q_cutoff=q_cutoff,
-                                                   do_insert_wrt_ref=False,
-                                                   slice_start_wrt_ref_1based=read_slice_intersect_start_wrt_ref,
-                                                   slice_end_wrt_ref_1based=read_slice_intersect_end_wrt_ref,
-                                                   stats=stats)
-
-
-    if len(seq1) != len(seq2) or len(qual1) != len(qual2) or len(qual1) != len(seq1):
-        raise ValueError("Expect left and right pad mate sequences and qualities such that they line up. " +
-                            " mate1=" + mate1_record.qname + " mate2=" + mate2_record.qname +
-                            " len_seq1={} len_seq2={},  len_qual1={} len_qual2={}".format(len(seq1),
-                                                                                                       len(seq2),
-                                                                                                       len(qual1),
-                                                                                                       len(qual2)))
-
-    # If overlapping mate bases agree, either mate quality can be lower as long as the
-    #   Probability of single base error at the quality cutoff >= Probability of both mates having same erroneous base
-    # Quality = -10 log P(error),  P(error) = 1e-(Quality/10)  by Phred Score definition.
-    # Assume that the probability of a wrong base is independent across mates, positions.
-    # Say the correct base = G, the permutations of wrong overlapping bases = {AA, AC, AT, CA, CC, CT, TA, TC, TT}.
-    # ==> There are 3 permutations where the overlapping bases are the same; There are 9 possible permutations of wrong overlapping bases.
-    #
-    # P(single base error at q_cutoff) >= P(both mates same base & both mates wrong base)
-    # P(single base error at q_cutoff) >= P(both mates wrong base) P(both mates same base | both mates wrong base)
-    # 1e-(q_cutoff/10) >= P(mate1 1-base error) P(mate2 1-base error) [3 matching overlaps / 9 possible permutations of overlapping wrong bases)
-    # 1e-(q_cutoff/10) >= 1e-q1/10 *  1e-q2/10  * 1/3
-    # 3e-(q_cutoff/10) >= 1e-q1/10 *  1e-q2/10
-    # log3 - q_cutoff/10 >= -q1/10 - q2/10
-    # -10log3 + qcutoff <= q1 + q2
-    # qcutoff_overlap = -10log3 + qcutoff <= q1 + q2
-    q_cutoff_overlap = -10 * math.log10(3) + q_cutoff
-
-    for i in range(0, len(seq2)):
-
-        q2 = ord(qual2[i])-PHRED_SANGER_OFFSET
-        q1 = ord(qual1[i])-PHRED_SANGER_OFFSET
-
-        # Both mates have gap at this position.
-        if seq1[i] == seq2[i] == SEQ_PAD_CHAR:
-            # Change to "N" if the position is inside the read fragment
-            # so that multiple sequence alignment realizes that there is a base here as instead of a gap wrt ref.
-            if mate_region_start <= i + read_slice_intersect_start_wrt_ref <= mate_region_end:
-                mseq += "N"
-            else:
-                mseq += SEQ_PAD_CHAR
-
-        # only mate2 has real base here
-        elif seq1[i] == SEQ_PAD_CHAR and seq2[i] != SEQ_PAD_CHAR:
-            mseq += seq2[i]
-            stats.total_match_1mate += 1
-            if q1 >= q_cutoff:
-                stats.total_match_1mate_hi_qual += 1
-            else:
-                stats.total_match_1mate_lo_qual += 1
-
-        # only mate1 has real base here
-        elif seq2[i] == SEQ_PAD_CHAR and seq1[i] != SEQ_PAD_CHAR:
-            mseq += seq1[i]
-            stats.total_match_1mate += 1
-            if q2 >= q_cutoff:
-                stats.total_match_1mate_hi_qual += 1
-            else:
-                stats.total_match_1mate_lo_qual += 1
-
-        # Both mates have the same base at this position
-        elif seq1[i] == seq2[i] and seq1[i] != SEQ_PAD_CHAR:
-            stats.total_match_nonconflict += 1
-            if q_cutoff_overlap <= q1 + q2:
-                mseq += seq1[i]
-                stats.total_match_nonconflict_hi_qual += 1
-            else:
-                mseq += "N"
-                stats.total_match_nonconflict_lo_qual += 1
-
-        # Both mates have disagreeing bases at this position: take the high confidence
-        elif q1 > q2:
-            stats.total_match_conflict += 1
-            if q1 >= q_cutoff:
-                mseq += seq1[i]
-                stats.total_match_conflict_hi_qual += 1
-            else:
-                mseq += "N"
-                stats.total_match_conflict_lo_qual += 1
-
-        elif q2 > q1:
-            stats.total_match_conflict += 1
-            if q2 >= q_cutoff:
-                mseq += seq2[i]
-                stats.total_match_conflict_hi_qual += 1
-            else:
-                mseq += "N"
-                stats.total_match_conflict_lo_qual += 1
-
-        elif q2 == q1:
-            mseq += "N"
-            stats.total_match_conflict += 1
-            if q2 >= q_cutoff:
-                stats.total_match_conflict_equal_hi_qual += 1
-            else:
-                stats.total_match_conflict_equal_lo_qual += 1
-
-
-        else:
-            raise ValueError("We should never get here.  Unanticipated use case for merging sam reads")
-
-
-    if do_insert_wrt_ref:
-        mseq, stats = merge_read_inserts(mate1_record=mate1_record,
-                                         mate2_record=mate2_record,
-                                         sliced_mseq=mseq,
-                                         q_cutoff=q_cutoff,
-                                         q_cutoff_overlap=q_cutoff_overlap,
-                                         slice_start_wrt_ref_1based=read_slice_intersect_start_wrt_ref,
-                                         slice_end_wrt_ref_1based=read_slice_intersect_end_wrt_ref,
-                                         stats=stats)
-
-
-    # Now pad with respect to reference
-    if do_pad_wrt_ref:
-            left_pad_len = read_slice_intersect_start_wrt_ref  - 1
-            right_pad_len = mate1_record.ref_len - read_slice_intersect_end_wrt_ref
-            mseq = (sam_constants.SEQ_PAD_CHAR * left_pad_len) + mseq + (sam_constants.SEQ_PAD_CHAR * right_pad_len)
-
-    elif do_pad_wrt_slice:
-        left_pad_len = read_slice_intersect_start_wrt_ref  - slice_start_wrt_ref_1based
-        right_pad_len = slice_end_wrt_ref_1based - read_slice_intersect_end_wrt_ref
-        mseq = (sam_constants.SEQ_PAD_CHAR * left_pad_len) + mseq + (sam_constants.SEQ_PAD_CHAR * right_pad_len)
-
-
-
-    return mseq, stats
-
+#
+# def merge_read_inserts(mate1_record, mate2_record, sliced_mseq, q_cutoff, q_cutoff_overlap,
+#                        slice_start_wrt_ref_1based, slice_end_wrt_ref_1based, stats=None):
+#     """
+#     Assumes that sliced_mseq only contains the sliced portion of the merged read sequence.
+#
+#     :param mate1_record:
+#     :param mate2_record:
+#     :param sliced_mseq:
+#     :param q_cutoff:
+#     :param slice_start_wrt_ref_1based:
+#     :param slice_end_wrt_ref_1based:
+#     :return:
+#     """
+#     # track stats about inserts
+#     if not stats:
+#         stats = align_stats.AlignStats()
+#
+#     seq1_start_wrt_ref_1based = mate1_record.get_seq_start_wrt_ref()  # 1-based position wrt reference for start of unclipped portion of sequence1
+#     seq1_end_wrt_ref_1based =  mate1_record.get_seq_end_wrt_ref()  # 1-based position wrt reference for end of unclipped portion of sequence1
+#     seq2_start_wrt_ref_1based = mate2_record.get_seq_start_wrt_ref()  # 1-based position wrt reference for start of unclipped portion of sequence2
+#     seq2_end_wrt_ref_1based = mate2_record.get_seq_end_wrt_ref()  # 1-based position wrt reference for end of unclipped portion of sequence2
+#
+#     rpos_to_insert_seq_qual1 = mate1_record.get_insert_dict()
+#     rpos_to_insert_seq_qual2 = mate2_record.get_insert_dict()
+#     merge_rpos_to_insert = dict()
+#
+#     # For the positions in which the mates overlap, check if the inserts are the same in both mates
+#     # insert_pos1_wrt_ref_1based is the 1-based position wrt ref before after the insertion
+#     for insert_pos1_wrt_ref_1based, (insert_seq1, insert_qual1) in rpos_to_insert_seq_qual1.iteritems():
+#         # ignore inserts outside of the slice
+#         if insert_pos1_wrt_ref_1based <  slice_start_wrt_ref_1based or insert_pos1_wrt_ref_1based >= slice_end_wrt_ref_1based:
+#             continue
+#         stats.total_inserts += len(insert_seq1)
+#         stats.total_insert_blocks += 1
+#         # Does this insert overlap with mate 2?
+#         if seq2_start_wrt_ref_1based <= insert_pos1_wrt_ref_1based < seq2_end_wrt_ref_1based:
+#             insert_seq2, insert_qual2 = rpos_to_insert_seq_qual2.get(insert_pos1_wrt_ref_1based, ("", ""))
+#             if insert_seq2:
+#                 del rpos_to_insert_seq_qual2[insert_pos1_wrt_ref_1based]  # Do not reprocess the insert from mate 2
+#
+#             # For each inserted base, If insert is same in both mates, then keep it.  But Mask it with "N" if the combined mate q score does not meet q_cutoff_overlap.
+#             # Only exclude the inserts that aren't the same between both mates.
+#             # Note that we go through the inserted bases in order, so it if a mate has an extra or missing inserted base, then
+#             # then rest of the inserted bases in the sequence will be out of wack.
+#             # if insert_seq1 == insert_seq2:
+#             #     masked_insert_seq = ""
+#             #     for i, ichar in enumerate(insert_seq1):
+#             #         stats.total_insert_agree += 1
+#             #         iqual1 = ord(insert_qual1[i])-PHRED_SANGER_OFFSET
+#             #         iqual2 = ord(insert_qual2[i])-PHRED_SANGER_OFFSET
+#             #         if iqual1 + iqual2 >= q_cutoff_overlap:
+#             #             masked_insert_seq += ichar
+#             #             stats.total_insert_agree_hi_qual += 1
+#             #         else:
+#             #             masked_insert_seq += "N"
+#             #             stats.total_insert_agree_lo_qual += 1
+#             #     merge_rpos_to_insert[insert_pos1_wrt_ref_1based] = masked_insert_seq
+#             #
+#             # # If the mates don't have the same insert, then exclude the full insert block and keep track of stats
+#             # else:
+#             masked_insert_seq = ""
+#             longer_seq = insert_seq1 if len(insert_seq1) > len(insert_seq2) else insert_seq2
+#             for i in range(0, len(longer_seq)):
+#
+#                 iqual1 = ord(insert_qual1[i])-PHRED_SANGER_OFFSET
+#                 if i < len(insert_seq2):
+#                     ichar2 = None
+#                     iqual2 = None
+#                 else:
+#                     ichar2 = sam_constants.SEQ_PAD_CHAR
+#                     iqual2 = ord(sam_constants.QUAL_PAD_CHAR)-PHRED_SANGER_OFFSET
+#
+#                 if i < len(insert_seq1):
+#                     ichar1 = insert_seq1[i]
+#                     iqual1 = ord(insert_qual1[i])-PHRED_SANGER_OFFSET
+#                 else:
+#                     ichar2 = sam_constants.SEQ_PAD_CHAR
+#                     iqual2 = ord(sam_constants.QUAL_PAD_CHAR)-PHRED_SANGER_OFFSET
+#
+#                 if ichar1 == ichar2:
+#                     stats.total_insert_agree += 1
+#                     if iqual1 + iqual2 >= q_cutoff_overlap:
+#                         masked_insert_seq += ichar
+#                         stats.total_insert_agree_hi_qual += 1
+#                     else:
+#                         masked_insert_seq += "N"
+#                         stats.total_insert_agree_lo_qual += 1
+#                 else:
+#                     stats.total_insert_conflict += 1
+#                     if iqual1 + iqual2 >= q_cutoff_overlap:
+#                         stats.total_insert_conflict_hi_qual += 1
+#                     else:
+#                         stats.total_insert_conflict_lo_qual += 1
+#             #LOGGER.debug("Conflict with inserts in " + mate1_record.qname + " at ref position " + str(insert_pos1_wrt_ref_1based) +
+#             #             " insert1=" + insert_seq1 + " insert2=" + insert_seq2)
+#
+#         else:
+#             # If the the insert is in a region that does not overlap with the mate, ignore it if it's low quality
+#             masked_insert_seq = ""
+#             for i, ichar in enumerate(insert_seq1):
+#                 stats.total_insert_1mate += 1
+#                 iqual = ord(insert_qual1[i])-PHRED_SANGER_OFFSET
+#                 if iqual >= q_cutoff:
+#                     masked_insert_seq += ichar
+#                     stats.total_insert_1mate_hi_qual += 1
+#                 else:
+#                     stats.total_insert_1mate_lo_qual += 1
+#
+#
+#             merge_rpos_to_insert[insert_pos1_wrt_ref_1based] = masked_insert_seq
+#
+#     for insert_pos2_wrt_ref_1based, (insert_seq2, insert_qual2) in rpos_to_insert_seq_qual2.iteritems():
+#         # ignore inserts outside of slice
+#         if insert_pos2_wrt_ref_1based <  slice_start_wrt_ref_1based or insert_pos2_wrt_ref_1based >= slice_end_wrt_ref_1based:
+#             continue
+#         stats.total_inserts += len(insert_seq2)
+#         stats.total_insert_blocks += 1
+#         # Does this insert overlap with mate1?
+#         if seq1_start_wrt_ref_1based <= insert_pos2_wrt_ref_1based < seq1_end_wrt_ref_1based:
+#             insert_seq1, insert_qual1 = rpos_to_insert_seq_qual1.get(insert_pos2_wrt_ref_1based, ("", ""))
+#             if insert_seq1:
+#                 raise ValueError("Shouldn't have gotten here")
+#
+#             # If the mates don't have the same insert, exlude the insert block, keep track of stats.
+#             else:
+#                 for i, ichar2 in enumerate(insert_seq2):
+#                     iqual2 = ord(insert_qual2[i])-PHRED_SANGER_OFFSET
+#                     stats.total_insert_conflict += 1
+#                     if iqual2 >= q_cutoff:
+#                         stats.total_insert_conflict_hi_qual += 1
+#                     else:
+#                         stats.total_insert_conflict_lo_qual += 1
+#                 #LOGGER.debug("Conflict with inserts in " + mate1_record.qname + " at ref position " + str(rpos_insert2) +
+#                 #             " insert1=" + insert_seq1 + " insert2=" + insert_seq2)
+#
+#         else:
+#             # If the the insert is in a region that does not overlap with the mate, keep it only if quality is high
+#             masked_insert_seq = ""
+#             for i, ichar in enumerate(insert_qual2):
+#                 stats.total_insert_1mate += 1
+#                 iqual = ord(insert_qual2[i])-PHRED_SANGER_OFFSET
+#                 if iqual >= q_cutoff:
+#                     masked_insert_seq += ichar
+#                     stats.total_insert_1mate_hi_qual += 1
+#                 else:
+#                     stats.total_insert_1mate_lo_qual += 1
+#
+#             merge_rpos_to_insert[insert_pos2_wrt_ref_1based] = masked_insert_seq
+#
+#
+#     mseq_with_inserts = ""
+#     last_insert_pos_0based_wrt_mseq = -1  # 0-based position wrt result_seq before the previous insertion
+#     # insert_pos_wrt_ref: 1-based reference position before the insertion
+#     for insert_1based_pos_wrt_ref, insert_seq in merge_rpos_to_insert.iteritems():
+#         # 0-based position wrt sliced_mseq right before the insertion
+#         insert_pos_0based_wrt_mseq =  insert_1based_pos_wrt_ref - slice_start_wrt_ref_1based
+#         mseq_with_inserts += sliced_mseq[last_insert_pos_0based_wrt_mseq+1:insert_pos_0based_wrt_mseq+1] + insert_seq
+#         last_insert_pos_0based_wrt_mseq = insert_pos_0based_wrt_mseq
+#
+#     # TODO:  assume that bowtie will not let inserts at beginning/end of align, but check
+#     mseq_with_inserts += sliced_mseq[last_insert_pos_0based_wrt_mseq+1:len(sliced_mseq)]
+#
+#     if merge_rpos_to_insert:
+#         LOGGER.debug("qname=" + mate1_record.qname + " insert stats:\n" + stats.dump_insert_stats())
+#
+#     return mseq_with_inserts, stats
+#
+#
+#
+#
+# def merge_sam_reads(mate1_record, mate2_record, q_cutoff=10, do_insert_wrt_ref=False, do_pad_wrt_ref=True,
+#                     do_pad_wrt_slice=False, slice_end_wrt_ref_1based=None, slice_start_wrt_ref_1based=None, stats=None):
+#     """
+#     Merge two sequences that overlap over some portion (paired-end
+#     reads).  Using the positional information in the SAM file, we will
+#     know where the sequences lie relative to one another.  In the case
+#     that the base in one read has no complement in the other read
+#     (in partial overlap region), take that base at face value.
+#
+#     Allows insertions.
+#
+#     :param do_pad_wrt_slice:
+#     :return:  merged paired-end read
+#     :rtype : str
+#     :param int q_cutoff: quality cutoff below which a base is converted to N if there is no consensus between the mates.
+#     :param bool do_insert_wrt_ref: whether insertions with respect to reference is allowed.
+#     """
+#
+#     mseq = ''
+#     if not stats:
+#         stats = align_stats.AlignStats()
+#
+#     # If the slice does not intersect either mate,
+#     # Then just return empty string or padded gaps wrt ref or slice as desired.
+#     mate_region_start = min(mate1_record.get_seq_start_wrt_ref(), mate2_record.get_seq_start_wrt_ref())
+#     mate_region_end = max(mate1_record.get_seq_end_wrt_ref(), mate2_record.get_seq_end_wrt_ref())
+#     if ((slice_start_wrt_ref_1based and slice_start_wrt_ref_1based > mate_region_end) or
+#             (slice_end_wrt_ref_1based and slice_end_wrt_ref_1based < mate_region_start)):
+#
+#         if do_pad_wrt_ref:
+#             mseq = sam_constants.SEQ_PAD_CHAR * mate1_record.ref_len
+#         elif do_pad_wrt_slice:
+#             slice_len = slice_end_wrt_ref_1based - slice_start_wrt_ref_1based + 1
+#             mseq = sam_constants.SEQ_PAD_CHAR * slice_len
+#         return mseq, stats
+#
+#     if not slice_start_wrt_ref_1based:
+#         slice_start_wrt_ref_1based = 1
+#     if not slice_end_wrt_ref_1based:
+#         slice_end_wrt_ref_1based = mate1_record.ref_len
+#
+#     # 1-based position with respect to reference of the start of intersection of the read fragment and slice
+#     read_slice_intersect_start_wrt_ref = max(mate_region_start, slice_start_wrt_ref_1based)
+#     # 1-based position with respect to reference of the end of intersection of read fragment and slice
+#     read_slice_intersect_end_wrt_ref = min(mate_region_end, slice_end_wrt_ref_1based)
+#
+#     # Extract portion of reads that fit within the intersection of the read fragment & slice.
+#     # Pad the extracted sequences just enough so that they line up within the intersection.
+#     # Do not pad with respect to the reference yet.  Do not pad with respect to the slice yet.
+#     # Pop out insertions with respect to the reference so that it is easier to find the sequence coordinates wrt ref.
+#     # Keep track of the insertions and the ref pos right before the insertion.
+#     seq1, qual1, stats = mate1_record.get_seq_qual(do_pad_wrt_ref=False,
+#                                                    do_pad_wrt_slice=True,
+#                                                    do_mask_low_qual=False,
+#                                                    q_cutoff=q_cutoff,
+#                                                    do_insert_wrt_ref=False,
+#                                                    slice_start_wrt_ref_1based=read_slice_intersect_start_wrt_ref,
+#                                                    slice_end_wrt_ref_1based=read_slice_intersect_end_wrt_ref,
+#                                                    stats=stats)
+#     seq2, qual2, stats = mate2_record.get_seq_qual(do_pad_wrt_ref=False,
+#                                                    do_pad_wrt_slice=True,
+#                                                    do_mask_low_qual=False,
+#                                                    q_cutoff=q_cutoff,
+#                                                    do_insert_wrt_ref=False,
+#                                                    slice_start_wrt_ref_1based=read_slice_intersect_start_wrt_ref,
+#                                                    slice_end_wrt_ref_1based=read_slice_intersect_end_wrt_ref,
+#                                                    stats=stats)
+#
+#
+#     if len(seq1) != len(seq2) or len(qual1) != len(qual2) or len(qual1) != len(seq1):
+#         raise ValueError("Expect left and right pad mate sequences and qualities such that they line up. " +
+#                             " mate1=" + mate1_record.qname + " mate2=" + mate2_record.qname +
+#                             " len_seq1={} len_seq2={},  len_qual1={} len_qual2={}".format(len(seq1),
+#                                                                                                        len(seq2),
+#                                                                                                        len(qual1),
+#                                                                                                        len(qual2)))
+#
+#     # If overlapping mate bases agree, either mate quality can be lower as long as the
+#     #   Probability of single base error at the quality cutoff >= Probability of both mates having same erroneous base
+#     # Quality = -10 log P(error),  P(error) = 1e-(Quality/10)  by Phred Score definition.
+#     # Assume that the probability of a wrong base is independent across mates, positions.
+#     # Say the correct base = G, the permutations of wrong overlapping bases = {AA, AC, AT, CA, CC, CT, TA, TC, TT}.
+#     # ==> There are 3 permutations where the overlapping bases are the same; There are 9 possible permutations of wrong overlapping bases.
+#     #
+#     # P(single base error at q_cutoff) >= P(both mates same base & both mates wrong base)
+#     # P(single base error at q_cutoff) >= P(both mates wrong base) P(both mates same base | both mates wrong base)
+#     # 1e-(q_cutoff/10) >= P(mate1 1-base error) P(mate2 1-base error) [3 matching overlaps / 9 possible permutations of overlapping wrong bases)
+#     # 1e-(q_cutoff/10) >= 1e-q1/10 *  1e-q2/10  * 1/3
+#     # 3e-(q_cutoff/10) >= 1e-q1/10 *  1e-q2/10
+#     # log3 - q_cutoff/10 >= -q1/10 - q2/10
+#     # -10log3 + qcutoff <= q1 + q2
+#     # qcutoff_overlap = -10log3 + qcutoff <= q1 + q2
+#     q_cutoff_overlap = -10 * math.log10(3) + q_cutoff
+#
+#     for i in range(0, len(seq2)):
+#
+#         q2 = ord(qual2[i])-PHRED_SANGER_OFFSET
+#         q1 = ord(qual1[i])-PHRED_SANGER_OFFSET
+#
+#         # Both mates have gap at this position.
+#         if seq1[i] == seq2[i] == SEQ_PAD_CHAR:
+#             # Change to "N" if the position is inside the read fragment
+#             # so that multiple sequence alignment realizes that there is a base here as instead of a gap wrt ref.
+#             if mate_region_start <= i + read_slice_intersect_start_wrt_ref <= mate_region_end:
+#                 mseq += "N"
+#             else:
+#                 mseq += SEQ_PAD_CHAR
+#
+#         # only mate2 has real base here
+#         elif seq1[i] == SEQ_PAD_CHAR and seq2[i] != SEQ_PAD_CHAR:
+#             mseq += seq2[i]
+#             stats.total_match_1mate += 1
+#             if q1 >= q_cutoff:
+#                 stats.total_match_1mate_hi_qual += 1
+#             else:
+#                 stats.total_match_1mate_lo_qual += 1
+#
+#         # only mate1 has real base here
+#         elif seq2[i] == SEQ_PAD_CHAR and seq1[i] != SEQ_PAD_CHAR:
+#             mseq += seq1[i]
+#             stats.total_match_1mate += 1
+#             if q2 >= q_cutoff:
+#                 stats.total_match_1mate_hi_qual += 1
+#             else:
+#                 stats.total_match_1mate_lo_qual += 1
+#
+#         # Both mates have the same base at this position
+#         elif seq1[i] == seq2[i] and seq1[i] != SEQ_PAD_CHAR:
+#             stats.total_match_nonconflict += 1
+#             if q_cutoff_overlap <= q1 + q2:
+#                 mseq += seq1[i]
+#                 stats.total_match_nonconflict_hi_qual += 1
+#             else:
+#                 mseq += "N"
+#                 stats.total_match_nonconflict_lo_qual += 1
+#
+#         # Both mates have disagreeing bases at this position: take the high confidence
+#         elif q1 > q2:
+#             stats.total_match_conflict += 1
+#             if q1 >= q_cutoff:
+#                 mseq += seq1[i]
+#                 if q2 >= q_cutoff:
+#                     stats.total_match_conflict_hi_qual += 1
+#                 else:
+#                     stats.total_match_conflict_hilo_qual += 1
+#             else:
+#                 mseq += "N"
+#                 stats.total_match_conflict_lo_qual += 1
+#
+#         elif q2 > q1:
+#             stats.total_match_conflict += 1
+#             if q2 >= q_cutoff:
+#                 mseq += seq2[i]
+#                 if q1 >= q_cutoff:
+#                     stats.total_match_conflict_hi_qual += 1
+#                 else:
+#                     stats.total_match_conflict_hilo_qual += 1
+#             else:
+#                 mseq += "N"
+#                 stats.total_match_conflict_lo_qual += 1
+#
+#         elif q2 == q1:
+#             mseq += "N"
+#             stats.total_match_conflict += 1
+#             if q2 >= q_cutoff:
+#                 stats.total_match_conflict_equal_hi_qual += 1
+#             else:
+#                 stats.total_match_conflict_equal_lo_qual += 1
+#
+#
+#         else:
+#             raise ValueError("We should never get here.  Unanticipated use case for merging sam reads")
+#
+#
+#     if do_insert_wrt_ref:
+#         mseq, stats = merge_read_inserts(mate1_record=mate1_record,
+#                                          mate2_record=mate2_record,
+#                                          sliced_mseq=mseq,
+#                                          q_cutoff=q_cutoff,
+#                                          q_cutoff_overlap=q_cutoff_overlap,
+#                                          slice_start_wrt_ref_1based=read_slice_intersect_start_wrt_ref,
+#                                          slice_end_wrt_ref_1based=read_slice_intersect_end_wrt_ref,
+#                                          stats=stats)
+#
+#
+#     # Now pad with respect to reference
+#     if do_pad_wrt_ref:
+#             left_pad_len = read_slice_intersect_start_wrt_ref  - 1
+#             right_pad_len = mate1_record.ref_len - read_slice_intersect_end_wrt_ref
+#             mseq = (sam_constants.SEQ_PAD_CHAR * left_pad_len) + mseq + (sam_constants.SEQ_PAD_CHAR * right_pad_len)
+#
+#     elif do_pad_wrt_slice:
+#         left_pad_len = read_slice_intersect_start_wrt_ref  - slice_start_wrt_ref_1based
+#         right_pad_len = slice_end_wrt_ref_1based - read_slice_intersect_end_wrt_ref
+#         mseq = (sam_constants.SEQ_PAD_CHAR * left_pad_len) + mseq + (sam_constants.SEQ_PAD_CHAR * right_pad_len)
+#
+#
+#
+#     return mseq, stats
 
 
 
