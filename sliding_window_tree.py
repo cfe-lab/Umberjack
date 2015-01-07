@@ -52,6 +52,8 @@ def create_full_msa_fasta(sam_filename, out_dir, ref, ref_len, mapping_cutoff, r
 
     sam_filename_nopath = os.path.split(sam_filename)[1]
     sam_filename_prefix = os.path.splitext(sam_filename_nopath)[0]
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)
     msa_fasta_filename = out_dir + os.sep + sam_filename_prefix + "." + ref + ".msa.fasta"
 
     LOGGER.debug("Start Full MSA-Fasta from SAM for ref " + ref)

@@ -155,6 +155,9 @@ def merge_pairs(seq1, seq2, qual1, qual2, q_cutoff=10):
         elif q2 > q1 and q2 >= q_cutoff:
                 mseq += seq2[i]
 
+        elif q1 == q2 or (q1 < q_cutoff and q2 < q_cutoff):  # TODO:  put in the correct pairs capabilities into here
+            mseq += "N"
+
         else:
             raise ValueError("We should never get here.  Unanticipated use case for merging sam reads")
 
@@ -636,7 +639,7 @@ def create_msa_fasta_from_sam(sam_filename, ref, ref_len, out_fasta_filename, ma
                 continue
 
 
-            padded_seq1, padded_qual1 = get_padded_seq_from_cigar(pos=int(pos), cigar=cigar, seq=seq, qual=qual,
+            padded_seq1, padded_qual1, ref_pos_to_insert_seq_qual, left_pad_len, right_pad_len = get_padded_seq_from_cigar(pos=int(pos), cigar=cigar, seq=seq, qual=qual,
                                                                   ref_len=ref_len)
 
             padded_seq2 = ''
@@ -663,7 +666,7 @@ def create_msa_fasta_from_sam(sam_filename, ref, ref_len, out_fasta_filename, ma
                     if (refname2 == ref and qname2 == qname and
                             not(sam_constants.SamFlag.IS_UNMAPPED & int(flag2) or sam_constants.SamFlag.IS_SECONDARY_ALIGNMENT & int(flag2) or
                                 refname2 == '*' or cigar2 == '*' or int(pos2) == 0 or int(mapq2) < mapping_cutoff)):
-                        padded_seq2, padded_qual2 = get_padded_seq_from_cigar(pos=int(pos2), cigar=cigar2, seq=seq2,
+                        padded_seq2, padded_qual2, ref_pos_to_insert_seq_qual, left_pad_len, right_pad_len = get_padded_seq_from_cigar(pos=int(pos2), cigar=cigar2, seq=seq2,
                                                                               qual=qual2, ref_len=ref_len)
 
             if padded_seq1 and padded_seq2:
