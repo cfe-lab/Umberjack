@@ -11,6 +11,8 @@ INDELIBLE_SITE_INFO_START = 8  # The line that the site information actually sta
 treefile = sys.argv[1]
 global_scaling_factors = sys.argv[2].split(",")
 n_sites = int(sys.argv[3])
+OUTPUT_PREFIX = sys.argv[4] #"scaling_"
+
 handle = open(treefile, 'rU')
 
 tree_string = handle.readline()
@@ -40,11 +42,14 @@ prop = [0.1038610, 0.1432928, 0.1381003, 0.1212857, 0.1020363, 0.0835798, 0.0673
 #n_sites = 10000 # codons
 kappa = 8.0
 
+RANDOM_SEED = 10
+
+
 for scaling_factor in global_scaling_factors:
     scaling_factor = float(scaling_factor)
 
     # Do not overwrite existing fastas and rates files
-    output_fasta = "scaling_{}.fas".format(scaling_factor)
+    output_fasta = "{}{}_TRUE.fas".format(OUTPUT_PREFIX, scaling_factor)
     if os.path.exists(output_fasta):
         print(output_fasta + " already exists.  Not regenerating")
     else:
@@ -52,7 +57,12 @@ for scaling_factor in global_scaling_factors:
 
         # write minimal contents of INDELible control file
         handle.write('[TYPE] CODON 1\n')
-        handle.write('[SETTINGS]\n[output] FASTA\n[printrates] TRUE\n')
+        handle.write('[SETTINGS]\n')
+        handle.write('[ancestralprint] NEW\n')  # output ancestral sequences in separate file
+        handle.write('[output] FASTA\n')  # TODO:  Write out nexus file.  Then later convert to fasta
+        handle.write('[fastaextension] fasta\n')
+        handle.write('[printrates] TRUE\n')
+        handle.write('[randomseed] ' + str(RANDOM_SEED) + '\n')
         handle.write('[MODEL] M3\n[submodel] %f\n' % kappa)
 
         prop_string = ''
@@ -65,11 +75,12 @@ for scaling_factor in global_scaling_factors:
         handle.write(prop_string + '\n')
         handle.write(omega_string + '\n')
 
-        handle.write('[TREE] bigtree %s;\n' % tree_string.rstrip('0123456789.;:\n'))
+        #handle.write('[TREE] bigtree %s;\n' % tree_string.rstrip('0123456789.;:\n'))
+        handle.write('[TREE] bigtree %s\n' % tree_string)
         handle.write('[treelength] %1.1f\n' % scaling_factor)
         handle.write('[PARTITIONS] partitionname\n')
         handle.write('  [bigtree M3 %d]\n' % n_sites)
-        handle.write('[EVOLVE] partitionname 1 scaling_%1.1f\n' % (scaling_factor))
+        handle.write('[EVOLVE] partitionname 1 %s%1.1f\n' % (OUTPUT_PREFIX, scaling_factor))
 
         handle.close()
 
@@ -83,8 +94,8 @@ for scaling_factor in global_scaling_factors:
     # (although only 1 dN/dS class per site)
 
     # Do not overwrite existing fastas and rates files
-    output_rates_txt = "scaling_{}_RATES.txt".format(scaling_factor)
-    output_rates_csv = "scaling_{}_RATES.csv".format(scaling_factor)
+    output_rates_txt = "{}{}_RATES.txt".format(OUTPUT_PREFIX, scaling_factor)
+    output_rates_csv = "{}{}_RATES.csv".format(OUTPUT_PREFIX, scaling_factor)
     if os.path.exists(output_rates_csv):
         print(output_rates_csv + " already exists.  Not regenerating")
     else:

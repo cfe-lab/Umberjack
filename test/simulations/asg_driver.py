@@ -10,7 +10,8 @@ from ASGsim import *;
 root = sys.argv[1]
 
 whens = [5000];
-how_manys = [10000];
+#how_manys = [10000];
+how_manys = [100];
 
 # first 3 parameters are: resample_rate, selection_rate, mutation_rate
 myASG = ASG(0.00001, 0.01, 0.0001, whens, how_manys, growth_rate = 0.005);
