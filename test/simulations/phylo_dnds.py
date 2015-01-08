@@ -13,7 +13,6 @@ def calc_total_poss_subst(codon):
     :param Bio.Seq.Seq codon:  3bp nucleotide codon
     :return int: total of point mutations that yield synonymous amino acid substitutions
     """
-    codon = codon.upper()
     orig_aa = Seq.translate(codon)
     total_poss_syn = 0
     total_poss_nonsyn = 0
@@ -21,11 +20,11 @@ def calc_total_poss_subst(codon):
         nuc = codon[codon_pos]
         for mut_str in ("A", "C", "T", "G"):
             mut = Seq.Seq(mut_str)
-            if str(mut) == str(nuc):
+            if str(mut).upper() == str(nuc).upper():
                 continue
             mut_codon = codon[:codon_pos] + mut + codon[codon_pos+1:]
             mut_aa = Seq.translate(mut_codon)
-            if str(orig_aa) == str(mut_aa)  :
+            if str(orig_aa).upper() == str(mut_aa).upper():
                 total_poss_syn += 1
             else:
                 total_poss_nonsyn += 1
@@ -45,7 +44,7 @@ def calc_total_subst(codon1, codon2):
     orig_aa1 = Seq.translate(codon1)
     for pos, nucstr1 in enumerate(str(codon1)):
         nucstr2 = str(codon2[pos])
-        if nucstr1 != nucstr2:
+        if nucstr1.upper() != nucstr2.upper():
             mut_codon1 = codon1[:pos] + Seq.Seq(nucstr2) + codon1[pos+1:]
             mut_aa1 = Seq.translate(mut_codon1)
             if str(orig_aa1) == str(mut_aa1):
@@ -69,6 +68,16 @@ def is_subst(codon1, codon2):
 
 
 
+def get_parent(tree, child_clade):
+    """
+    Returns the parent clade of the given clade
+    :param Bio.Phylo.Tree tree:
+    :param Bio.Phylo.Clade child_clade:
+    :return:
+    """
+    node_path = tree.get_path(child_clade)  # list of clades in path from just after root to the child clade
+    return node_path[-2]  # the last item in list is the child clade.  The 2nd last item is the parent clade.
+
 
 def calc_popn_dnds(leaf_fasta, ancestor_fasta, treefile):
     """
@@ -89,18 +98,21 @@ def calc_popn_dnds(leaf_fasta, ancestor_fasta, treefile):
     all_site_syn = [0.0]*num_codons
     all_site_nonsyn = [0.0]*num_codons
 
-    # For each leaf, traverse from root to leaf.
+    # Traverse each branch (parent-child pair).
     # Count number of nonsynonymous substitutions, synonymous substitutions between each parent-child pair at each codon site.
-    root_seq = nuc_recs[tree.clade.name].seq
-    for leaf in tree.get_terminals():
-        path_clades = tree.get_path(leaf)  # list of clades in path from just below root to leaf
-        parent_seq = root_seq
-        print "Processing path=" + ",".join([clade.name for clade in path_clades])
-        path_total_poss_syn = [0.0]*num_codons
-        path_total_poss_nonsyn = [0.0]*num_codons
-        path_total_syn = [0.0]*num_codons
-        path_total_nonsyn = [0.0]*num_codons
-        for child in path_clades:  # traverse from all child clades from just below root to leaf
+    #root_seq = nuc_recs[tree.clade.name].seq
+    #for leaf in tree.get_terminals():
+        # path_clades = tree.get_path(leaf)  # list of clades in path from just below root to leaf
+        # parent_seq = root_seq
+
+    innernodes = tree.find_clades(terminal=False)
+    for parent in innernodes:
+        #print "Processing path=" + ",".join([clade.name for clade in path_clades])
+        #for child in path_clades:  # traverse from all child clades from just below root to leaf
+
+        parent_seq = nuc_recs[parent.name].seq
+        for child in parent:
+            print "Processing parent-child=" + parent.name + "-" + child.name
             child_seq = nuc_recs[child.name].seq
 
             for codon_site in range(0, num_codons):  #0-based codon sites
@@ -108,26 +120,22 @@ def calc_popn_dnds(leaf_fasta, ancestor_fasta, treefile):
                 parent_codon_seq = parent_seq[nuc_pos:nuc_pos + Utility.NUC_PER_CODON]
                 child_codon_seq = child_seq[nuc_pos:nuc_pos + Utility.NUC_PER_CODON]
 
+                total_codon_poss_syn, total_codon_poss_nonsyn = calc_total_poss_subst(parent_codon_seq)
                 if is_subst(parent_codon_seq, child_codon_seq):
-                    total_codon_poss_syn, total_codon_poss_nonsyn = calc_total_poss_subst(parent_codon_seq)
-                    all_site_total_poss_syn[codon_site] += total_codon_poss_syn
-                    all_site_total_poss_nonsyn[codon_site] += total_codon_poss_nonsyn
-
                     total_codon_syn, total_codon_nonsyn = calc_total_subst(parent_codon_seq, child_codon_seq)
-                    all_site_syn[codon_site] += total_codon_syn
-                    all_site_nonsyn[codon_site] += total_codon_nonsyn
+                else:
+                    total_codon_syn, total_codon_nonsyn = 0,0
 
-                    # path_total_poss_syn[codon_site] = total_codon_poss_syn
-                    # path_total_poss_nonsyn[codon_site] = total_codon_poss_nonsyn
-                    # path_total_syn[codon_site] = total_codon_syn
-                    # path_total_nonsyn[codon_site] = total_codon_nonsyn
+                all_site_total_poss_syn[codon_site] += total_codon_poss_syn
+                all_site_total_poss_nonsyn[codon_site] += total_codon_poss_nonsyn
+                all_site_syn[codon_site] += total_codon_syn
+                all_site_nonsyn[codon_site] += total_codon_nonsyn
 
-            parent_seq = child_seq
+                print "site=" + str(codon_site) + " par={} child={} poss_syn={} poss_nonsyn={} syn={} nonsyn={}".format(parent_codon_seq, child_codon_seq,
+                                                                                                                        total_codon_poss_syn, total_codon_poss_nonsyn,
+                                                                                                        total_codon_syn, total_codon_nonsyn)
 
-        # print "path_total_poss_syn={} path_total_poss_nonsyn={} path_total_syn={} path_total_nonsyn={}".format(path_total_poss_syn[1],
-        #                                                                                                            path_total_poss_nonsyn[1],
-        #                                                                                                            path_total_syn[1],
-        #                                                                                                            path_total_nonsyn[1])
+
 
     for codon_site in range(0, num_codons):
         if all_site_total_poss_nonsyn[codon_site] != 0 and all_site_total_poss_syn[codon_site] != 0:
