@@ -4,54 +4,54 @@ library(reshape2)
 library(knitr)
 library(epiR)
 
-BASE_MUTATION_RATE <- 0.0001
+BASE_MUTATION_RATE <- 0.0001  # TODO:  output mutation rate into comments so that we can parse it in R
 
 NUC_PER_CODON <- 3
-WINDOWSIZE <- 400
-REF_LEN_NUC <- 9000
-
-POPN_SIZE <- 10000
-START_NUCPOS <- 3001
-END_NUCPOS <- 3400
-
-START_CODON <- 1001
-END_CODON <- 1133
-
-SMOOTH_DIST <- 10
-# TODO:  find expected dn-ds
 
 
-actual_dnds_filename <- "../out/consensus/mut100_1x_errfree_window400/actual_dnds_by_site.csv"
-#actual_dnds_filename <- "../out/consensus/mut100_1x_window400/actual_dnds_by_site.csv"
-expected_dnds_filename <- "../data/indelible/sample_genomes.100.rates.csv"
+# Read locations of input files from local sliding_window_tree_unit_test.config file
+CONFIG_FILENAME <- "./sliding_window_tree_unit_test.config"
+config<-read.table(CONFIG_FILENAME, sep="=", col.names=c("key","value"), as.is=c(1,2))
+
+actual_dnds_filename <- config[config$key=="ACTUAL_DNDS_FILENAME",]$val
+expected_dnds_filename <-  config[config$key=="EXPECTED_DNDS_FILENAME",]$val
+
 
 dnds_file <- file(actual_dnds_filename, open="rt")
 comments <- readLines(dnds_file, 1) # Read one line 
 close(dnds_file)
 
+args <- unlist(strsplit(comments, ','))
+start_nuc_pos <- as.numeric(unlist(strsplit(args[grep("start_nuc_pos", args)], "="))[2])
+end_nuc_pos <- as.numeric(unlist(strsplit(args[grep("end_nuc_pos", args)], "="))[2])
+start_codon <- (start_nuc_pos %/% 3) + 1
+end_codon <- end_nuc_pos %/% 3
+smooth_dist <- as.numeric(unlist(strsplit(args[grep("smooth_dist", args)], "="))[2])
 
 #' **`r comments`**
 #' -----------------------------
 #' 
 #' 
+# Cols:  Ref  Site  aveDnDs  dNdSWeightBySubst	dN_minus_dS	Windows	Codons	NonSyn	Syn	Subst	dNdSWeightByReads	multisiteAvedNdS	multisitedNdSWeightBySubst	simpleDnDs
 actual_dnds <- read.table(actual_dnds_filename, header=TRUE, na.strings="None", comment.char = "#", sep=",")
 dim(actual_dnds)
 head(actual_dnds)
-tail(actual_dnds)
 str(actual_dnds)
 summary(actual_dnds)
 
-
-expected_dnds <- read.table(expected_dnds_filename, header=TRUE, sep=',')
+# Cols: Observed S Changes  Observed NS Changes	E[S Sites]	E[NS Sites]	Observed S. Prop.	P{S}	dS	dN	dN-dS	P{S leq. observed}	P{S geq. observed}	Scaled dN-dS	dn/ds
+expected_dnds <- read.table(expected_dnds_filename, header=TRUE, sep="\t")  # Site  Interval	Scaling_factor	Rate_class	Omega
+expected_dnds$Site <- as.numeric(rownames(expected_dnds))
+expected_dnds$Omega <- expected_dnds$dN/expected_dnds$dS
 dim(expected_dnds)
 head(expected_dnds)
 str(expected_dnds)
 summary(expected_dnds)
 
 all(expected_dnds$Site == actual_dnds$Site)
-actual_dnds <- actual_dnds[START_CODON:END_CODON,]
+actual_dnds <- actual_dnds[start_codon:end_codon,]
 summary(actual_dnds)
-expected_dnds <- expected_dnds[START_CODON:END_CODON,]
+expected_dnds <- expected_dnds[start_codon:end_codon,]
 summary(expected_dnds)
 
 
@@ -65,7 +65,7 @@ expected_dnds$MultisiteAveDnDs <- apply(expected_dnds, 1, function(row) {
   site <- as.numeric(row["Site"])
   total_dnds <- 0
   total_sites <- 0
-  for (adjsite in max(MIN_SITE, site-SMOOTH_DIST):min(MAX_SITE, site+SMOOTH_DIST)) {
+  for (adjsite in max(MIN_SITE, site-smooth_dist):min(MAX_SITE, site+smooth_dist)) {
     total_dnds <- total_dnds + expected_dnds[expected_dnds$Site==adjsite, "Omega"]
     total_sites <- total_sites +1
   }
@@ -74,105 +74,154 @@ expected_dnds$MultisiteAveDnDs <- apply(expected_dnds, 1, function(row) {
 })
 
 
-#' **Scatterplot actual vs expected dn ds together**
 
-fullDat <- data.frame(actual_dnds, Expected=expected_dnds$Omega, ExpectedMultisite=expected_dnds$MultisiteAveDnDs)
+
+
+#' **Scatterplot actual vs expected dn ds together**
+fullDat <- cbind(actual_dnds, Expected=expected_dnds$Omega, ExpectedMultisite=expected_dnds$MultisiteAveDnDs, ExpectedMinus=expected_dnds$Scaled.dN.dS)
 fullDat <- na.omit(fullDat)
 summary(fullDat)
 
-ggplot(fullDat[!is.na(fullDat$aveDnDs),], aes(x=aveDnDs, y=Expected)) + 
+ggplot(fullDat[!is.na(fullDat$aveDnDs),], aes(x=Expected, y=aveDnDs)) + 
   geom_point() +
   geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
-  xlab("\nInferred") + 
-  ylab("Expected\n") + 
-  theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
-  scale_x_continuous(breaks=seq(0, 3, 0.5), limits=c(0, max(fullDat$aveDnDs, fullDat$Expected))) +
-  scale_y_continuous(breaks=seq(0, 3, 0.5), limits=c(0, max(fullDat$aveDnDs, fullDat$Expected))) +
+  geom_abline(slope=1) + 
+  ylab("Inferred\n") + 
+  xlab("\nExpected") + 
   coord_fixed(ratio=1) + 
-  ggtitle("Inferred vs Expected dn/ds, Inferred dn/ds Weighted by Substitutions")
-
-ggplot(fullDat[!is.na(fullDat$simpleDnDs),], aes(x=simpleDnDs, y=Expected)) + 
-  geom_point() +
-  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
-  xlab("\nInferred") + 
-  ylab("Expected\n") + 
   theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
-  scale_x_continuous(breaks=seq(0, max(fullDat$simpleDnDs), 0.5), limits=c(0, max(fullDat$simpleDnDs, fullDat$Expected))) +
-  scale_y_continuous(breaks=seq(0, max(fullDat$simpleDnDs), 0.5), limits=c(0, max(fullDat$simpleDnDs, fullDat$Expected))) +
-  coord_fixed(ratio=1) + 
-  ggtitle("Inferred vs Expected dn/ds, Inferred dn/ds Weighted by Substitutions")
+  ggtitle("Inferred Ave dN/dS vs Expected dn/ds")
 
-ggplot(fullDat[!is.na(fullDat$dNdSWeightBySubst),], aes(x=dNdSWeightBySubst, y=Expected)) + 
+
+ggplot(fullDat[!is.na(fullDat$simpleDnDs),], aes(x=Expected, y=simpleDnDs)) + 
   geom_point() +
   geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
-  xlab("\nInferred") + 
-  ylab("Expected\n") + 
+  ylab("Inferred\n") + 
+  xlab("\nExpected") + 
+  coord_fixed(ratio=1) + 
+  geom_abline(slope=1) + 
   theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
-  scale_x_continuous(breaks=seq(0, 3, 0.5), limits=c(0, max(fullDat$dNdSWeightBySubst, fullDat$Expected))) +
-  scale_y_continuous(breaks=seq(0, 3, 0.5), limits=c(0, max(fullDat$dNdSWeightBySubst, fullDat$Expected))) +
-  coord_fixed(ratio=1) + 
-  ggtitle("Inferred vs Expected dn/ds, Inferred dn/ds Weighted by Substitutions")
+  ggtitle("Inferred Simple dN/dS (do not normalize by expected subst) vs Expected dn/ds")
 
-ggplot(fullDat[!is.na(fullDat$dNdSWeightByReads),], aes(x=dNdSWeightByReads, y=Expected)) + 
+
+ggplot(fullDat[!is.na(fullDat$dN_minus_dS),], aes(x=ExpectedMinus, y=dN_minus_dS)) + 
   geom_point() +
   geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
-  xlab("\nInferred") + 
-  ylab("Expected\n") + 
+  ylab("Inferred\n") + 
+  xlab("\nExpected") + 
+  coord_fixed(ratio=1) + 
+  geom_abline(slope=1) + 
   theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
-  scale_x_continuous(breaks=seq(0, 3, 0.5), limits=c(0, max(fullDat$dNdSWeightByReads, fullDat$Expected))) +
-  scale_y_continuous(breaks=seq(0, 3, 0.5), limits=c(0, max(fullDat$dNdSWeightByReads, fullDat$Expected))) +
-  coord_fixed(ratio=1) + 
-  ggtitle("Inferred vs Expected dn/ds, Inferred dn/ds Weighted by Substitutions")
+  ggtitle("Inferred dN-dS vs Expected dn-dS")
 
-ggplot(fullDat, aes(x=multisiteAvedNdS, y=ExpectedMultisite)) + 
+ggplot(fullDat[!is.na(fullDat$dNdSWeightBySubst),], aes(x=Expected, y=dNdSWeightBySubst)) + 
   geom_point() +
   geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
-  xlab("\nInferred") + 
-  ylab("Expected\n") + 
+  ylab("Inferred\n") + 
+  xlab("\nExpected") + 
+  geom_abline(slope = 1) + 
+  coord_fixed(ratio=1) + 
+  theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
+  ggtitle("Inferred dn/ds Weighted by Substitutions vs Expected dn/ds")
+
+ggplot(fullDat[!is.na(fullDat$dNdSWeightByReads),], aes(x=Expected, y=dNdSWeightByReads)) + 
+  geom_point() +
+  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
+  ylab("Inferred\n") + 
+  xlab("\nExpected") + 
+  geom_abline(slope = 1) + 
+  theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
+  coord_fixed(ratio=1) + 
+  ggtitle("Inferred dN/dS Weighted by Reads vs Expected dn/ds")
+
+ggplot(fullDat, aes(x=ExpectedMultisite, y=multisiteAvedNdS)) + 
+  geom_point() +
+  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
+  ylab("Inferred\n") + 
+  xlab("\nExpected") + 
+  geom_abline(slope = 1) + 
   theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
   coord_fixed(ratio=1) + 
   ggtitle("Inferred vs Expected dn/ds, Inferred dn/ds Averaged Across Surrounding Sites")
 
-ggplot(fullDat, aes(x=multisitedNdSWeightBySubst, y=ExpectedMultisite)) + 
+ggplot(fullDat, aes(x=ExpectedMultisite, y=multisitedNdSWeightBySubst)) + 
   geom_point() +
   geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
-  xlab("\nInferred") + 
-  ylab("Expected\n") + 
+  ylab("Inferred\n") + 
+  xlab("\nExpected") + 
   theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
   coord_fixed(ratio=1) + 
-  ggtitle("Inferred vs Expected dn/ds, Inferred dn/ds Averaged Across Surrounding Sites")
+  geom_abline(slope = 1) + 
+  ggtitle("Inferred vs Expected dn/ds, Inferred dn/ds Averaged Across Surrounding Sites, Weighted by Substitutions")
 
 
 #' **Smoothed Scatterplot of Site dn/ds across the genome**
 #+ fig.width=28
 fullDatBySource <- reshape2:::melt.data.frame(data=fullDat, na.rm = FALSE, id.vars=c("Ref", "Site"),
-                                              measure.vars=c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", 
+                                              measure.vars=c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", "dN_minus_dS",
                                                              "multisiteAvedNdS", "multisitedNdSWeightBySubst", 
-                                                             "Expected", "ExpectedMultisite", "simpleDnDs"),
+                                                             "Expected", "ExpectedMultisite", "ExpectedMinus", 
+                                                             "simpleDnDs"),
                                               variable.name="source", value.name="dnds")
 head(fullDatBySource)
 tail(fullDatBySource)
 str(fullDatBySource)
 summary(fullDatBySource)
-#ggplot(fullDatBySource[fullDatBySource$source %in% c("aveDnDs", "simpleDnDs", "Expected"),], 
-ggplot(fullDatBySource[fullDatBySource$source %in% c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", "simpleDnDs", "Expected"),], 
-       aes(x=Site, y=dnds, color=source, size=2) ) + 
+ggplot(fullDatBySource[fullDatBySource$source %in% c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", "Expected"),], 
+       aes(x=Site, y=dnds, color=source) ) + 
   geom_smooth() + 
   xlab("Codon Site") + 
   ylab("dN/dS") + 
   ggtitle("dn/ds by site") + 
   theme(plot.title=element_text(size=36), axis.title=element_text(size=32), axis.text=element_text(size=24), 
-      legend.text=element_text(size=24), legend.title=element_blank())
+        legend.text=element_text(size=24), legend.title=element_blank())
 
-#' **Line Plot of Site dn/ds across the genome**
+#' **Line Plot of Average Site dn/ds across the genome**
 #' 
 #+ fig.width=20
-ggplot(fullDatBySource[fullDatBySource$source %in% c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", "simpleDnDs", "Expected"),], 
+ggplot(fullDatBySource[fullDatBySource$source %in% c("aveDnDs", "Expected"),], 
        aes(x=Site, y=dnds, color=source) ) + 
   geom_line() + 
   xlab("Codon Site Along Genome") + 
   ylab("dN/dS") + 
   ggtitle("dn/ds by site") + 
+  theme(plot.title=element_text(size=36), axis.title=element_text(size=32), axis.text=element_text(size=24), 
+        legend.text=element_text(size=24), legend.title=element_blank())
+
+
+#' **Line Plot of Average Site dn/ds Weighted by Substitutions and Reads across the genome**
+#' 
+#+ fig.width=20
+ggplot(fullDatBySource[fullDatBySource$source %in% c("dNdSWeightBySubst", "dNdSWeightByReads", "Expected"),], 
+       aes(x=Site, y=dnds, color=source) ) + 
+  geom_line() + 
+  xlab("Codon Site Along Genome") + 
+  ylab("dN/dS") + 
+  ggtitle("dn/ds by site") + 
+  theme(plot.title=element_text(size=36), axis.title=element_text(size=32), axis.text=element_text(size=24), 
+        legend.text=element_text(size=24), legend.title=element_blank())
+
+#' **Line Plot of Site dn-ds across the genome**
+#' 
+#+ fig.width=20
+ggplot(fullDatBySource[fullDatBySource$source %in% c("dN_minus_dS", "ExpectedMinus"),], 
+       aes(x=Site, y=dnds, color=source) ) + 
+  geom_line() + 
+  xlab("Codon Site Along Genome") + 
+  ylab("dN-dS") + 
+  ggtitle("dn-ds by site") + 
+  theme(plot.title=element_text(size=36), axis.title=element_text(size=32), axis.text=element_text(size=24), 
+        legend.text=element_text(size=24), legend.title=element_blank())
+
+#' **Smoothed Scatterplot of Site dn-ds across the genome**
+#' 
+#+ fig.width=20
+ggplot(fullDatBySource[fullDatBySource$source %in% c("dN_minus_dS", "ExpectedMinus"),], 
+       aes(x=Site, y=dnds, color=source) ) + 
+  geom_smooth() + 
+  xlab("Codon Site") + 
+  ylab("dN-dS") + 
+  ggtitle("Smoothed dn-ds") + 
   theme(plot.title=element_text(size=36), axis.title=element_text(size=32), axis.text=element_text(size=24), 
         legend.text=element_text(size=24), legend.title=element_blank())
 
@@ -250,14 +299,14 @@ ggplot(actual_dnds, aes(x=Site, y=Windows) ) + geom_line() +
   ylab("Windows") + 
   ggtitle("Windows Across Genome")
 
-#' **Plot the expected mutation rate across the genome**
-#' 
-#+ fig.width=20
-ggplot(expected_dnds, aes(x=Site, y=Scaling_factor*BASE_MUTATION_RATE) ) + geom_line() + 
-  xlab("Codon Site Along Genome") + 
-  ylab("Mutation Rate Scaling Factor") + 
-  scale_y_continuous(breaks=seq(0, 0.25, 0.01), limits=c(0, 0.25)) +
-  ggtitle("Mutation Rate Along Genome")
+# #' **Plot the expected mutation rate across the genome**
+# #' 
+# #+ fig.width=20
+# ggplot(expected_dnds, aes(x=Site, y=Scaling_factor*BASE_MUTATION_RATE) ) + geom_line() + 
+#   xlab("Codon Site Along Genome") + 
+#   ylab("Mutation Rate Scaling Factor") + 
+#   scale_y_continuous(breaks=seq(0, 0.25, 0.01), limits=c(0, 0.25)) +
+#   ggtitle("Mutation Rate Along Genome")
 
 #' **Plot the Expected Omega rate across the genome**
 #' 
@@ -286,8 +335,8 @@ print(dnds_cor)
 dnds_cor <- cor(fullDat$dNdSWeightBySubst, fullDat$Expected, method="spearman", use="complete.obs")
 print(dnds_cor)
 
-#' **Find how correlated the actual dn-ds vs expected dn/ds are**
-dnds_cor <- cor(fullDat$dN_minus_dS, fullDat$Expected, method="spearman", use="complete.obs")
+#' **Find how correlated the actual dn-ds vs expected dn-ds are**
+dnds_cor <- cor(fullDat$dN_minus_dS, fullDat$ExpectedMinus, method="spearman", use="complete.obs")
 print(dnds_cor)
 
 #' **Find how correlated the actual dn/ds weighted by reads vs expected dn/ds are**
@@ -316,8 +365,8 @@ print(dnds_ccc$rho.c)
 dnds_ccc <-  epi.ccc(fullDat$dNdSWeightBySubst, fullDat$Expected)
 print(dnds_ccc$rho.c)
 
-#' **Find how concordance correlated the actual dn-ds vs expected dn/ds are**
-dnds_ccc <-  epi.ccc(fullDat$dN_minus_dS, fullDat$Expected)
+#' **Find how concordance correlated the actual dn-ds vs expected dn-ds are**
+dnds_ccc <-  epi.ccc(fullDat$dN_minus_dS, fullDat$ExpectedMinus)
 print(dnds_ccc$rho.c)
 
 #' **Find how concordance correlated the actual dn/ds weighted by reads vs expected dn/ds are**

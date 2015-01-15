@@ -8,7 +8,7 @@ import sys
 import ConfigParser
 import indelible.indelible_handler as indelibler
 import hyphy.hyphy_handler as hyphy_handler
-
+import fasttree.fasttree_handler as fasttree_handler
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
@@ -111,16 +111,29 @@ LOGGER.debug("Finished execute ")
 
 
 
-# Calculate HyPhy dN/dS against the full sample_genomes population fasta
-# TODO:  do fasttree tree  since we lose the tree when we concatenate multiple populations at different scalings together
+# Calculate HyPhy dN/dS for each indelible population
+with open(INTERVALS_CSV, 'rU') as fh_in_intervals:
+    import csv
+    #scaling_factor,num_codons,outdir,out_filename_prefix
+    reader = csv.DictReader(fh_in_intervals)
+    for interval in reader:
+        # Indelible writes the tree along with other stats in the trees.txt file.
+        # Parse out the tree into separate newick file.
+        scaling_factor_str = str(float(interval["scaling_factor"]))
+        indelible_tree_txt = interval["outdir"] + os.sep + "trees.txt"
+        indelible_out_tree_nwk = interval["outdir"] + os.sep + INDELIBLE_OUT_FILENAME_PREFIX + scaling_factor_str + ".nwk"
+        indelible_leaves_fasta = interval["outdir"] + os.sep + INDELIBLE_OUT_FILENAME_PREFIX + scaling_factor_str + "_TRUE.fasta"
+        indelibler.write_tree(indelible_tree_txt, indelible_out_tree_nwk)
+        hyphy_handler.calc_dnds(codon_fasta_filename=indelible_leaves_fasta, tree_filename=indelible_out_tree_nwk,
+                                threads=PROCS)
 
 
-indelible_tree_txt = OUTDIR + os.sep + "50" + os.sep + "trees.txt"
-indelible_out_tree_nwk = OUTDIR + os.sep + "50" + os.sep + INDELIBLE_OUT_FILENAME_PREFIX + ".50.nwk"
-indelibler.write_tree(indelible_tree_txt, indelible_out_tree_nwk)
-hyphy_handler.calc_dnds(codon_fasta_filename=sample_genomes_fasta,
-                        tree_filename=indelible_out_tree_nwk,
-                        pvalue=0.05,
+# For the sample_genomes populations, we lose the true tree branch lengths when we concatenate multiple populations at different scalings together.
+# Get FastTree to approximate tree for concatenated population sequences.
+sample_genomes_tree_fname = fasttree_handler.make_tree(fasta_fname=sample_genomes_fasta, threads=PROCS)
+
+# Calculate HyPhy dN/dS for the full sample_genomes population fasta
+hyphy_handler.calc_dnds(codon_fasta_filename=sample_genomes_fasta, tree_filename=sample_genomes_tree_fname,
                         threads=PROCS)
 
 

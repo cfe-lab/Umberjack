@@ -43,7 +43,7 @@ ART_CMD=[ART_BIN_DIR + os.sep + "art_illumina",
      "-dr2",  "0", # 2nd read deletion rate
      "-l",  "250", # length of read
      #"-f", "2", # fold coverage
-     "-f", "2", # fold coverage
+     "-f", "10", # fold coverage
      "-m",  "346", # mean fragment size
      "-s",  "75", # std dev fragment size
      "-o",  art_output_prefix  # output prefix
@@ -177,6 +177,8 @@ for input_sam, aln_ref_fasta in [(art_output_prefix + ".sam", reference_fasta),
 
 # Get per-bp coverage along reference consensus.  This table is passed to R for plotting.
 samtools_logfile = bowtie_output_prefix + ".samtools.log"
+MIN_BASE_Q = 20
+MIN_MAP_Q = 20
 print "Logging to " + samtools_logfile
 if os.path.exists(samtools_logfile):
     os.remove(samtools_logfile)
@@ -193,11 +195,18 @@ for input_sam in [art_output_prefix + ".sort.sam",
                         input_sam ] # input samfile
     output_depth_tsv = input_sam.replace(".sam", ".cov.tsv")
     SAMTOOLS_DEPTH_CMD = ["samtools", "depth",
-                          "-q", "20",  # min base quality 20
-                          "-Q", "20",  # min mapping quality 20
+                          "-q", str(MIN_BASE_Q),  # min base quality
+                          "-Q", str(MIN_MAP_Q),  # min mapping quality 20
                           output_bam ]
     with open(samtools_logfile, 'a') as fh_log,  open(output_depth_tsv, 'w') as fh_out_cov:
         print "About to execute " + " ".join(SAMTOOLS_BAM_CMD)
         subprocess.check_call(SAMTOOLS_BAM_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
         print "About to execute " + " ".join(SAMTOOLS_DEPTH_CMD)
         subprocess.check_call(SAMTOOLS_DEPTH_CMD, env=os.environ, stdout=fh_out_cov, stderr=fh_log)
+
+# Plot the coverage and qualties into HTML
+Rscript_wdir =  os.path.abspath(os.path.dirname(__file__) + os.sep + "R")
+Rscript_cmd = ("library(knitr); " +
+               "setwd('{}'); ".format(Rscript_wdir) +
+               "spin('small_cov.R')")
+subprocess.check_call(["Rscript", "-e", Rscript_cmd], env=os.environ)

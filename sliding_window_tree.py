@@ -133,19 +133,20 @@ def tabulate_results(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
                      end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, pvalue, output_csv_filename,
                      mode, window_slide, smooth_dist):
 
-    comments = ("ref=" + ref + ","
-                             "ref_len=" + str(ref_len) + "," +
-                             "sam=" + sam_filename + "," +
-                             "map_qual_cutoff=" + str(map_qual_cutoff) + "," +
-                             "read qual cutoff=" + str(read_qual_cutoff) + "," +
-                             "max_prop_n=" + str(max_prop_n) + "," +
-                             "start nuc pos=" + str(start_nucpos) + "," +
-                             "end nuc pos=" + str(end_nucpos) + "," +
-                             "windowsize=" + str(window_size) + "," +
-                             "window_slide=" + str(window_slide) + "," +
-                             "window_depth_cutoff=" + str(window_depth_cutoff) + "," +
-                             "window_breadth_cutoff=" + str(window_breadth_cutoff) + "," +
-                             "pvalue=" + str(pvalue))
+    comments = ("ref=" + ref + "," +
+                "ref_len=" + str(ref_len) + "," +
+                "sam=" + sam_filename + "," +
+                "map_qual_cutoff=" + str(map_qual_cutoff) + "," +
+                "read qual cutoff=" + str(read_qual_cutoff) + "," +
+                "max_prop_n=" + str(max_prop_n) + "," +
+                "start_nuc_pos=" + str(start_nucpos) + "," +
+                "end_nuc_pos=" + str(end_nucpos) + "," +
+                "windowsize=" + str(window_size) + "," +
+                "window_slide=" + str(window_slide) + "," +
+                "window_depth_cutoff=" + str(window_depth_cutoff) + "," +
+                "window_breadth_cutoff=" + str(window_breadth_cutoff) + "," +
+                "pvalue=" + str(pvalue) + "," +
+                "smooth_dist=" + str(smooth_dist))
     if mode == MODE_DNDS:
         LOGGER.debug("Start Ave Dn/DS for all windows for ref " + ref + " " + output_csv_filename)
         seq_dnds_info = slice_miseq.tabulate_dnds(dnds_tsv_dir=out_dir, ref=ref, ref_nuc_len=ref_len,
