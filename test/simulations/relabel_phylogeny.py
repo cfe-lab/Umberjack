@@ -21,6 +21,9 @@ for i, node in enumerate(nodes):
 tips = t.get_terminals()
 for i, tip in enumerate(tips):
     tip.name = 'otu'+str(i+1)
+
+
+
 #t.collapse(t.clade)
 
 # # dictionary of Clade to depth (tree height)
@@ -48,6 +51,16 @@ for i, tip in enumerate(tips):
 #     branch.branch_length = cur / global_scaling_factor
 #     #if i % 500 == 0: print i, cur, depth, logistic, adj
 
+
+# branches = nodes + tips
+# t.clade.branch_length = 0.0
+# total_branch_len = t.total_branch_length()
+# global_scaling_factor = 100.0
+# for i, branch in enumerate(branches):
+#     branch_scaling_factor = global_scaling_factor/total_branch_len
+#     branch.branch_length = branch.branch_length * branch_scaling_factor
+
+
 # Indelible wants beginning of newick to start with (, end of newick to end with );
 from cStringIO import StringIO
 
@@ -57,6 +70,8 @@ tree_strio.flush()
 tree_str = tree_strio.getvalue()
 tree_strio.close()
 tree_str = "(" + tree_str.replace(";", ");")
+# tree_str = tree_str.replace(":0.000000000;", ";")
+
 relabled_nwk = in_tree_file.replace(".nwk", ".rename.nwk")
 with open(relabled_nwk, "w") as fh_out:
     fh_out.write(tree_str)

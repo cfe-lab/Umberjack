@@ -16,12 +16,17 @@ ART_QUAL_PROFILE_TSV2 = sys.argv[3]
 reference_fasta = sys.argv[4]
 consensus_fasta = sys.argv[5]
 art_output_prefix = sys.argv[6]
+ART_FOLD_COVER = sys.argv[7]
+art_mean_insert_size = sys.argv[8]
+art_stddev_insert_size = sys.argv[9]
 
-PICARD_BIN_DIR = sys.argv[7]
+PICARD_BIN_DIR = sys.argv[10]
 
-BOWTIE_OUT_DIR = sys.argv[8]
-PROCS = int(sys.argv[9])
-SEED = int(sys.argv[10])
+BWA_OUT_DIR = sys.argv[11]
+PROCS = int(sys.argv[12])
+SEED = int(sys.argv[13])
+NUM_INDIV = sys.argv[14]
+NUM_CODON_SITES = sys.argv[15]
 
 
 if not os.path.exists(os.path.dirname(art_output_prefix)):
@@ -41,11 +46,12 @@ ART_CMD=[ART_BIN_DIR + os.sep + "art_illumina",
      "-ir2",  "0", # 2nd read insertion rate
      "-dr",  "0", # 1st read deletion rate
      "-dr2",  "0", # 2nd read deletion rate
+     "-qs", "2",  # Bump up the quality scores of every base in 1st mate so that average error rate = 0.006
+     "-qs2", "2",  # Bump up the quality scores of every base in 2nd mate so that average error rate = 0.006
      "-l",  "250", # length of read
-     #"-f", "2", # fold coverage
-     "-f", "10", # fold coverage
-     "-m",  "346", # mean fragment size
-     "-s",  "75", # std dev fragment size
+     "-f", ART_FOLD_COVER, # fold coverage
+     "-m",  art_mean_insert_size, # mean fragment size
+     "-s",  art_stddev_insert_size, # std dev fragment size
      "-o",  art_output_prefix  # output prefix
      ]
 
@@ -78,87 +84,69 @@ with open(picard_logfile, 'w') as fh_log:
 
 
 # Align reads against population consensus
-if not os.path.exists(BOWTIE_OUT_DIR):
-    os.makedirs(BOWTIE_OUT_DIR)
+if not os.path.exists(BWA_OUT_DIR):
+    os.makedirs(BWA_OUT_DIR)
 
 
-bowtie_output_prefix = BOWTIE_OUT_DIR + os.sep + os.path.basename(art_output_prefix)
-bowtie_log = bowtie_output_prefix + ".bowtie.log"
-bowtie_db_prefix = BOWTIE_OUT_DIR + os.sep + os.path.basename(consensus_fasta).replace(".fasta", "")
-BOWTIE_BUILD_CMD = ["bowtie2-build",
+bwa_output_prefix = BWA_OUT_DIR + os.sep + os.path.basename(art_output_prefix)
+bwa_log = bwa_output_prefix + ".bwa.log"
+bwa_db_prefix = BWA_OUT_DIR + os.sep + os.path.basename(consensus_fasta).replace(".fasta", "")
+BWA_BUILD_CMD = ["/home/thuy/programs/bwa/bwa-0.7.8/bwa", "index",
+                 "-p", bwa_db_prefix, # prefix of db index
                     consensus_fasta,  # fasta to align against
-                    bowtie_db_prefix]  # prefix of db index
+                    ]
 
-# Super high gap penalty, very sensitive local alignment
-BOWTIE_CMD = ["bowtie2",
-              "--local",
-              "-D", "30",  # max allowed failed seed extensions
-              "-R", "4", # max reseeds for repetitive seeds
-              "-N", "1", # max mismatches during seed alignment
-              "-L", "10", # seed length
-              "-i", "S,1,0.25",  # interval between seed strings.  Interval(readlen) = 1 + 0.25 * sqrt(readlen) = 4.9
-              "-x", bowtie_db_prefix,  # reference index
-              "-t",  # output timing
-              "-1", art_output_prefix + ".1.fq",
-              "-2", art_output_prefix + ".2.fq",
-              "-S", bowtie_output_prefix + ".consensus.bowtie.sam",  # samfile output
-              "--rdg", "100,3",  # read affine gap open, gap extension penalty
-              "--rfg", "100,3",  # ref affine gap open, gap extension penalty
-              "--phred33",   # sanger phred scoring
-              "-p", str(PROCS)]
+# bwa seems to perform better than bowtie for aligning the very divergent sequences
+with open(bwa_log, 'w') as fh_log:
+    print "Logging to " + bwa_log
+    print "About to execute " + " ".join(BWA_BUILD_CMD)
+    subprocess.check_call(BWA_BUILD_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
 
-# Super high gap penalty, very sensitive local alignment
-#--very-sensitive-local
-#Same as: -D 20 -R 3 -N 0 -L 20 -i S,1,0.50
-# -D 30 -R 4 -N 1 -L 10 -i S,1,0.25
-BOWTIE_ERRFREE_CMD = ["bowtie2",
-              "--local",
-              "-D", "30",  # max allowed failed seed extensions
-              "-R", "4", # max reseeds for repetitive seeds
-              "-N", "1", # max mismatches during seed alignment
-              "-L", "10", # seed length
-              "-i", "S,1,0.25",  # interval between seed strings.  Interval(readlen) = 1 + 0.25 * sqrt(readlen)
-              "-x", bowtie_db_prefix,  # reference index
-              "-t",  # output timing
-              "-1", art_output_prefix + ".errFree.1.fq",
-              "-2", art_output_prefix + ".errFree.2.fq",
-              "-S", bowtie_output_prefix + ".errFree.consensus.bowtie.sam",  # samfile output
-              "--rdg", "100,3",  # read affine gap open, gap extension penalty
-              "--rfg", "100,3",  # ref affine gap open, gap extension penalty
-              "--phred33",   # sanger phred scoring
-              "-p", str(PROCS)]
+    for fq_prefix, output_sam in [(art_output_prefix, bwa_output_prefix + ".consensus.bwa.sam"),
+                           (art_output_prefix + ".errFree", bwa_output_prefix + ".errFree.consensus.bwa.sam")]:
+        BWA_CMD = ["/home/thuy/programs/bwa/bwa-0.7.8/bwa",
+              "mem",
+              "-t", "10", # threads
+              "-k", "5",  # seed len
+              "-d", "4800", # max extension
+              "-r", "1", # reseeding
+              "-B", "2", # mismatch penalty
+              "-T", "10", # min align score
 
-with open(bowtie_log, 'w') as fh_log:
-    print "Logging to " + bowtie_log
-    print "About to execute " + " ".join(BOWTIE_BUILD_CMD)
-    subprocess.check_call(BOWTIE_BUILD_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
-
-    print "About to execute " + " ".join(BOWTIE_CMD)
-    subprocess.check_call(BOWTIE_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
-
-    print "About to execute " + " ".join(BOWTIE_ERRFREE_CMD)
-    subprocess.check_call(BOWTIE_ERRFREE_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
-
+              bwa_db_prefix,  # reference index
+              fq_prefix + ".1.fq",
+              fq_prefix + ".2.fq"]
+        with open(output_sam, 'w') as fh_out_sam:
+            print "About to execute " + " ".join(BWA_CMD)
+            subprocess.check_call(BWA_CMD, env=os.environ, stdout=fh_out_sam, stderr=fh_log)
 
 
 
 # Get the coverage stats and histo
-picard_logfile = bowtie_output_prefix + ".picard.wgsmetrics.log"
+picard_logfile = bwa_output_prefix + ".picard.wgsmetrics.log"
 print "Logging to " + picard_logfile
 if os.path.exists(picard_logfile):
     os.remove(picard_logfile)
 for input_sam, aln_ref_fasta in [(art_output_prefix + ".sam", reference_fasta),
                                  (art_output_prefix + ".errFree.sam", reference_fasta),
-                                 (bowtie_output_prefix + ".consensus.bowtie.sam", consensus_fasta),
-                                 (bowtie_output_prefix + ".errFree.consensus.bowtie.sam", consensus_fasta)]:
+                                 (bwa_output_prefix + ".consensus.bwa.sam", consensus_fasta),
+                                 (bwa_output_prefix + ".errFree.consensus.bwa.sam", consensus_fasta)]:
 
     output_sam = input_sam.replace(".sam", ".sort.sam")
+    output_query_sam = input_sam.replace(".sam", ".sort.query.sam")
     output_wgsmetrics = input_sam.replace(".sam", ".picard.wgsmetrics")
     PICARD_SORT_SAM_CMD = ["java", "-jar", PICARD_BIN_DIR + os.sep + "picard.jar",
                   "SortSam",
                   "INPUT=" + input_sam,
                   "OUTPUT=" + output_sam,
                   "SORT_ORDER=coordinate"]
+    # Sort by queryname for sliding_window_tree.py
+    PICARD_SORT_QUERYNAME_SAM_CMD = ["java", "-jar", PICARD_BIN_DIR + os.sep + "picard.jar",
+                  "SortSam",
+                  "INPUT=" + input_sam,
+                  "OUTPUT=" + output_query_sam,
+                  "SORT_ORDER=queryname"]
+
     # CollectWgsMetrics Needs a sam/bam sorted by coordinates
     PICARD_WGS_METRICS_CMD = ["java", "-jar", PICARD_BIN_DIR + os.sep + "picard.jar",
                   "CollectWgsMetrics",
@@ -172,20 +160,22 @@ for input_sam, aln_ref_fasta in [(art_output_prefix + ".sam", reference_fasta),
         subprocess.check_call(PICARD_SORT_SAM_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
         print "About to execute " + " ".join(PICARD_WGS_METRICS_CMD)
         subprocess.check_call(PICARD_WGS_METRICS_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
+        print "About to execute " + " ".join(PICARD_SORT_QUERYNAME_SAM_CMD)
+        subprocess.check_call(PICARD_SORT_QUERYNAME_SAM_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
 
 
 
 # Get per-bp coverage along reference consensus.  This table is passed to R for plotting.
-samtools_logfile = bowtie_output_prefix + ".samtools.log"
+samtools_logfile = bwa_output_prefix + ".samtools.log"
 MIN_BASE_Q = 20
-MIN_MAP_Q = 20
+MIN_MAP_Q = 5
 print "Logging to " + samtools_logfile
 if os.path.exists(samtools_logfile):
     os.remove(samtools_logfile)
 for input_sam in [art_output_prefix + ".sort.sam",
                   art_output_prefix + ".errFree.sort.sam",
-                  bowtie_output_prefix + ".consensus.bowtie.sort.sam",
-                  bowtie_output_prefix + ".errFree.consensus.bowtie.sort.sam"]:
+                  bwa_output_prefix + ".consensus.bwa.sort.sam",
+                  bwa_output_prefix + ".errFree.consensus.bwa.sort.sam"]:
 
     output_bam = input_sam.replace(".sam", ".bam")
     SAMTOOLS_BAM_CMD = ["samtools", "view",
@@ -206,7 +196,22 @@ for input_sam in [art_output_prefix + ".sort.sam",
 
 # Plot the coverage and qualties into HTML
 Rscript_wdir =  os.path.abspath(os.path.dirname(__file__) + os.sep + "R")
+# Output the R config file (workaround cuz can't seem to set commandline parameters for rmd knitr scripts)
+Rcov_config_file = os.path.abspath(os.path.dirname(__file__) + os.sep + "R" + os.sep + "small_cov.config")
+with open(Rcov_config_file, 'w') as fh_out_rconfig:
+    fh_out_rconfig.write("NUM_INDIV={}".format(NUM_INDIV) + "\n")
+    fh_out_rconfig.write("NUM_CODON_SITES={}".format(NUM_CODON_SITES) + "\n")
+    fh_out_rconfig.write("ART_FOLD_COVER={}".format(ART_FOLD_COVER) + "\n")
+    fh_out_rconfig.write("ORIG_ERR_FREE_COV_TSV={}".format(art_output_prefix + ".errFree.sort.cov.tsv",) + "\n")
+    fh_out_rconfig.write("ALN_ERR_FREE_COV_TSV={}".format(bwa_output_prefix + ".errFree.consensus.bwa.sort.cov.tsv",) + "\n")
+    fh_out_rconfig.write("ORIG_ERR_FREE_WGS_METRICS={}".format(art_output_prefix + ".errFree.picard.wgsmetrics",) + "\n")
+    fh_out_rconfig.write("ALN_ERR_FREE_WGS_METRICS={}".format(bwa_output_prefix + ".errFree.consensus.bwa.picard.wgsmetrics",) + "\n")
+    fh_out_rconfig.write("ORIG_COV_TSV={}".format(art_output_prefix + ".sort.cov.tsv",) + "\n")
+    fh_out_rconfig.write("ALN_COV_TSV={}".format(bwa_output_prefix + ".consensus.bwa.sort.cov.tsv",) + "\n")
+    fh_out_rconfig.write("ORIG_WGS_METRICS={}".format(art_output_prefix + ".picard.wgsmetrics",) + "\n")
+    fh_out_rconfig.write("ALN_WGS_METRICS={}".format(bwa_output_prefix + ".consensus.bwa.picard.wgsmetrics",) + "\n")
 Rscript_cmd = ("library(knitr); " +
                "setwd('{}'); ".format(Rscript_wdir) +
                "spin('small_cov.R')")
 subprocess.check_call(["Rscript", "-e", Rscript_cmd], env=os.environ)
+shutil.copy(Rscript_wdir + os.sep + "small_cov.html", bwa_output_prefix + ".cov.html")

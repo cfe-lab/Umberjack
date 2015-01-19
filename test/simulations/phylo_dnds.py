@@ -4,18 +4,65 @@ from Bio import SeqIO as SeqIO
 from Bio import Seq as Seq
 import itertools
 import Utility
+import itertools
 
+
+def calc_total_poss_pathway_subst(start_codon, end_codon):
+    """
+    Calculate the total of possible point mutations that yield synonymous amino acid substitution.
+    If there are multiple pathways, then averages over the pathways.
+    :param Bio.Seq.Seq start_codon:  3bp nucleotide codon
+    :return int: total of point mutations that yield synonymous amino acid substitutions
+    """
+    upper_start_codon = start_codon.upper()
+    upper_end_codon = end_codon.upper()
+
+
+    total_poss_syn = 0.0
+    total_poss_nonsyn = 0.0
+    total_poss_subs = 0.0
+
+    # find positions where the codons differ
+    diff_pos = []
+    for pos, nucstr1 in enumerate(str(upper_start_codon)):
+        nucstr2 = str(upper_end_codon[pos])
+        if nucstr1 != nucstr2:
+            diff_pos.extend([pos])
+
+    # Traverse all possible pathways from start_codon to end_codon where
+    # each stage of a pathway mutates by 1 base.
+    last_codon = upper_start_codon
+    poss_syn, poss_nonsyn = calc_total_poss_subst(upper_start_codon)
+    total_poss_subs += 1
+    total_poss_syn += poss_syn
+    total_poss_nonsyn += poss_nonsyn
+
+    for pathway in itertools.permutations(diff_pos):
+        print str(upper_start_codon) + " " + str(upper_end_codon) + " " + ",".join([str(x) for x in pathway])
+        for mut_pos in pathway:
+            mut_nuc = upper_end_codon[mut_pos]
+            mut_codon =  last_codon[:mut_pos] + mut_nuc + last_codon[mut_pos+1:]
+            poss_syn, poss_nonsyn = calc_total_poss_subst(mut_codon)
+
+            total_poss_subs += 1
+            total_poss_syn += poss_syn
+            total_poss_nonsyn += poss_nonsyn
+
+            last_codon = mut_codon
+
+        if str(last_codon) != str(upper_end_codon):
+            raise ValueError("Pathway does not yield end codon " + str(last_codon))
+
+
+    ave_poss_syn = total_poss_syn/total_poss_subs
+    ave_poss_nonsyn = total_poss_nonsyn/total_poss_subs
+    return ave_poss_syn, ave_poss_nonsyn
 
 
 def calc_total_poss_subst(codon):
-    """
-    Calculate the total of possible point mutations that yield synonymous amino acid substitution.
-    :param Bio.Seq.Seq codon:  3bp nucleotide codon
-    :return int: total of point mutations that yield synonymous amino acid substitutions
-    """
+    total_poss_syn = 0.0
+    total_poss_nonsyn = 0.0
     orig_aa = Seq.translate(codon)
-    total_poss_syn = 0
-    total_poss_nonsyn = 0
     for codon_pos in range(0, Utility.NUC_PER_CODON):
         nuc = codon[codon_pos]
         for mut_str in ("A", "C", "T", "G"):
@@ -32,26 +79,60 @@ def calc_total_poss_subst(codon):
     return total_poss_syn, total_poss_nonsyn
 
 
-def calc_total_subst(codon1, codon2):
+def calc_total_subst(start_codon, end_codon):
     """
-    Returns total synonymous substitutions, nonsynonymous substitutions
-    :param Bio.Seq.Seq codon1:  3bp codon
-    :param Bio.Seq.Seq codon2:  3bp codon
-    :return tuple (int, int):  (total point mutations that yield same amino acid, total point mutations that yield different amino acid)
+    Returns total synonymous substitutions, nonsynonymous substitutions.
+    If there are multiple positions that differ between codons, then returns the average synonynous substitutions,
+    average nonsynonymous substitutions across all possible pathways from codon1 to codon2
+    where each stage in a pathway is separated by 1 position mutation.
+    :param Bio.Seq.Seq start_codon:  3bp codon
+    :param Bio.Seq.Seq end_codon:  3bp codon
+    :return tuple (int, int):  (average point mutations that yield same amino acid across all pathways, average point mutations that yield different amino acid across all pathways)
     """
-    total_syn = 0
-    total_nonsyn = 0
-    orig_aa1 = Seq.translate(codon1)
-    for pos, nucstr1 in enumerate(str(codon1)):
-        nucstr2 = str(codon2[pos])
-        if nucstr1.upper() != nucstr2.upper():
-            mut_codon1 = codon1[:pos] + Seq.Seq(nucstr2) + codon1[pos+1:]
-            mut_aa1 = Seq.translate(mut_codon1)
-            if str(orig_aa1) == str(mut_aa1):
+    total_syn = 0.0
+    total_nonsyn = 0.0
+    total_subs = 0.0
+
+    upper_start_codon = start_codon.upper()
+    upper_end_codon = end_codon.upper()
+
+    # find positions where the codons differ
+    diff_pos = []
+    for pos, nucstr1 in enumerate(str(upper_start_codon)):
+        nucstr2 = str(upper_end_codon[pos])
+        if nucstr1 != nucstr2:
+            diff_pos.extend([pos])
+
+    # Traverse all possible pathways from start_codon to end_codon where
+    # each stage of a pathway mutates by 1 base.
+    last_codon = upper_start_codon
+    last_aa = Seq.translate(last_codon)
+    for pathway in itertools.permutations(diff_pos):
+        print str(upper_start_codon) + " " + str(upper_end_codon) + " " + ",".join([str(x) for x in pathway])
+        for mut_pos in pathway:
+            mut_nuc = upper_end_codon[mut_pos]
+            mut_codon =  last_codon[:mut_pos] + mut_nuc + last_codon[mut_pos+1:]
+            mut_aa = Seq.translate(mut_codon)
+
+            total_subs += 1
+            if str(last_aa) == str(mut_aa):
                 total_syn += 1
             else:
                 total_nonsyn += 1
-    return total_syn, total_nonsyn
+
+            last_codon = mut_codon
+            last_aa = mut_aa
+
+        if str(last_codon) != str(upper_end_codon):
+            raise ValueError("Pathway does not yield end codon " + str(last_codon))
+
+    if total_subs:
+        ave_syn = total_syn/total_subs
+        ave_nonsyn = total_nonsyn/total_subs
+    else:
+        ave_syn = 0.0
+        ave_nonsyn = 0.0
+    return ave_syn, ave_nonsyn
 
 
 
@@ -120,11 +201,9 @@ def calc_popn_dnds(leaf_fasta, ancestor_fasta, treefile):
                 parent_codon_seq = parent_seq[nuc_pos:nuc_pos + Utility.NUC_PER_CODON]
                 child_codon_seq = child_seq[nuc_pos:nuc_pos + Utility.NUC_PER_CODON]
 
-                total_codon_poss_syn, total_codon_poss_nonsyn = calc_total_poss_subst(parent_codon_seq)
-                if is_subst(parent_codon_seq, child_codon_seq):
-                    total_codon_syn, total_codon_nonsyn = calc_total_subst(parent_codon_seq, child_codon_seq)
-                else:
-                    total_codon_syn, total_codon_nonsyn = 0,0
+                total_codon_poss_syn, total_codon_poss_nonsyn = calc_total_poss_pathway_subst(parent_codon_seq, child_codon_seq)
+                total_codon_syn, total_codon_nonsyn = calc_total_subst(parent_codon_seq, child_codon_seq)
+
 
                 all_site_total_poss_syn[codon_site] += total_codon_poss_syn
                 all_site_total_poss_nonsyn[codon_site] += total_codon_poss_nonsyn

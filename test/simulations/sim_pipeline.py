@@ -9,6 +9,8 @@ import ConfigParser
 import indelible.indelible_handler as indelibler
 import hyphy.hyphy_handler as hyphy_handler
 import fasttree.fasttree_handler as fasttree_handler
+import shutil
+
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
@@ -84,6 +86,9 @@ ART_BIN_DIR = config.get(SECTION, "ART_BIN_DIR")
 ART_QUAL_PROFILE_TSV1 = config.get(SECTION, "ART_QUAL_PROFILE_TSV1")
 ART_QUAL_PROFILE_TSV2 = config.get(SECTION, "ART_QUAL_PROFILE_TSV2")
 ART_READ_OUTPUT_PREFIX =  config.get(SECTION, "ART_READ_OUTPUT_PREFIX")
+ART_FOLD_COVER = config.getint(SECTION, "ART_FOLD_COVER")
+ART_MEAN_INSERT = config.getint(SECTION, "ART_MEAN_INSERT")
+ART_STDEV_INSERT = config.getint(SECTION, "ART_STDEV_INSERT")
 
 PICARD_BIN_DIR = config.get(SECTION, "PICARD_BIN_DIR")
 BOWTIE_OUT_DIR = config.get(SECTION, "BOWTIE_OUT_DIR")
@@ -100,10 +105,15 @@ generate_reads_cmd = ["python", generate_reads_exe,
                       sample_genomes_fasta,
                       sample_genomes_consensus_fasta,
                       ART_READ_OUTPUT_PREFIX,
+                      str(ART_FOLD_COVER),
+                      str(ART_MEAN_INSERT),
+                      str(ART_STDEV_INSERT),
                       PICARD_BIN_DIR,
                       BOWTIE_OUT_DIR,
                       str(PROCS),
-                      str(SEED)]
+                      str(SEED),
+                      str(NUM_INDIV),
+                      str(NUM_CODON_SITES)]
 LOGGER.debug("About to execute " + " ".join(generate_reads_cmd))
 subprocess.check_call(generate_reads_cmd, env=os.environ)
 LOGGER.debug("Finished execute ")
@@ -111,21 +121,21 @@ LOGGER.debug("Finished execute ")
 
 
 
-# Calculate HyPhy dN/dS for each indelible population
-with open(INTERVALS_CSV, 'rU') as fh_in_intervals:
-    import csv
-    #scaling_factor,num_codons,outdir,out_filename_prefix
-    reader = csv.DictReader(fh_in_intervals)
-    for interval in reader:
-        # Indelible writes the tree along with other stats in the trees.txt file.
-        # Parse out the tree into separate newick file.
-        scaling_factor_str = str(float(interval["scaling_factor"]))
-        indelible_tree_txt = interval["outdir"] + os.sep + "trees.txt"
-        indelible_out_tree_nwk = interval["outdir"] + os.sep + INDELIBLE_OUT_FILENAME_PREFIX + scaling_factor_str + ".nwk"
-        indelible_leaves_fasta = interval["outdir"] + os.sep + INDELIBLE_OUT_FILENAME_PREFIX + scaling_factor_str + "_TRUE.fasta"
-        indelibler.write_tree(indelible_tree_txt, indelible_out_tree_nwk)
-        hyphy_handler.calc_dnds(codon_fasta_filename=indelible_leaves_fasta, tree_filename=indelible_out_tree_nwk,
-                                threads=PROCS)
+# # Calculate HyPhy dN/dS for each indelible population
+# with open(INTERVALS_CSV, 'rU') as fh_in_intervals:
+#     import csv
+#     #scaling_factor,num_codons,outdir,out_filename_prefix
+#     reader = csv.DictReader(fh_in_intervals)
+#     for interval in reader:
+#         # Indelible writes the tree along with other stats in the trees.txt file.
+#         # Parse out the tree into separate newick file.
+#         scaling_factor_str = str(float(interval["scaling_factor"]))
+#         indelible_tree_txt = interval["outdir"] + os.sep + "trees.txt"
+#         indelible_out_tree_nwk = interval["outdir"] + os.sep + INDELIBLE_OUT_FILENAME_PREFIX + scaling_factor_str + ".nwk"
+#         indelible_leaves_fasta = interval["outdir"] + os.sep + INDELIBLE_OUT_FILENAME_PREFIX + scaling_factor_str + "_TRUE.fasta"
+#         indelibler.write_tree(indelible_tree_txt, indelible_out_tree_nwk)
+#         hyphy_handler.calc_dnds(codon_fasta_filename=indelible_leaves_fasta, tree_filename=indelible_out_tree_nwk, pvalue=0.05,
+#                                 threads=PROCS)
 
 
 # For the sample_genomes populations, we lose the true tree branch lengths when we concatenate multiple populations at different scalings together.
@@ -133,7 +143,7 @@ with open(INTERVALS_CSV, 'rU') as fh_in_intervals:
 sample_genomes_tree_fname = fasttree_handler.make_tree(fasta_fname=sample_genomes_fasta, threads=PROCS)
 
 # Calculate HyPhy dN/dS for the full sample_genomes population fasta
-hyphy_handler.calc_dnds(codon_fasta_filename=sample_genomes_fasta, tree_filename=sample_genomes_tree_fname,
+hyphy_handler.calc_dnds(codon_fasta_filename=sample_genomes_fasta, tree_filename=sample_genomes_tree_fname, pvalue=0.05,
                         threads=PROCS)
 
 
