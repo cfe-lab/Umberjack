@@ -152,7 +152,7 @@ class PairedRecord:
         return merge_rpos_to_insert
 
 
-    def merge_inserts(self, sliced_mseq, q_cutoff, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based,
+    def __merge_inserts(self, sliced_mseq, q_cutoff, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based,
                            stats=None):
         """
         Assumes that sliced_mseq only contains the sliced portion of the merged read sequence.
@@ -285,7 +285,7 @@ class PairedRecord:
 
 
 
-    def merge_match(self, q_cutoff=10, pad_space_btn_mate="N", slice_start_wrt_ref_1based=None, slice_end_wrt_ref_1based=None, stats=None):
+    def __merge_match(self, q_cutoff=10, pad_space_btn_mate="N", slice_start_wrt_ref_1based=None, slice_end_wrt_ref_1based=None, stats=None):
         """
         Merge bases in reads that align as a match to the reference (as opposed to bases that align as an insert to the ref).
         :param q_cutoff:
@@ -439,6 +439,8 @@ class PairedRecord:
             slice_start_wrt_ref_1based = 1
         if not slice_end_wrt_ref_1based:
             slice_end_wrt_ref_1based = self.mate1.ref_len
+        if slice_start_wrt_ref_1based > slice_end_wrt_ref_1based:
+            raise ValueError("slice start must be before slice end")
 
         # If the slice does not intersect either mate,
         # Then just return empty string or padded gaps wrt ref or slice as desired.
@@ -457,13 +459,13 @@ class PairedRecord:
         # 1-based position with respect to reference of intersection between the read fragment and slice
         read_slice_xsect_start_wrt_ref, read_slice_xsect_end_wrt_ref = self.get_read_slice_intersect(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based)
 
-        mseq = self.merge_match(q_cutoff=10, pad_space_btn_mate=pad_space_btn_mates,
+        mseq = self.__merge_match(q_cutoff=q_cutoff, pad_space_btn_mate=pad_space_btn_mates,
                          slice_start_wrt_ref_1based=read_slice_xsect_start_wrt_ref,
                          slice_end_wrt_ref_1based=read_slice_xsect_end_wrt_ref, stats=stats)
 
 
         if do_insert_wrt_ref:
-            mseq, stats = self.merge_inserts(sliced_mseq=mseq, q_cutoff=q_cutoff,
+            mseq, stats = self.__merge_inserts(sliced_mseq=mseq, q_cutoff=q_cutoff,
                                                   slice_start_wrt_ref_1based=read_slice_xsect_start_wrt_ref,
                                                   slice_end_wrt_ref_1based=read_slice_xsect_end_wrt_ref, stats=stats)
         # Now pad with respect to reference

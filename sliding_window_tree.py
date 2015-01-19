@@ -70,15 +70,16 @@ def create_full_msa_fasta(sam_filename, out_dir, ref, ref_len, mapping_cutoff, r
 
 
 # TODO:  do multiple test corrections for pvalues
-def eval_window(msa_fasta_filename, window_depth_cutoff, window_breadth_cutoff, start_window_nucpos, end_window_nucpos,
-                pvalue, threads_per_window, mode="DNDS", hyphy_exe=hyphy.HYPHY_EXE, hyphy_basedir=hyphy.HYPHY_BASEDIR,
-                fastree_exe=fasttree.FASTTREE_EXE):
+def eval_window(window_depth_cutoff, window_breadth_cutoff, start_window_nucpos, end_window_nucpos, ref, out_dir, pvalue=0.05,
+                msa_fasta_filename=None, sam_filename=None, map_qual_cutoff=None, read_qual_cutoff=None, max_prop_N=None, threads_per_window=1, mode="DNDS",
+                hyphy_exe=hyphy.HYPHY_EXE, hyphy_basedir=hyphy.HYPHY_BASEDIR, fastree_exe=fasttree.FASTTREE_EXE):
     """
     Handles the processing for a single window along the genome.
     Creates the multiple sequence aligned fasta file for the window.
     Feeds the window multiple-sequence aligned fasta file to fasttree2 to create a tree.
     Feeds the tree into HyPhy to obtain dn/ds values.
 
+    :param sam_filename:
     :param str msa_fasta_filename: full filepath to multiple sequence aligned file for all reads.
     :param int window_depth_cutoff:  the minimum number of required reads that meet the breadth threshold below which the window is thrown out
     :param float window_breadth_cutoff: the minimum fraction of a window that merged paired-end read must cover to be included in the window.
@@ -91,7 +92,8 @@ def eval_window(msa_fasta_filename, window_depth_cutoff, window_breadth_cutoff, 
     :param str fastree_exe: full filepath to FastTreeMP executable
     """
 
-    LOGGER.debug("msa_fasta_filename=" + msa_fasta_filename + "\n" +
+    LOGGER.debug("msa_fasta_filename=" + str(msa_fasta_filename) + "\n" +
+                 "sam_filename=" + str(sam_filename) + "\n" +
                  "window_depth_thresh=" + str(window_depth_cutoff) + "\n" +
                  "window_breadth_thresh=" + str(window_breadth_cutoff) + "\n" +
                  "start_nucpos=" + str(start_window_nucpos) + "\n" +
@@ -99,14 +101,34 @@ def eval_window(msa_fasta_filename, window_depth_cutoff, window_breadth_cutoff, 
                  "pvalue=" + str(pvalue) + "\n" +
                  "threads=" + str(threads_per_window) + "\n")
 
-    # Slice the multiple sequence aligned fasta file into a window fasta
-    msa_fasta_filename_prefix = os.path.splitext(msa_fasta_filename)[0]
-    msa_window_filename_prefix = msa_fasta_filename_prefix + "." + str(start_window_nucpos) + "_" + str(end_window_nucpos)
-    msa_window_fasta_filename = msa_window_filename_prefix + ".fasta"
-    total_slice_seq = slice_miseq.create_slice_msa_fasta(fasta_filename=msa_fasta_filename,
-                                                             out_fasta_filename=msa_window_fasta_filename,
-                                                             start_pos=start_window_nucpos, end_pos=end_window_nucpos,
-                                                             breadth_thresh=window_breadth_cutoff)
+    if not msa_fasta_filename and not sam_filename:
+        raise ValueError("Either msa_fasta_filename or sam_filename must be defined")
+
+    if sam_filename:
+        sam_filename_nopath = os.path.split(sam_filename)[1]
+        sam_filename_prefix = os.path.splitext(sam_filename_nopath)[0]
+
+        msa_window_filename_prefix = out_dir + os.sep + sam_filename_prefix + "." + str(start_window_nucpos) + "_" + str(end_window_nucpos)
+        msa_window_fasta_filename = msa_window_filename_prefix + ".fasta"
+        total_slice_seq = sam_handler.create_msa_slice_from_sam(sam_filename=sam_filename,
+                                                                ref=ref,
+                                                                out_fasta_filename=msa_window_fasta_filename,
+                                                                mapping_cutoff=map_qual_cutoff,
+                                                                read_qual_cutoff=read_qual_cutoff,
+                                                                max_prop_N=max_prop_N,
+                                                                breadth_thresh=window_breadth_cutoff,
+                                                                start_pos=start_window_nucpos,
+                                                                end_pos=end_window_nucpos,
+                                                                is_insert=False)
+    else:
+        # Slice the multiple sequence aligned fasta file into a window fasta
+        msa_fasta_filename_prefix = os.path.splitext(msa_fasta_filename)[0]
+        msa_window_filename_prefix = msa_fasta_filename_prefix + "." + str(start_window_nucpos) + "_" + str(end_window_nucpos)
+        msa_window_fasta_filename = msa_window_filename_prefix + ".fasta"
+        total_slice_seq = slice_miseq.create_slice_msa_fasta(fasta_filename=msa_fasta_filename,
+                                                                 out_fasta_filename=msa_window_fasta_filename,
+                                                                 start_pos=start_window_nucpos, end_pos=end_window_nucpos,
+                                                                 breadth_thresh=window_breadth_cutoff)
 
     # Check whether the msa sliced fasta has enough reads to make a good tree
     if total_slice_seq < window_depth_cutoff:
@@ -200,31 +222,41 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
     ref_len = sam_handler.get_ref_len(sam_filename, ref)
 
     # Create a pseudo multiple-sequence aligned fasta file
-    msa_fasta_filename = create_full_msa_fasta(sam_filename=sam_filename, out_dir=out_dir, ref=ref, ref_len=ref_len,
-                                               mapping_cutoff=map_qual_cutoff, read_qual_cutoff=read_qual_cutoff,
-                                               max_prop_N=max_prop_n)
+    # msa_fasta_filename = create_full_msa_fasta(sam_filename=sam_filename, out_dir=out_dir, ref=ref, ref_len=ref_len,
+    #                                            mapping_cutoff=map_qual_cutoff, read_qual_cutoff=read_qual_cutoff,
+    #                                            max_prop_N=max_prop_n)
 
-
+    msa_fasta_filename = None  # TODO:  write the full msa if in debug mode
     # All nucleotide positions are 1-based
     last_window_start_nucpos = min(end_nucpos, ref_len - window_size + 1)
 
     total_windows = (last_window_start_nucpos - start_nucpos + 1) / Utility.NUC_PER_CODON
     LOGGER.debug("There are " + str(total_windows) + " total windows to process")
 
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)  # TODO:  put msa_fasta_file into the outdir too
     process_results = []
     for start_window_nucpos in range(start_nucpos, last_window_start_nucpos + 1, window_slide):
         end_window_nucpos = start_window_nucpos + window_size - 1
-        window_args = {"msa_fasta_filename": msa_fasta_filename,
-                       "window_depth_cutoff": window_depth_cutoff,
+        window_args = {"window_depth_cutoff": window_depth_cutoff,
                        "window_breadth_cutoff": window_breadth_cutoff,
                        "start_window_nucpos": start_window_nucpos,
                        "end_window_nucpos": end_window_nucpos,
+                       "ref": ref,
+                       "out_dir": out_dir,
                        "pvalue": pvalue,
+                       "msa_fasta_filename": msa_fasta_filename,
+                       "sam_filename": sam_filename,
+                       "map_qual_cutoff": map_qual_cutoff,
+                       "read_qual_cutoff": read_qual_cutoff,
+                       "max_prop_N": max_prop_n,
                        "threads_per_window": threads_per_window,
                        "mode": mode,
                        "hyphy_exe": hyphy_exe,
                        "hyphy_basedir": hyphy_basedir,
                        "fastree_exe": fastree_exe}
+
+
         process_result = pool.apply_async(eval_window, (), window_args)
         process_results.append(process_result)
 
@@ -302,11 +334,11 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
             pool_size = comm.Get_size()
             LOGGER.debug("Pool size = " + str(pool_size))
 
-            # Create a pseudo multiple-sequence aligned fasta file
-            msa_fasta_filename = create_full_msa_fasta(sam_filename=sam_filename, out_dir=out_dir, ref=ref, ref_len=ref_len,
-                                                       mapping_cutoff=map_qual_cutoff, read_qual_cutoff=read_qual_cutoff,
-                                                       max_prop_N=max_prop_n)
-
+            # # Create a pseudo multiple-sequence aligned fasta file
+            # msa_fasta_filename = create_full_msa_fasta(sam_filename=sam_filename, out_dir=out_dir, ref=ref, ref_len=ref_len,
+            #                                            mapping_cutoff=map_qual_cutoff, read_qual_cutoff=read_qual_cutoff,
+            #                                            max_prop_N=max_prop_n)
+            msa_fasta_filename = None  # TODO:  only write this out if debug mode
             # All nucleotide positions are 1-based
             last_window_start_nucpos = min(end_nucpos, ref_len - window_size + 1)
 
@@ -318,7 +350,8 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
 
             start_window_nucpos = start_nucpos
 
-
+            if not os.path.exists(out_dir):
+                os.makedirs(out_dir)  # TODO:  put msa_fasta_file into the outdir too
 
             while start_window_nucpos <= last_window_start_nucpos or busy_replica_2_request:
 
@@ -326,12 +359,18 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
                 while start_window_nucpos <= last_window_start_nucpos and available_replicas:
                     end_window_nucpos = start_window_nucpos + window_size - 1
 
-                    window_args = {"msa_fasta_filename": msa_fasta_filename,
-                                   "window_depth_cutoff": window_depth_cutoff,
+                    window_args = {"window_depth_cutoff": window_depth_cutoff,
                                    "window_breadth_cutoff": window_breadth_cutoff,
                                    "start_window_nucpos": start_window_nucpos,
                                    "end_window_nucpos": end_window_nucpos,
+                                   "ref": ref,
+                                   "out_dir": out_dir,
                                    "pvalue": pvalue,
+                                   "msa_fasta_filename": msa_fasta_filename,
+                                   "sam_filename": sam_filename,
+                                   "map_qual_cutoff": map_qual_cutoff,
+                                   "read_qual_cutoff": read_qual_cutoff,
+                                   "max_prop_N": max_prop_n,
                                    "threads_per_window": threads_per_window,
                                    "mode": mode,
                                    "hyphy_exe": hyphy_exe,

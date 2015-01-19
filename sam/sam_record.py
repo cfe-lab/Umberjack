@@ -28,6 +28,8 @@ class SamRecord:
         self.mapq = None
         self.qual = None
         self.pos = None
+        self.rnext = None
+        self.pnext = None
         self.mate_record = None
         self.nopad_noinsert_seq = None
         self.nopad_noinsert_qual = None
@@ -40,6 +42,11 @@ class SamRecord:
         return not self.qname and not self.seq
 
     def fill_record(self, sam_row_dict):
+        """
+        Fills the sam record using a dict created from a row in a sam file.
+        :param sam_row_dict:
+        :return:
+        """
         self.qname = sam_row_dict["qname"]
         self.flag = int(sam_row_dict["flag"])
         self.rname = sam_row_dict["rname"]
@@ -48,12 +55,26 @@ class SamRecord:
         self.mapq = int(sam_row_dict["mapq"])
         self.qual = sam_row_dict["qual"]
         self.pos = int(sam_row_dict["pos"])
+        self.rnext = int(sam_row_dict["rnext"])
+        self.pnext = int(sam_row_dict["pnext"])
         self.mate_record = None
+
+    def fill_record_vals(self, qname, flag, rname, seq, cigar, mapq, qual, pos, rnext, pnext):
+        self.qname = qname
+        self.flag = flag
+        self.rname = rname
+        self.seq = seq
+        self.cigar = cigar
+        self.mapq = mapq
+        self.qual = qual
+        self.pos = pos
+        self.rnext = rnext
+        self.pnext = pnext
 
     def fill_mate(self, mate_record):
         self.mate_record = mate_record
         if not mate_record.mate_record:
-            mate_record = self
+            mate_record.mate_record = self
 
     def get_mate_slice_intersect_wrt_ref(self, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
         """
@@ -87,7 +108,7 @@ class SamRecord:
         :param int slice_start_wrt_ref_1based:  If None, then whole sequence returned.   Otherwise, the slice 1-based start position with respect to the reference.
         :param int slice_end_wrt_ref_1based:  If None, then whole sequence returned.  Otherwise the slice end 1-based position with respect to the reference.
         :param AlignStats stats:  keeps track of stats.  Only counts inserts and quality if you allow inserts and mask quality.
-        :return tuple (str, str):  (sequence, quality)
+        :return tuple (str, str, AlignStats):  (sequence, quality, AlignStats)
         """
         if not stats:
             stats = align_stats.AlignStats()
@@ -288,6 +309,9 @@ class SamRecord:
             # Soft clipping leaves the sequence in the SAM - so we should skip it
             elif token[-1] == 'S':
                 pos_wrt_seq_0based += length
+            elif token[-1] == 'H':  # hard clipping does not leave the sequence in the sam.
+                # no-op
+                i = 0
             else:
                 raise ValueError("Unable to handle CIGAR token: {} - quitting".format(token))
                 sys.exit()

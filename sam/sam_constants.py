@@ -18,3 +18,15 @@ class SamFlag:
     IS_FAILED =                0x200
     IS_DUPLICATE =             0x400
     IS_CHIMERIC_ALIGNMENT =    0x800
+
+class SamHeader:
+    TAG_HEADER_PREFIX = "@"
+    TAG_HEADER_START = "@HD"
+    TAG_SEP = "\t"
+    TAG_KEY_VAL_SEP = ":"
+    TAG_SORT_ORDER_KEY = "SO"
+    TAG_SORT_ORDER_VAL_QUERYNAME = "queryname"
+    TAG_REFSEQ_START = "@SQ"
+    TAG_REFSEQ_NAME_KEY = "SN"
+    TAG_REFSEQ_LEN_KEY = "LN"
+
