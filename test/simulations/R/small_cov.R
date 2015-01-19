@@ -11,35 +11,36 @@ PICARD_WGS_METRICS_ROWS <- 1
 PICARD_COV_HISTO_SKIP <- 10
 
 
-config_file <- "../data/small/small.config"
-NUM_INDIV <- 0
-NUM_CODON_SITES <- 0
 
 
-conn <- file(config_file, open="r")
-lines <- readLines(conn)
-for (i in 1:length(lines)){
-  if (grepl("NUM_INDIV", lines[i]) == TRUE) {
-    print(lines[i])  
-    NUM_INDIV <- as.numeric(unlist(strsplit(lines[i], "="))[2])
-  }
-  else if (grepl("NUM_CODON_SITES", lines[i]) == TRUE) {
-    NUM_CODON_SITES <- as.numeric(unlist(strsplit(lines[i], "="))[2])
-  }
-}
-close(conn)
+
+# READ IN CONFIGS
+R_CONFIG_FILENAME <- "./small_cov.config"
+rconfig<-read.table(R_CONFIG_FILENAME, sep="=", col.names=c("key","value"), as.is=c(1,2))
+NUM_INDIV <- as.numeric(rconfig[rconfig$key=="NUM_INDIV",]$val)
+NUM_CODON_SITES <- as.numeric(rconfig[rconfig$key=="NUM_CODON_SITES",]$val)
+ART_FOLD_COVER <- as.numeric(rconfig[rconfig$key=="ART_FOLD_COVER",]$val)
+orig_err_free_cov_tsv <- rconfig[rconfig$key=="ORIG_ERR_FREE_COV_TSV",]$val
+aln_err_free_cov_tsv <- rconfig[rconfig$key=="ALN_ERR_FREE_COV_TSV",]$val
+orig_err_free_wgs_metrics_file <- rconfig[rconfig$key=="ORIG_ERR_FREE_WGS_METRICS",]$val
+aln_err_free_wgs_metrics_file <- rconfig[rconfig$key=="ALN_ERR_FREE_WGS_METRICS",]$val
+orig_cov_tsv <- rconfig[rconfig$key=="ORIG_COV_TSV",]$val
+aln_cov_tsv <- rconfig[rconfig$key=="ALN_COV_TSV",]$val
+orig_wgs_metrics_file <- rconfig[rconfig$key=="ORIG_WGS_METRICS",]$val
+aln_wgs_metrics_file <- rconfig[rconfig$key=="ALN_WGS_METRICS",]$val
+print(rconfig)
+
 
 #'  NUM_INDIV=`r NUM_INDIV`
 #'  NUM_CODON_SITES=`r NUM_CODON_SITES`
+#'  ART_FOLD_COVER=`r ART_FOLD_COVER`
+
 
 POPN_BP <- NUM_INDIV * NUM_CODON_SITES * 3
 GENOME_BP <- NUM_CODON_SITES * 3
 
 plot_cov <- function(orig_cov_tsv, aln_cov_tsv, qual) {
-  
-#   orig_cov_tsv <- "../data/small/mixed/reads/small.mixed.reads.errFree.sort.cov.tsv"
-#   aln_cov_tsv <- "../data/small/mixed/aln/small.mixed.reads.errFree.consensus.bowtie.sort.cov.tsv"
-#   qual <- "error free"
+
   
   # samtools depth files do not report positions with zero coverage.  Add the missing ref/positions
   Ref <- data.frame(Ref=paste0("otu", seq(1, NUM_INDIV)))
@@ -125,16 +126,13 @@ get_metrics <- function (orig_wgs_metrics_file) {
 #' ====================================
 #' 
 
-orig_err_free_cov_tsv <- "../data/small/mixed/reads/small.mixed.reads.errFree.sort.cov.tsv"
-aln_err_free_cov_tsv <- "../data/small/mixed/aln/small.mixed.reads.errFree.consensus.bowtie.sort.cov.tsv"
 plot_cov(orig_err_free_cov_tsv, aln_err_free_cov_tsv, "Error Free")
 
-orig_err_free_wgs_metrics_file <- "../data/small/mixed/reads/small.mixed.reads.errFree.picard.wgsmetrics"
+
 #' **ORIGINAL ERROR-FREE READ METRICS:**  
 #' **`r get_metrics(orig_err_free_wgs_metrics_file)`**
 #' 
 
-aln_err_free_wgs_metrics_file <- "../data/small/mixed/aln/small.mixed.reads.errFree.consensus.bowtie.picard.wgsmetrics"
 #' **ALIGNED ERROR-FREE READ METRICS:**  
 #' **`r get_metrics(aln_err_free_wgs_metrics_file)`**
 #' 
@@ -144,17 +142,10 @@ aln_err_free_wgs_metrics_file <- "../data/small/mixed/aln/small.mixed.reads.errF
 #' 
 #' Coverage for Bases with >20 Quality and Reads >20 Mapping quality.
 
-orig_cov_tsv <- "../data/small/mixed/reads/small.mixed.reads.sort.cov.tsv"
-aln_cov_tsv <- "../data/small/mixed/aln/small.mixed.reads.consensus.bowtie.sort.cov.tsv"
-
 plot_cov(orig_cov_tsv, aln_cov_tsv, "Typical Quality")
-
-orig_wgs_metrics_file <- "../data/small/mixed/reads/small.mixed.reads.picard.wgsmetrics"
 #' **ORIGINAL READ METRICS:**  
 #' **`r get_metrics(orig_wgs_metrics_file)`**
 #' 
-
-aln_wgs_metrics_file <- "../data/small/mixed/aln/small.mixed.reads.consensus.bowtie.picard.wgsmetrics"
 #' **ALIGNED READ METRICS:**  
 #' **`r get_metrics(aln_wgs_metrics_file)`**
 #' 

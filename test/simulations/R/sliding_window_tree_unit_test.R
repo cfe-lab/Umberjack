@@ -15,7 +15,16 @@ config<-read.table(CONFIG_FILENAME, sep="=", col.names=c("key","value"), as.is=c
 
 actual_dnds_filename <- config[config$key=="ACTUAL_DNDS_FILENAME",]$val
 expected_dnds_filename <-  config[config$key=="EXPECTED_DNDS_FILENAME",]$val
+expected_dnds_start_nuc_pos <-  as.numeric(config[config$key=="EXPECTED_DNDS_START_NUC_POS",]$val)
+expected_dnds_end_nuc_pos <-  as.numeric(config[config$key=="EXPECTED_DNDS_END_NUC_POS",]$val)
 
+#'  ACTUAL_DNDS_FILENAME=`r actual_dnds_filename`
+#'  
+#'  EXPECTED_DNDS_FILENAME=`r expected_dnds_filename`
+#'  
+#'  EXPECTED_DNDS_START_NUC_POS=`r expected_dnds_start_nuc_pos`
+#'  
+#'  EXPECTED_DNDS_END_NUC_POS=`r expected_dnds_end_nuc_pos`
 
 dnds_file <- file(actual_dnds_filename, open="rt")
 comments <- readLines(dnds_file, 1) # Read one line 
@@ -28,11 +37,17 @@ start_codon <- (start_nuc_pos %/% 3) + 1
 end_codon <- end_nuc_pos %/% 3
 smooth_dist <- as.numeric(unlist(strsplit(args[grep("smooth_dist", args)], "="))[2])
 
+#'  start_codon=`r start_codon`
+#'  
+#'  end_codon=`r end_codon`
+#'  
+#'  smooth_dist=`r smooth_dist`
+
 #' **`r comments`**
 #' -----------------------------
 #' 
 #' 
-# Cols:  Ref  Site  aveDnDs  dNdSWeightBySubst	dN_minus_dS	Windows	Codons	NonSyn	Syn	Subst	dNdSWeightByReads	multisiteAvedNdS	multisitedNdSWeightBySubst	simpleDnDs
+# Cols:  Ref  Site  aveDnDs  dNdSWeightBySubst	dN_minus_dS	Windows	Codons	NonSyn	Syn	Subst	dNdSWeightByReads	multisiteAvedNdS	multisitedNdSWeightBySubst	simpleDnDs  dNdSWeightByReadsNoLowSyn
 actual_dnds <- read.table(actual_dnds_filename, header=TRUE, na.strings="None", comment.char = "#", sep=",")
 dim(actual_dnds)
 head(actual_dnds)
@@ -40,18 +55,25 @@ str(actual_dnds)
 summary(actual_dnds)
 
 # Cols: Observed S Changes  Observed NS Changes	E[S Sites]	E[NS Sites]	Observed S. Prop.	P{S}	dS	dN	dN-dS	P{S leq. observed}	P{S geq. observed}	Scaled dN-dS	dn/ds
+# Parse the expected dnds filename for it start and end nucleotide positions (1-based)
+
 expected_dnds <- read.table(expected_dnds_filename, header=TRUE, sep="\t")  # Site  Interval	Scaling_factor	Rate_class	Omega
-expected_dnds$Site <- as.numeric(rownames(expected_dnds))
+expected_dnds_start_codon <- (expected_dnds_start_nuc_pos %/% 3) + 1
+expected_dnds$Site <- as.numeric(rownames(expected_dnds)) + expected_dnds_start_codon -1
+expected_dnds_end_codon <- max(expected_dnds$Site)
 expected_dnds$Omega <- expected_dnds$dN/expected_dnds$dS
+expected_dnds$Omega[expected_dnds$dS == 0] <- NA
 dim(expected_dnds)
 head(expected_dnds)
 str(expected_dnds)
 summary(expected_dnds)
 
-all(expected_dnds$Site == actual_dnds$Site)
-actual_dnds <- actual_dnds[start_codon:end_codon,]
+
+intersect_start_codon <- max(expected_dnds_start_codon, start_codon)
+intersect_end_codon <- min(expected_dnds_end_codon, end_codon)
+actual_dnds <- actual_dnds[actual_dnds$Site >= intersect_start_codon & actual_dnds$Site <=intersect_end_codon,]
 summary(actual_dnds)
-expected_dnds <- expected_dnds[start_codon:end_codon,]
+expected_dnds <- expected_dnds[expected_dnds$Site >= intersect_start_codon & expected_dnds$Site <=intersect_end_codon,]
 summary(expected_dnds)
 
 
@@ -103,6 +125,16 @@ ggplot(fullDat[!is.na(fullDat$simpleDnDs),], aes(x=Expected, y=simpleDnDs)) +
   theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
   ggtitle("Inferred Simple dN/dS (do not normalize by expected subst) vs Expected dn/ds")
 
+
+ggplot(fullDat[!is.na(fullDat$dNdSWeightByReadsNoLowSyn),], aes(x=Expected, y=dNdSWeightByReadsNoLowSyn)) + 
+  geom_point() +
+  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
+  ylab("Inferred\n") + 
+  xlab("\nExpected") + 
+  coord_fixed(ratio=1) + 
+  geom_abline(slope=1) + 
+  theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
+  ggtitle("Inferred dN/dS weighted by reads (windows with low syn subst excl) vs Expected dn/ds")
 
 ggplot(fullDat[!is.na(fullDat$dN_minus_dS),], aes(x=ExpectedMinus, y=dN_minus_dS)) + 
   geom_point() +
@@ -161,13 +193,22 @@ fullDatBySource <- reshape2:::melt.data.frame(data=fullDat, na.rm = FALSE, id.va
                                               measure.vars=c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", "dN_minus_dS",
                                                              "multisiteAvedNdS", "multisitedNdSWeightBySubst", 
                                                              "Expected", "ExpectedMultisite", "ExpectedMinus", 
-                                                             "simpleDnDs"),
+                                                             "simpleDnDs", "dNdSWeightByReadsNoLowSyn"),
                                               variable.name="source", value.name="dnds")
 head(fullDatBySource)
 tail(fullDatBySource)
 str(fullDatBySource)
 summary(fullDatBySource)
 ggplot(fullDatBySource[fullDatBySource$source %in% c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", "Expected"),], 
+       aes(x=Site, y=dnds, color=source) ) + 
+  geom_smooth() + 
+  xlab("Codon Site") + 
+  ylab("dN/dS") + 
+  ggtitle("dn/ds by site") + 
+  theme(plot.title=element_text(size=36), axis.title=element_text(size=32), axis.text=element_text(size=24), 
+        legend.text=element_text(size=24), legend.title=element_blank())
+
+ggplot(fullDatBySource[fullDatBySource$source %in% c("dNdSWeightByReadsNoLowSyn", "Expected"),], 
        aes(x=Site, y=dnds, color=source) ) + 
   geom_smooth() + 
   xlab("Codon Site") + 
@@ -193,6 +234,19 @@ ggplot(fullDatBySource[fullDatBySource$source %in% c("aveDnDs", "Expected"),],
 #' 
 #+ fig.width=20
 ggplot(fullDatBySource[fullDatBySource$source %in% c("dNdSWeightBySubst", "dNdSWeightByReads", "Expected"),], 
+       aes(x=Site, y=dnds, color=source) ) + 
+  geom_line() + 
+  xlab("Codon Site Along Genome") + 
+  ylab("dN/dS") + 
+  ggtitle("dn/ds by site") + 
+  theme(plot.title=element_text(size=36), axis.title=element_text(size=32), axis.text=element_text(size=24), 
+        legend.text=element_text(size=24), legend.title=element_blank())
+
+
+#' **Line Plot of Average Site dn/ds Weighted by Reads With Windows with < 1 Syn Subst removed across the genome**
+#' 
+#+ fig.width=20
+ggplot(fullDatBySource[fullDatBySource$source %in% c("dNdSWeightByReadsNoLowSyn", "Expected"),], 
        aes(x=Site, y=dnds, color=source) ) + 
   geom_line() + 
   xlab("Codon Site Along Genome") + 
@@ -343,6 +397,11 @@ print(dnds_cor)
 dnds_cor <- cor(fullDat$dNdSWeightByReads, fullDat$Expected, method="spearman", use="complete.obs")
 print(dnds_cor)
 
+#' **Find how correlated the actual dn/ds weighted by reads (windows low syn subs excl) vs expected dn/ds are**
+dnds_cor <- cor(fullDat$dNdSWeightByReadsNoLowSyn, fullDat$Expected, method="spearman", use="complete.obs")
+print(dnds_cor)
+
+
 #' **Find how correlated the actual dn/ds smoothed over surrounding sites vs expected dn/ds are**
 dnds_cor <- cor(fullDat$multisiteAvedNdS, fullDat$ExpectedMultisite, method="spearman", use="complete.obs")
 print(dnds_cor)
@@ -373,10 +432,47 @@ print(dnds_ccc$rho.c)
 dnds_ccc <-  epi.ccc(fullDat$dNdSWeightByReads, fullDat$Expected)
 print(dnds_ccc$rho.c)
 
+#' **Find how concordance correlated the actual dn/ds weighted by reads (windows low syn subst excl) vs expected dn/ds are**
+dnds_ccc <-  epi.ccc(fullDat$dNdSWeightByReadsNoLowSyn, fullDat$Expected)
+print(dnds_ccc$rho.c)
+
+
 #' **Find how concordance correlated the actual dn/ds smoothed over surrounding sites vs expected dn/ds are**
 dnds_ccc <-  epi.ccc(fullDat$multisiteAvedNdS, fullDat$ExpectedMultisite)
 print(dnds_ccc$rho.c)
 
 #' **Find how concordance correlated the actual dn/ds smoothed over surrounding sites weighted by substitutions vs expected dn/ds are**
 dnds_ccc <-  epi.ccc(fullDat$multisitedNdSWeightBySubst, fullDat$ExpectedMultisite)
+print(dnds_ccc$rho.c)
+
+# **Find concordance at each mtuation rate  5x
+dnds_ccc <-  epi.ccc(fullDat[fullDat$Site <= 400, ]$dNdSWeightByReadsNoLowSyn, fullDat[fullDat$Site <= 400, ]$Expected)
+print(dnds_ccc$rho.c)
+
+# 10x
+dnds_ccc <-  epi.ccc(fullDat[fullDat$Site >400 & fullDat$Site <=800 , ]$dNdSWeightByReadsNoLowSyn, fullDat[fullDat$Site > 400 & fullDat$Site <=800 , ]$Expected)
+print(dnds_ccc$rho.c)
+
+# 50x
+dnds_ccc <-  epi.ccc(fullDat[fullDat$Site >800 & fullDat$Site <=1200 , ]$dNdSWeightByReadsNoLowSyn, fullDat[fullDat$Site > 800 & fullDat$Site <=1200 , ]$Expected)
+print(dnds_ccc$rho.c)
+
+# 100x
+dnds_ccc <-  epi.ccc(fullDat[fullDat$Site >1200 & fullDat$Site <=1600 , ]$dNdSWeightByReadsNoLowSyn, fullDat[fullDat$Site > 1200 & fullDat$Site <=1600 , ]$Expected)
+print(dnds_ccc$rho.c)
+
+# **Find concordance at each mtuation rate  5x.  Don't ignore windows with low syn subs
+dnds_ccc <-  epi.ccc(fullDat[fullDat$Site <= 400, ]$dNdSWeightByReads, fullDat[fullDat$Site <= 400, ]$Expected)
+print(dnds_ccc$rho.c)
+
+# 10x
+dnds_ccc <-  epi.ccc(fullDat[fullDat$Site >400 & fullDat$Site <=800 , ]$dNdSWeightByReads, fullDat[fullDat$Site > 400 & fullDat$Site <=800 , ]$Expected)
+print(dnds_ccc$rho.c)
+
+# 50x
+dnds_ccc <-  epi.ccc(fullDat[fullDat$Site >800 & fullDat$Site <=1200 , ]$dNdSWeightByReads, fullDat[fullDat$Site > 800 & fullDat$Site <=1200 , ]$Expected)
+print(dnds_ccc$rho.c)
+
+# 100x
+dnds_ccc <-  epi.ccc(fullDat[fullDat$Site >1200 & fullDat$Site <=1600 , ]$dNdSWeightByReads, fullDat[fullDat$Site > 1200 & fullDat$Site <=1600 , ]$Expected)
 print(dnds_ccc$rho.c)
