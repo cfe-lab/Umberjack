@@ -58,6 +58,7 @@ subprocess.check_call(relabel_phylogeny_cmd, env=os.environ)
 LOGGER.debug("Finished execute ")
 renamed_treefile = TREE_FILE_PREFIX + ".rename.nwk"
 
+
 # Use Indelible to create population sequences at different scaling factors (ie mutation rates)
 os.environ["PATH"] += os.pathsep + INDELIBLE_BIN_DIR
 batch_indelible_exe = os.path.abspath(os.path.dirname(__file__) + "/indelible/batch_indelible.py")
@@ -75,7 +76,8 @@ sample_genomes_exe = os.path.abspath(os.path.dirname(__file__) + os.sep + "sampl
 sample_genomes_cmd = ["python", sample_genomes_exe,
                       INTERVALS_CSV,  # full filepath of intervals CSV indicating indelible scaling factors and number of codons to take from each
                       SAMPLE_GENOMES_OUTDIR,  # full filepath of directory for sample_genomes.py output
-                      SAMPLE_GENOMES_OUT_FILENAME_PREFIX]  # prefix of sample_genomes.py population sequence output files
+                      SAMPLE_GENOMES_OUT_FILENAME_PREFIX,
+                      str(SEED)]  # prefix of sample_genomes.py population sequence output files
 LOGGER.debug("About to execute " + " ".join(sample_genomes_cmd))
 subprocess.check_call(sample_genomes_cmd, env=os.environ)
 LOGGER.debug("Finished execute ")
@@ -112,8 +114,7 @@ generate_reads_cmd = ["python", generate_reads_exe,
                       BOWTIE_OUT_DIR,
                       str(PROCS),
                       str(SEED),
-                      str(NUM_INDIV),
-                      str(NUM_CODON_SITES)]
+                      INDELIBLE_OUT_FILENAME_PREFIX + ".rates.csv"]
 LOGGER.debug("About to execute " + " ".join(generate_reads_cmd))
 subprocess.check_call(generate_reads_cmd, env=os.environ)
 LOGGER.debug("Finished execute ")
@@ -140,10 +141,13 @@ LOGGER.debug("Finished execute ")
 
 # For the sample_genomes populations, we lose the true tree branch lengths when we concatenate multiple populations at different scalings together.
 # Get FastTree to approximate tree for concatenated population sequences.
-sample_genomes_tree_fname = fasttree_handler.make_tree(fasta_fname=sample_genomes_fasta, threads=PROCS)
+sample_genomes_tree_fname = fasttree_handler.make_tree_repro(fasta_fname=sample_genomes_fasta, intree_fname=renamed_treefile)
 
+
+HYPHY_EXE = config.get(SECTION, "HYPHY_EXE")
+HYPHY_BASEPATH = config.get(SECTION, "HYPHY_BASEPATH")
 # Calculate HyPhy dN/dS for the full sample_genomes population fasta
-hyphy_handler.calc_dnds(codon_fasta_filename=sample_genomes_fasta, tree_filename=sample_genomes_tree_fname, pvalue=0.05,
-                        threads=PROCS)
+hyphy_handler.calc_dnds(codon_fasta_filename=sample_genomes_fasta, tree_filename=sample_genomes_tree_fname,
+                        hyphy_exe=HYPHY_EXE, hyphy_basedir=HYPHY_BASEPATH, threads=PROCS)
 
 
