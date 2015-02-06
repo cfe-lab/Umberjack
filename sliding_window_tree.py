@@ -69,10 +69,9 @@ def create_full_msa_fasta(sam_filename, out_dir, ref, ref_len, mapping_cutoff, r
 
 
 
-# TODO:  do multiple test corrections for pvalues
 def eval_window(window_depth_cutoff, window_breadth_cutoff, start_window_nucpos, end_window_nucpos, ref, out_dir, pvalue=0.05,
                 msa_fasta_filename=None, sam_filename=None, map_qual_cutoff=None, read_qual_cutoff=None, max_prop_N=None, threads_per_window=1, mode="DNDS",
-                hyphy_exe=hyphy.HYPHY_EXE, hyphy_basedir=hyphy.HYPHY_BASEDIR, fastree_exe=fasttree.FASTTREE_EXE):
+                hyphy_exe=hyphy.HYPHY_EXE, hyphy_basedir=hyphy.HYPHY_BASEDIR, fastree_exe=fasttree.FASTTREEMP_EXE):
     """
     Handles the processing for a single window along the genome.
     Creates the multiple sequence aligned fasta file for the window.
@@ -140,8 +139,8 @@ def eval_window(window_depth_cutoff, window_breadth_cutoff, start_window_nucpos,
     fastree_treefilename = fasttree.make_tree(fasta_fname=msa_window_fasta_filename, threads=threads_per_window, fastree_exe=fastree_exe)
 
     if mode == MODE_DNDS:
-        hyphy.calc_dnds(hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, threads=threads_per_window,
-                        codon_fasta_filename=msa_window_fasta_filename, tree_filename=fastree_treefilename, pvalue=pvalue)
+        hyphy.calc_dnds(codon_fasta_filename=msa_window_fasta_filename, tree_filename=fastree_treefilename,
+                        hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, threads=threads_per_window)
     elif mode == MODE_GTR_CMP:
         hyphy.calc_nuc_subst(hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, threads=threads_per_window,
                              codon_fasta_filename=msa_window_fasta_filename, tree_filename=fastree_treefilename)
@@ -152,8 +151,8 @@ def eval_window(window_depth_cutoff, window_breadth_cutoff, start_window_nucpos,
 
 # TODO:  clean my parameters
 def tabulate_results(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
-                     end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, pvalue, output_csv_filename,
-                     mode, window_slide, smooth_dist):
+                     end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, output_csv_filename, mode,
+                     window_slide, smooth_dist):
 
     comments = ("ref=" + ref + "," +
                 "ref_len=" + str(ref_len) + "," +
@@ -167,13 +166,12 @@ def tabulate_results(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
                 "window_slide=" + str(window_slide) + "," +
                 "window_depth_cutoff=" + str(window_depth_cutoff) + "," +
                 "window_breadth_cutoff=" + str(window_breadth_cutoff) + "," +
-                "pvalue=" + str(pvalue) + "," +
                 "smooth_dist=" + str(smooth_dist))
     if mode == MODE_DNDS:
         LOGGER.debug("Start Ave Dn/DS for all windows for ref " + ref + " " + output_csv_filename)
         seq_dnds_info = slice_miseq.tabulate_dnds(dnds_tsv_dir=out_dir, ref=ref, ref_nuc_len=ref_len,
-                                                  pvalue_thresh=pvalue, output_csv_filename=output_csv_filename,
-                                                  comments=comments, smooth_dist=smooth_dist)
+                                                  output_csv_filename=output_csv_filename, comments=comments,
+                                                  smooth_dist=smooth_dist)
         LOGGER.debug("Done Ave Dn/DS for all windows  for ref " + ref + ".  Wrote to " + output_csv_filename)
         return seq_dnds_info
     elif mode == MODE_GTR_RATE:
@@ -185,9 +183,9 @@ def tabulate_results(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
 
 
 def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
-                       end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, pvalue, threads_per_window,
+                       end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, threads_per_window,
                        concurrent_windows, output_csv_filename=None, mode="DNDS", window_slide=3, smooth_dist=10,
-                       hyphy_exe=hyphy.HYPHY_EXE, hyphy_basedir=hyphy.HYPHY_BASEDIR, fastree_exe=fasttree.FASTTREE_EXE):
+                       hyphy_exe=hyphy.HYPHY_EXE, hyphy_basedir=hyphy.HYPHY_BASEDIR, fastree_exe=fasttree.FASTTREEMP_EXE):
     """
     Launch a separate process to analyze each window.
     Each window can use up to <threads_per_window> threads.
@@ -206,7 +204,6 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
     :param int window_slide:  Number of nucleotide bases to slide the window by.  Default=3.
     :param int window_depth_cutoff:  the minimum number of required reads that meet the breadth threshold below which the window is thrown out
     :param float window_breadth_cutoff:  the minimum fraction of a window that merged paired-end read must cover to be included in the window.
-    :param float pvalue:  pvalue threshold for detecting dN/dS (used by HyPhy)
     :param int threads_per_window:  number of threads allotted to processing a single window  (only FastTree and HyPhy will be multithreaded)
     :param int concurrent_windows:  the number of windows to process at the same time.
     :param str output_csv_filename:  name of output dN/dS tab separated file generated by HyPhy.  Will be created under out_dir.
@@ -244,7 +241,6 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
                        "end_window_nucpos": end_window_nucpos,
                        "ref": ref,
                        "out_dir": out_dir,
-                       "pvalue": pvalue,
                        "msa_fasta_filename": msa_fasta_filename,
                        "sam_filename": sam_filename,
                        "map_qual_cutoff": map_qual_cutoff,
@@ -273,8 +269,9 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
     LOGGER.debug("Done waiting for window queue.  About to tabulate results.")
 
     tabulate_results(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
-                     end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, pvalue,
-                     output_csv_filename, mode, window_slide, smooth_dist)
+                     end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, output_csv_filename, mode, window_slide,
+                     smooth_dist)
+
 
 
 class WindowReplicaInfo:
@@ -295,9 +292,9 @@ class WindowReplicaInfo:
 
 
 def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
-                     end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, pvalue, threads_per_window,
+                     end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, threads_per_window,
                      output_csv_filename=None, mode="DNDS", window_slide=3, smooth_dist=10, hyphy_exe=hyphy.HYPHY_EXE,
-                     hyphy_basedir=hyphy.HYPHY_BASEDIR, fastree_exe=fasttree.FASTTREE_EXE):
+                     hyphy_basedir=hyphy.HYPHY_BASEDIR, fastree_exe=fasttree.FASTTREEMP_EXE):
     """
     Launch a separate process to analyze each window via MPI.  Similar to eval_windows_async, but uses MPI.
 
@@ -314,7 +311,6 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
     :param int window_slide:  Number of nucleotide bases to slide the window by.  Default=3.
     :param int window_depth_cutoff:  the minimum number of required reads that meet the breadth threshold below which the window is thrown out
     :param float window_breadth_cutoff:  the minimum fraction of a window that merged paired-end read must cover to be included in the window.
-    :param float pvalue:  pvalue threshold for detecting dN/dS (used by HyPhy)
     :param int threads_per_window:  number of threads allotted to processing a single window  (only FastTree and HyPhy will be multithreaded)
     :param str output_csv_filename:  name of output dN/dS tab separated file generated by HyPhy.  Will be created under out_dir.
     :param str hyphy_exe:  full filepath to HYPHYMP executable
@@ -323,9 +319,9 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
     """
 
     from mpi4py import MPI  # TODO:  remove this before checking in
-
+    comm = MPI.COMM_WORLD
     try:
-        comm = MPI.COMM_WORLD
+
         rank = comm.Get_rank()
         LOGGER.debug("I am rank=" + str(rank))
         LOGGER.debug("I am on machine=" + str(MPI.Get_processor_name()))
@@ -365,7 +361,6 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
                                    "end_window_nucpos": end_window_nucpos,
                                    "ref": ref,
                                    "out_dir": out_dir,
-                                   "pvalue": pvalue,
                                    "msa_fasta_filename": msa_fasta_filename,
                                    "sam_filename": sam_filename,
                                    "map_qual_cutoff": map_qual_cutoff,
@@ -423,8 +418,9 @@ def eval_windows_mpi(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_
 
             LOGGER.debug("About to tabulate results")
             tabulate_results(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n,
-                             start_nucpos, end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, pvalue,
-                             output_csv_filename, mode, window_slide, smooth_dist)
+                             start_nucpos, end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff,
+                             output_csv_filename, mode,window_slide, smooth_dist)
+
             LOGGER.debug("Done tabulating results")
 
         else:  # replica process does the work

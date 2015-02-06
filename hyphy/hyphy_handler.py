@@ -16,8 +16,8 @@ HYPHY_EXE = "HYPHYMP"
 HYPHY_BASEDIR = "/usr/local/lib/hyphy/TemplateBatchFiles/"
 
 
-# TODO:  multiple correction for pvalue
-def calc_dnds(codon_fasta_filename, tree_filename, pvalue, hyphy_exe=HYPHY_EXE, hyphy_basedir=HYPHY_BASEDIR, threads=1):
+
+def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=HYPHY_EXE, hyphy_basedir=HYPHY_BASEDIR, threads=1):
         hyphy_filename_prefix = os.path.splitext(codon_fasta_filename)[0]  # Remove .fasta suffix
         hyphy_modelfit_filename = hyphy_filename_prefix + ".nucmodelfit"
         hyphy_dnds_tsv_filename = hyphy_filename_prefix + ".dnds.tsv"
@@ -36,10 +36,10 @@ def calc_dnds(codon_fasta_filename, tree_filename, pvalue, hyphy_exe=HYPHY_EXE, 
                                          "1",  # Full tree
                                          "1",  # Averaged
                                          "1",  # Approximate extended binomial distro
-                                         str(pvalue),  # pvalue threshold
+                                         "0.05",  # pvalue threshold for determining statistically significant dN/dS > 1 or dN/dS < 1.
                                          "2",  # Export to file
                                          os.path.abspath(hyphy_dnds_tsv_filename),  # dN/dS tsv output file
-                                         "2\n"])  # Count approximate numbers of dN, dS rate classes supported by data
+                                         "1\n"])  # Do not count approximate numbers of dN, dS rate classes supported by data
 
             # Feed window tree into hyphy to find dnds for the window
             with open(hyphy_log, 'w') as hyphy_log_fh:

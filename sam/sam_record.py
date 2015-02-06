@@ -311,7 +311,7 @@ class SamRecord:
                 pos_wrt_seq_0based += length
             elif token[-1] == 'H':  # hard clipping does not leave the sequence in the sam.
                 # no-op
-                i = 0
+                pass
             else:
                 raise ValueError("Unable to handle CIGAR token: {} - quitting".format(token))
                 sys.exit()

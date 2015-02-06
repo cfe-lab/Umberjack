@@ -82,6 +82,8 @@ def apply_cigar (cigar, seq, qual, ref_start_pos):
         # Soft clipping leaves the sequence in the SAM - so we should skip it
         elif token[-1] == 'S':
             left += length
+        elif token[-1] == 'H':
+            pass  # Hard clip does not leave sequence in SAM and pos already starts at unclipped pos
         else:
             raise ValueError("Unable to handle CIGAR token: {} - quitting".format(token))
 
@@ -213,8 +215,8 @@ def get_padded_seq_from_cigar(pos, cigar, seq, qual, ref_len):
 
 
 # TODO:  handle inserts.  Right now, all inserts are squelched so that there is multiple sequence alignment.
-def create_msa_fasta_from_sam(sam_filename, ref, ref_len, out_fasta_filename, mapping_cutoff, read_qual_cutoff,
-                              max_prop_N):
+def create_msa_fasta_from_sam(sam_filename, ref, out_fasta_filename, mapping_cutoff, read_qual_cutoff,
+                              max_prop_N, ref_len=None):
     """
     Parse SAM file contents for query-ref (pairwise) aligned sequences for a specific reference contig.
     For paired-end reads, merges the reads into a single sequence with gaps with respect to the reference.
@@ -227,13 +229,16 @@ def create_msa_fasta_from_sam(sam_filename, ref, ref_len, out_fasta_filename, ma
     NB: Only takes the primary alignment.
 
     :param str sam_filename: full path to sam file
-    :param str ref: name of reference contig to form MSA alignments to
-    :param int ref_len: length of reference contig in nucleotides
+    :param str ref: name of reference contig to form MSA alignments to.  If None, then splits out all alignments to any reference.
+    :param int ref_len: length of reference.  If None, then takes length from sam headers.
     :param str out_fasta_filename: full path of fasta file to write to.  Will completely overwite file.
     :param int mapping_cutoff:  Ignore alignments with mapping quality lower than the cutoff.
     :param int read_qual_cutoff: Convert bases with quality lower than this cutoff to N unless both mates agree.
     :param float max_prop_N:  Do not output merged sequences with proportion of N higher than the cutoff
     """
+
+    if not ref_len:
+        ref_len = get_ref_len(sam_filename, ref)
 
     LOGGER.debug("sam_filename=" + sam_filename + " out_fasta_filename=" + out_fasta_filename)
     with open(sam_filename, 'r') as sam_fh, open(out_fasta_filename, 'w') as out_fasta_fh:
@@ -242,6 +247,7 @@ def create_msa_fasta_from_sam(sam_filename, ref, ref_len, out_fasta_filename, ma
         if not lines:
             LOGGER.warn("Empty intput SAM file " + sam_filename)
 
+        start = 0
         # Skip top SAM header lines
         for start, line in enumerate(lines):
             if not line.startswith('@'):
@@ -257,7 +263,7 @@ def create_msa_fasta_from_sam(sam_filename, ref, ref_len, out_fasta_filename, ma
             qname, flag, refname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual = lines_arr[:11]
             i += 1
 
-            if not refname == ref:
+            if ref and not refname == ref:
                 continue
 
             # If read failed to map or has poor mapping quality, skip it
@@ -296,7 +302,7 @@ def create_msa_fasta_from_sam(sam_filename, ref, ref_len, out_fasta_filename, ma
                     # padded_seq2, padded_qual2 = get_padded_seq_from_cigar(pos=int(pos2), cigar=cigar2, seq=seq2,
                     #                                                       qual=qual2, flag=flag2, rname=refname2,
                     #                                                       ref_len=ref_len)
-                    if (refname2 == ref and qname2 == qname and
+                    if ((not ref or refname2 == ref) and qname2 == qname and
                             not(SamFlag.IS_UNMAPPED & int(flag2) or SamFlag.IS_SECONDARY_ALIGNMENT & int(flag2) or
                                 refname2 == '*' or cigar2 == '*' or int(pos2) == 0 or int(mapq2) < mapping_cutoff)):
                         padded_seq2, padded_qual2, ref_pos_to_insert_seq_qual, left_pad_len, right_pad_len = get_padded_seq_from_cigar(pos=int(pos2), cigar=cigar2, seq=seq2,
@@ -338,7 +344,7 @@ def __write_seq(fh_out, name, seq, max_prop_N, breadth_thresh):
 
 
 def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cutoff, read_qual_cutoff,
-                              max_prop_N, breadth_thresh, start_pos, end_pos, is_insert=False):
+                              max_prop_N, breadth_thresh, start_pos=None, end_pos=None, is_insert=False, ref_len=None):
     """
     Parse SAM file contents for query-ref (pairwise) aligned sequences for a specific reference contig.
     For paired-end reads, merges the reads into a single sequence with gaps with respect to the reference.
@@ -352,11 +358,14 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
     NB: Only takes the primary alignment.
 
     :param str sam_filename: full path to sam file.  Must be queryname sorted.
-    :param str ref: name of reference contig to form MSA alignments to
+    :param str ref: name of reference contig to form MSA alignments to.  If None, then splits out all alignments to any reference.
     :param str out_fasta_filename: full path of fasta file to write to.  Will completely overwite file.
     :param int mapping_cutoff:  Ignore alignments with mapping quality lower than the cutoff.
     :param int read_qual_cutoff: Convert bases with quality lower than this cutoff to N unless both mates agree.
     :param float max_prop_N:  Do not output merged sequences with proportion of N higher than the cutoff
+    :param int start_pos: 1-based start nucleotide start position of slice.  If None, then uses beginning of ref.
+    :param int end_pos: 1-based end nucleotide start position of slice.  If None, then uses end of ref.
+    :param int ref_len: length of reference.  If None, then takes length from sam headers.
     """
 
 
@@ -371,7 +380,8 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
         raise ValueError("Sam file must be queryname sorted and header must specify sort order")
 
     total_written = 0
-    ref_len = get_reflen(sam_filename, ref)
+    if not ref_len:
+        ref_len = get_reflen(sam_filename, ref)
     with open(sam_filename, 'r') as sam_fh, open(out_fasta_filename, 'w') as out_fasta_fh:
         prev_mate = None
         is_expect_mate = False
@@ -396,19 +406,19 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
             # From SAM specs:
             # "For a unmapped paired-end or mate-pair read whose mate is mapped, the unmapped read
             #   should have RNAME and POS identical to its mate"
-            if (SamFlag.IS_UNMAPPED & flag or SamFlag.IS_SECONDARY_ALIGNMENT & flag or
-                    rname == '*' or cigar == '*' or pos == 0 or mapq < mapping_cutoff or rname != ref):
+            if (SamFlag.IS_UNMAPPED & flag or SamFlag.IS_SECONDARY_ALIGNMENT & flag or SamFlag.IS_CHIMERIC_ALIGNMENT & flag or
+                    rname == '*' or cigar == '*' or pos == 0 or mapq < mapping_cutoff or (ref and rname != ref)):
                 continue
 
             mate = sam_record.SamRecord(ref_len=ref_len)
             mate.fill_record_vals(qname, flag, rname, seq, cigar, mapq, qual, pos, rnext, pnext)
 
-            is_mate_paired = SamFlag.IS_PAIRED & flag and not SamFlag.IS_MATE_UNMAPPED & flag and (rnext == "=" or rnext == ref)
+            is_mate_paired = SamFlag.IS_PAIRED & flag and not SamFlag.IS_MATE_UNMAPPED & flag and (rnext == "=" or not ref or rnext == ref)
 
             # We are expecting this record or future records to be the next mate in pair
             if is_expect_mate:
                 if (not prev_mate or not SamFlag.IS_PAIRED & prev_mate.flag or SamFlag.IS_MATE_UNMAPPED & prev_mate.flag or
-                         not (prev_mate.rnext == "=" or prev_mate.rnext == ref)):
+                         not (prev_mate.rnext == "=" or not ref or prev_mate.rnext == ref)):
                     if prev_mate:
                         LOGGER.error("Invalid logic.  Prevmate.qname=" + prev_mate.qname + " flag=" + str(prev_mate.flag) + " rnext=" + prev_mate.rnext)
                     raise ValueError("Invalid logic.  Shouldn't get here. - " + line)
@@ -427,6 +437,7 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
                     is_written = __write_seq(out_fasta_fh, pair.get_name(), mseq, max_prop_N, breadth_thresh)
                     total_written += 1 if is_written else 0
                 else:
+                    # TODO:  dont spit out this warning if we are missing a mate because we rejected its map qual
                     LOGGER.warn("Sam record inconsistent.  Expected pair for " + prev_mate.qname + " but got " + qname)
                     # This sam record does not pair with the previous sam record.
                     # Do low quality masking on the previous record and write it out.

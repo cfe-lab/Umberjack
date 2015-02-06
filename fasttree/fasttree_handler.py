@@ -10,12 +10,13 @@ formatter = logging.Formatter('%(asctime)s - [%(levelname)s] [%(name)s] [%(proce
 console_handler.setFormatter(formatter)
 LOGGER.addHandler(console_handler)
 
-FASTTREE_EXE = "FastTreeMP"
+FASTTREE_EXE = "FastTree"  # Single threaded.  Results reproducible if same seed is set
+FASTTREEMP_EXE = "FastTreeMP"
 ENV_OMP_NUM_THREADS = 'OMP_NUM_THREADS'
 GTRRATES_LINE_START = "GTRRates"
 
 
-def make_tree(fasta_fname, threads=1, fastree_exe=FASTTREE_EXE):
+def make_tree(fasta_fname, threads=1, fastree_exe=FASTTREEMP_EXE):
     """
     Creates a phylogenetic tree from the fasta
     :param str fasta_fname:  multiple sequence aligned fasta file
@@ -36,6 +37,45 @@ def make_tree(fasta_fname, threads=1, fastree_exe=FASTTREE_EXE):
                                    '-nt',   # nucleotides
                                    '-gamma',  # sites vary with 20 category gamma distro
                                    '-nosupport',  # do not output support values in tree
+                                   '-log', fastree_logfilename,  # fast tree log
+                                   '-out', fastree_treefilename,  # fast tree STDOUT, STDERR
+                                   fasta_fname],  # multiple sequence aligned fasta
+                                  stdout=fasttree_stdouterr_fh, stderr=fasttree_stdouterr_fh, shell=False,
+                                  env=os.environ)
+        LOGGER.debug("Done Fasttree " + fastree_treefilename)
+    else:
+        LOGGER.debug("Found existing Fasttree " + fastree_treefilename + ". Not regenerating")
+
+    return fastree_treefilename
+
+
+def make_tree_repro(fasta_fname, intree_fname, fastree_exe=FASTTREE_EXE):
+    """
+    Creates a phylogenetic tree from the fasta.  resulting tree will maintain the same topology as input tree,
+    but branch lengths will be optimized.
+
+    NB:  FastTree2.1 sometimes changes the topology if there are duplicate sequences.
+
+    :param str fasta_fname:  multiple sequence aligned fasta file
+    :param str intree_fname:  full filepath to input tree for which the topology should not change
+    :param str fastree_exe: full filepath to FastTree executable.  Default uses FastTree from PATH env var
+    """
+    fasta_fname_prefix = os.path.splitext(fasta_fname)[0]  # Remove the .fasta suffix
+    fastree_logfilename = fasta_fname_prefix + ".fasttree.log"
+    fastree_treefilename = fasta_fname_prefix + ".tree"
+    fasttree_stdouterr_filename = fasta_fname_prefix + ".fasttree.stdouterr.txt"
+    LOGGER.debug("Start Fasttree  " + fastree_treefilename)
+
+    if not os.path.exists(fastree_treefilename) or os.path.getsize(fastree_treefilename) <= 0:
+        with open(fasttree_stdouterr_filename, 'w') as fasttree_stdouterr_fh:
+            subprocess.check_call([fastree_exe,
+                                   '-gtr',  # general time reversible nucleotide substitution model
+                                   '-nt',   # nucleotides
+                                   '-gamma',  # sites vary with 20 category gamma distro
+                                   '-nosupport',  # do not output support values in tree
+                                   "-nome", # no minimum evolution nearest neighbour exchange or subtree prune regraph
+                                   "-mllen",  # find max likelihood branch lengths
+                                   "-intree", intree_fname,  #  input tree newick file.  Topology of resulting tree will not change.
                                    '-log', fastree_logfilename,  # fast tree log
                                    '-out', fastree_treefilename,  # fast tree STDOUT, STDERR
                                    fasta_fname],  # multiple sequence aligned fasta

@@ -1,8 +1,51 @@
 import os
 import errno
+import math
+
 
 NUC_PER_CODON = 3
+CODON2AA = {
+    'TTT' : 'F', 'TCT' : 'S', 'TAT' : 'Y', 'TGT' : 'C',
+    'TTC' : 'F', 'TCC' : 'S', 'TAC' : 'Y', 'TGC' : 'C',
+    'TTA' : 'L', 'TCA' : 'S', 'TAA' : '*', 'TGA' : '*',
+    'TTG' : 'L', 'TCG' : 'S', 'TAG' : '*', 'TGG' : 'W',
 
+    'CTT' : 'L', 'CCT' : 'P', 'CAT' : 'H', 'CGT' : 'R',
+    'CTC' : 'L', 'CCC' : 'P', 'CAC' : 'H', 'CGC' : 'R',
+    'CTA' : 'L', 'CCA' : 'P', 'CAA' : 'Q', 'CGA' : 'R',
+    'CTG' : 'L', 'CCG' : 'P', 'CAG' : 'Q', 'CGG' : 'R',
+
+    'ATT' : 'I', 'ACT' : 'T', 'AAT' : 'N', 'AGT' : 'S',
+    'ATC' : 'I', 'ACC' : 'T', 'AAC' : 'N', 'AGC' : 'S',
+    'ATA' : 'I', 'ACA' : 'T', 'AAA' : 'K', 'AGA' : 'R',
+    'ATG' : 'M', 'ACG' : 'T', 'AAG' : 'K', 'AGG' : 'R',
+
+    'GTT' : 'V', 'GCT' : 'A', 'GAT' : 'D', 'GGT' : 'G',
+    'GTC' : 'V', 'GCC' : 'A', 'GAC' : 'D', 'GGC' : 'G',
+    'GTA' : 'V', 'GCA' : 'A', 'GAA' : 'E', 'GGA' : 'G',
+    'GTG' : 'V', 'GCG' : 'A', 'GAG' : 'E', 'GGG' : 'G',
+
+    # codons with mixture codes
+    'GCN' : 'A',
+    'TTY' : 'F',
+    'AAY' : 'N',
+    'GAY' : 'D',
+    'TGY' : 'C',
+    'CAR' : 'Q',
+    'GAR' : 'E',
+    'GGN' : 'G',
+    'CAY' : 'H',
+    'ATH' : 'I',
+    'AAR' : 'K',
+    'YTR' : 'L','CTN' : 'L',
+    'CCN' : 'P',
+    'CGN' : 'R','MGR' : 'R',
+    'TCN' : 'S','AGY' : 'S',
+    'ACN' : 'T',
+    'TAY' : 'W',
+    'GTN' : 'V',
+    'TAR' : '*','TRA' : '*',
+    }
 
 def create_dir_check(new_dir):
     """
@@ -180,6 +223,7 @@ def get_total_nongap_nuc_all_pos(msa_fasta_filename):
     return total_nongap_by_pos
 
 
+
 def get_total_codons_by_pos(msa_fasta_filename):
     """
      Gets List of  total number of sequences with an unambiguous codon for every codon position.
@@ -191,50 +235,67 @@ def get_total_codons_by_pos(msa_fasta_filename):
     :param str msa_fasta_filename:  full filepath to nucleotide fasta
     """
     longest_seq = get_longest_seq_size_from_fasta(msa_fasta_filename)
-    total_unambig_codon_by_pos = [0] * ((longest_seq/NUC_PER_CODON) + 1)
-    with open(msa_fasta_filename, 'r') as fh:
+    total_unambig_codon_by_pos = [0] * int(math.ceil(longest_seq/NUC_PER_CODON))
+    with open(msa_fasta_filename, 'rU') as fh:
         seq = ""
         for line in fh:
             line = line.rstrip()
             if line[0] == '>':
-                if len(seq) >= 2:
-                    for nuc_pos in range(0, len(seq), 3):
-                        codon_1st_nuc = seq[nuc_pos].upper()
-                        if len(seq) > nuc_pos+1:
-                            codon_2nd_nuc = seq[nuc_pos + 1].upper()
-                        else:
-                            codon_2nd_nuc = "-"
-                        if not (codon_1st_nuc == 'N' or codon_1st_nuc == '-' or codon_2nd_nuc == 'N' or codon_2nd_nuc == '-'):
-                            codon_pos = nuc_pos/NUC_PER_CODON
-                            total_unambig_codon_by_pos[codon_pos] += 1
-
+                seq = seq.upper().replace("-", "N")
+                for nuc_pos in range(0, len(seq), 3):
+                    codon = seq[nuc_pos:nuc_pos + NUC_PER_CODON]
+                    codon += ("N" * (NUC_PER_CODON - len(codon)))  # right pad with N's
+                    if CODON2AA.get(codon):
+                        codon_pos = nuc_pos/NUC_PER_CODON
+                        total_unambig_codon_by_pos[codon_pos] += 1
                 seq = ""
             else:
                 seq += line
 
-        if len(seq) >= 2:
-            for nuc_pos in range(0, len(seq), 3):
-                codon_1st_nuc = seq[nuc_pos].upper()
-                if len(seq) > nuc_pos+1:
-                    codon_2nd_nuc = seq[nuc_pos + 1].upper()
-                else:
-                    codon_2nd_nuc = "-"
-                if not (codon_1st_nuc == 'N' or codon_1st_nuc == '-' or codon_2nd_nuc == 'N' or codon_2nd_nuc == '-'):
-                    codon_pos = nuc_pos/NUC_PER_CODON
-                    total_unambig_codon_by_pos[codon_pos] += 1
+        seq = seq.upper().replace("-", "N")
+        for nuc_pos in range(0, len(seq), 3):
+            codon = seq[nuc_pos:nuc_pos + NUC_PER_CODON]
+            codon += ("N" * (NUC_PER_CODON - len(codon)))  # right pad with N's
+            if CODON2AA.get(codon):
+                codon_pos = nuc_pos/NUC_PER_CODON
+                total_unambig_codon_by_pos[codon_pos] += 1
 
     return total_unambig_codon_by_pos
 
 
-class _Consensus:
+class Consensus:
     """
-    Internal use only.  Keeps track of consensus information for a sequence.
+    Keeps track of consensus information for a sequence.
     """
 
     __base_count = {'A': 0, 'C': 0, 'T': 0, 'G': 0}
 
     def __init__(self):
         self.seq = []
+
+    def parse(self, msa_fasta_filename):
+        """
+        Reads in multiple sequence alignment file.
+        """
+        with open(msa_fasta_filename, 'r') as in_fh:
+            seq = ""
+            for line in in_fh:
+                line = line.rstrip()
+                if line:
+                    if line[0] == '>':
+                        self.add_seq(seq)
+                        seq = ""
+                    else:
+                        seq += line
+            self.add_seq(seq)
+
+
+    def add_seq(self, seq):
+        """
+        Add a sequence to the consensus
+        """
+        for pos_0based, base in enumerate(seq):
+            self.add_base(base, pos_0based=pos_0based)
 
 
     def add_base(self, base, pos_0based):
@@ -247,10 +308,11 @@ class _Consensus:
         base = base.upper()
         if pos_0based >= len(self.seq):
             for i in range(pos_0based - len(self.seq) + 1):
-                self.seq.append(_Consensus.__base_count.copy())
+                self.seq.append(Consensus.__base_count.copy())
 
         if self.seq[pos_0based].has_key(base):
             self.seq[pos_0based][base] += 1
+
 
     def get_consensus(self):
         """
@@ -283,6 +345,109 @@ class _Consensus:
         print "Ave Mutations per base per sequence = " + str(float(total_mut)/total_bases)
 
 
+    def get_conserve(self, pos_0based):
+        """
+        :param int pos_0based: 0-based position in the multiple sequence alignment
+        :return: the fraction of conserved sequences at every position in the multiple sequence alignment.  Only considers A, C, G, T in the fraction.
+        :rtype float
+        """
+        conserve_count = max(self.seq[pos_0based].values())
+        total_count = sum(self.seq[pos_0based].values())
+        if total_count:
+            return float(conserve_count)/total_count
+        else:
+            return None
+
+
+    def get_ave_conserve(self, start_pos_0based, after_end_pos_0based):
+        """
+        Gets the average per-site conservation across the given range.
+        :param start_pos_0based:  0-based nucleotide start position
+        :param after_end_pos_0based:  0-based nucleotide end position + 1
+        :return:  average per-site fraction of conservation across the range.
+        """
+        total_conserve = 0.0
+        for pos in range(start_pos_0based, after_end_pos_0based):
+            conserve = self.get_conserve(pos)
+            total_conserve += conserve if conserve else 0
+
+        ave_conserve = total_conserve / (after_end_pos_0based - start_pos_0based)
+        return ave_conserve
+
+
+    def get_shannon_entropy(self, pos_0based):
+        """
+        Gets the Shannon Entropy (measure of bits required to represent each symbol) at the given site.  Only considers A, C, G, T
+        :param int pos_0based: 0-based nucleotide position in the multiple sequence alignment
+        :return: Shannon Entropy.  Log2 based.
+        :rtype float
+        """
+        total_nonempty_letters = sum(1.0 for val in self.seq[pos_0based].values() if val > 0)
+        total_letters = float(sum(self.seq[pos_0based].values()))
+        if not total_nonempty_letters:
+            return None
+
+        total_entropy = 0.0
+        for letter, count in  self.seq[pos_0based].iteritems():
+            if count:
+                p_letter = count / total_letters  # probability of this letter occuring at this position
+                log_p_letter = math.log(p_letter, 2)  # Log2  probability of letter
+                total_entropy += (p_letter * log_p_letter)
+
+        total_entropy = -total_entropy
+        return total_entropy
+
+
+    def get_ave_metric_entropy(self, start_pos_0based, after_end_pos_0based):
+        """
+        Gets the average per-site metric entropy across the given range.
+        :param start_pos_0based:  0-based nucleotide start position
+        :param after_end_pos_0based:  0-based nucleotide end position + 1
+        :return:  average per-site metric entropy across the range.
+        """
+        total_entropy = 0.0
+        for pos in range(start_pos_0based, after_end_pos_0based):
+            entropy = self.get_metric_entropy(pos)
+            total_entropy += entropy if entropy else 0
+
+        ave_entropy = total_entropy / (after_end_pos_0based - start_pos_0based)
+        return ave_entropy
+
+
+    def get_metric_entropy(self, pos_0based):
+        """
+        Gets the Metric Shannon Entropy at the given site.  Only considers A, C, G, T.
+        :param int pos_0based: 0-based position in the multiple sequence alignment
+        :return: Metric Shannon Entropy  (the Shannon Entropy divided by the number of sequences), \
+                which can be compared across sites to measure randomness
+        :rtype float
+        """
+        total_seqs = sum(self.seq[pos_0based].values())
+        if not total_seqs:
+            return None
+        shannon_entropy = self.get_shannon_entropy(pos_0based)
+        metric_entropy = shannon_entropy/total_seqs
+        return metric_entropy
+
+
+    def get_alignment_len(self):
+        """
+        :returns: the length of the longest sequence in the alignment
+        :rtype: int
+        """
+        return len(self.seq)
+
+    def get_depth(self, pos_0based):
+        """
+        :param int pos_0based: 0-based nucleotide position in the multiple sequence alignment
+        :return: the total sequences with a valid nucleotide (A, C, G, T) at the given position.
+        :rtype: int
+        """
+        return sum(self.seq[pos_0based].values())
+
+
+
+
 def get_consensus_from_msa(msa_fasta_filename, consensus_fasta_filename):
     """
     Gets the consensus from a multiple sequence aligned fasta and prints out stats to stdout
@@ -293,7 +458,7 @@ def get_consensus_from_msa(msa_fasta_filename, consensus_fasta_filename):
     consensus = ""
     with open(msa_fasta_filename, 'r') as in_fh, open(consensus_fasta_filename, 'w') as out_fh:
         seq = ""
-        consensus = _Consensus()
+        consensus = Consensus()
         for line in in_fh:
             line = line.rstrip()
             if line:
@@ -311,7 +476,8 @@ def get_consensus_from_msa(msa_fasta_filename, consensus_fasta_filename):
         out_fh.write(">consensus " + msa_fasta_filename + "\n")
         out_fh.write(consensus_seq + "\n")
 
-        consensus.print_stats()
+        #consensus.print_stats()
+
 
 
 def convert_fasta (lines):
