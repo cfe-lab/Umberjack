@@ -19,7 +19,9 @@ PICARD_COV_HISTO_SKIP <- 10
 
 
 
-# READ IN CONFIGS
+#' READ IN CONFIGS
+#' =============================
+#' 
 R_CONFIG_FILENAME <- "./small_cov.config"
 rconfig<-read.table(R_CONFIG_FILENAME, sep="=", col.names=c("key","value"), as.is=c(1,2))
 
@@ -38,11 +40,15 @@ ALN_WGS_METRICS <- rconfig[rconfig$key=="ALN_WGS_METRICS",]$val
 ORIG_CONSERVE_CSV <- rconfig[rconfig$key=="ORIG_CONSERVE_CSV",]$val
 ALN_CONSERVE_CSV <- rconfig[rconfig$key=="ALN_CONSERVE_CSV",]$val
 INDELIBLE_RATES_CSV <- rconfig[rconfig$key=="INDELIBLE_RATES_CSV", ]$val
+CMP_READ_ERR_CSV <- rconfig[rconfig$key=="CMP_READ_ERR_CSV", ]$val
 
 #+ results='asis'
 kable(rconfig, format="html", caption="Configs")
 
 
+#' Read in Diversity CSVs
+#' ================================
+#' 
 
 #+
 # Takes a *.conserve.csv file with nucleotide stats for unsliced sequences
@@ -86,6 +92,27 @@ POPN_BP <- NUM_INDIV * NUM_NUC_SITES
 indelible <- read.table(INDELIBLE_RATES_CSV, header=TRUE, sep=",")
 summary(indelible)
 
+#' Read in Sequencing Error CSVs
+#' ================================
+#' 
+
+
+# Get merged read stats on sequencing error, length, N's
+read_stats <- read.table(CMP_READ_ERR_CSV, header=TRUE, sep=",")
+read_stats$Len <- read_stats$End - read_stats$Start + 1
+summary(read_stats)
+summary(read_stats[read_stats$Source == "Orig",])
+summary(read_stats[read_stats$Source == "OrigErrFree",])
+summary(read_stats[read_stats$Source == "Aln",])
+summary(read_stats[read_stats$Source == "AlnErrFree",])
+
+
+
+
+#' Function Definitions
+#' ==============================
+#' 
+ 
 # Boxplot the actual divergence, entropy at each Indelible mutation scaling rate
 plot_act_diversity_by_indelible_mut <- function(full_popn_conserve, orig_conserve, orig_errfree_conserve,
                                                 aln_conserve, aln_errfree_conserve, indelible) {
@@ -199,6 +226,7 @@ plot_cmp_conserve <- function(full_popn_conserve_csv, orig_read_conserve_csv, al
                         data.frame(Source="AlnErrFree", aln_read_err_free_conserve))
   summary(all_conserve)
   
+  
   # Plot Diversity Along Genome
   sapply(c("Diverge", "Entropy", "NucDepth", "CodonDepth"), function(colname) {
     fig <- ggplot(all_conserve, aes(x=NucSite, color=Source, lty=Source)) + 
@@ -208,6 +236,7 @@ plot_cmp_conserve <- function(full_popn_conserve_csv, orig_read_conserve_csv, al
       ggtitle(paste0("Compare Smoothed ", colname, " At Each Nucleotide Site"))
     print(fig)
   })
+  
   
   # Plot Density of Sites For Diversity
   sapply(c("Diverge", "Entropy", "NucDepth", "CodonDepth"), function(colname) {
@@ -221,7 +250,8 @@ plot_cmp_conserve <- function(full_popn_conserve_csv, orig_read_conserve_csv, al
   
   # Plot Cumulative Frequency of Sites For Diversity
   sapply(c("Diverge", "Entropy", "NucDepth", "CodonDepth"), function(colname) {
-    fig <- ggplot(all_conserve, aes_string(x=colname, color="Source")) + 
+    fig <- ggplot(all_conserve, aes_string(x=colname, color="Source", lty="Source")) + 
+      stat_ecdf() + 
       xlab(paste0("\n", colname)) + 
       ylab(paste0("Cumulative Distribution of Sites\n")) + 
       ggtitle(paste0("Compare Cumulative Distribution of Sites For ", colname))
@@ -341,6 +371,7 @@ get_metrics <- function (ORIG_WGS_METRICS) {
   return (metrics)
 }
 
+# This takes a loooong time due to the aggregation of the massive original read coverage dataframe.
 # Compare Coverage of Full population, original reads (typical, err free), aligned reads (typical, error free) on same graph
 plot_cmp_cov <- function(orig_read_cov_tsv, aln_read_cov_tsv, orig_read_errfree_cov_tsv, aln_read_err_free_cov_tsv) {
   
@@ -368,6 +399,7 @@ plot_cmp_cov <- function(orig_read_cov_tsv, aln_read_cov_tsv, orig_read_errfree_
     ggtitle("Compare Per-Population Coverage Along Genome")
   print(fig)
 
+  
 }
 
 #'

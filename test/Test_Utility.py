@@ -4,8 +4,6 @@ import os
 import tempfile
 import math
 
-MSA_FASTA_FILENAME = "./simulations/data/sample_genomes.fas"
-CONSENSUS_FASTA_FILENAME = "./simulations/out/test_consensus.fasta"
 
 class MyTestCase(unittest.TestCase):
 
@@ -34,9 +32,22 @@ class MyTestCase(unittest.TestCase):
 
         os.remove(tmp_msa_fasta.name)
 
+
     def test_get_consensus_from_msa(self):
-        # TODO:  make trivial example instead of this
-        pass
+        tmpfile = tempfile.NamedTemporaryFile(delete=False)
+        tmpfile.write(">seq1\n")
+        tmpfile.write("ATNG\n")
+        tmpfile.write(">seq2\n")
+        tmpfile.write("GCGC\n")
+        tmpfile.write(">seq3\n")
+        tmpfile.write("GTGC\n")
+        tmpfile.flush()
+        os.fsync(tmpfile.file.fileno())
+        tmpfile.close()
+        cons = Utility.Consensus()
+        cons.parse(tmpfile.name)
+        cons_str = cons.get_consensus()
+        self.assertEqual("GTGC", cons_str)
 
 
     def test_shannon_entropy(self):
@@ -92,6 +103,136 @@ class MyTestCase(unittest.TestCase):
             self.assertEqual(expected[pos], actual, "Pos=0 expected={} actual={}".format(expected[pos], actual))
 
         os.remove(tmpfile.name)
+
+
+    def test_metric_entropy_ambig(self):
+        tmpfile = tempfile.NamedTemporaryFile(delete=False)
+        tmpfile.write(">seq1\n")
+        tmpfile.write("ATNG\n")
+        tmpfile.write(">seq2\n")
+        tmpfile.write("GCGT\n")
+        tmpfile.write(">seq3\n")
+        tmpfile.write("GTGC\n")
+        tmpfile.flush()
+        os.fsync(tmpfile.file.fileno())
+        tmpfile.close()
+
+        cons = Utility.Consensus()
+        cons.parse(tmpfile.name)
+
+        expected = [ -(1.0/3 * math.log(1.0/3, 2) + 2.0/3 * math.log(2.0/3, 2))/3,
+                     -(2.0/3 * math.log(2.0/3, 2) + 1.0/3 * math.log(1.0/3, 2))/3,
+                     -(2.25/3 * math.log(2.25/3, 2) + 3*0.25/3 * math.log(0.25/3, 2))/3,
+                     -(1.0/3 * math.log(1.0/3, 2) + 1.0/3 * math.log(1.0/3, 2) + 1.0/3 * math.log(1.0/3, 2))/3]
+
+        for pos in range (0, len(expected)):
+            actual = cons.get_metric_entropy(pos, is_count_ambig=True)
+            print("Pos={} expected={} actual={}".format(pos, expected[pos], actual))
+            self.assertEqual(expected[pos], actual, "Pos={} expected={} actual={}".format(pos, expected[pos], actual))
+
+        os.remove(tmpfile.name)
+
+
+    def test_metric_entropy_gap(self):
+        tmpfile = tempfile.NamedTemporaryFile(delete=False)
+        tmpfile.write(">seq1\n")
+        tmpfile.write("AT-G\n")
+        tmpfile.write(">seq2\n")
+        tmpfile.write("GCGT\n")
+        tmpfile.write(">seq3\n")
+        tmpfile.write("GTGC\n")
+        tmpfile.flush()
+        os.fsync(tmpfile.file.fileno())
+        tmpfile.close()
+
+        cons = Utility.Consensus()
+        cons.parse(tmpfile.name)
+
+        expected = [ -(1.0/3 * math.log(1.0/3, 2) + 2.0/3 * math.log(2.0/3, 2))/3,
+                     -(2.0/3 * math.log(2.0/3, 2) + 1.0/3 * math.log(1.0/3, 2))/3,
+                     -(2.25/3 * math.log(2.25/3, 2) + 3*0.25/3 * math.log(0.25/3, 2))/3,
+                     -(1.0/3 * math.log(1.0/3, 2) + 1.0/3 * math.log(1.0/3, 2) + 1.0/3 * math.log(1.0/3, 2))/3]
+
+        for pos in range (0, len(expected)):
+            actual = cons.get_metric_entropy(pos, is_count_ambig=True, is_count_gaps=True)
+            print("Pos={} expected={} actual={}".format(pos, expected[pos], actual))
+            self.assertEqual(expected[pos], actual, "Pos={} expected={} actual={}".format(pos, expected[pos], actual))
+
+        os.remove(tmpfile.name)
+
+
+    def test_get_conserve(self):
+        tmpfile = tempfile.NamedTemporaryFile(delete=False)
+        tmpfile.write(">seq1\n")
+        tmpfile.write("ATNG\n")
+        tmpfile.write(">seq2\n")
+        tmpfile.write("GCGT\n")
+        tmpfile.write(">seq3\n")
+        tmpfile.write("GTGC\n")
+        tmpfile.flush()
+        os.fsync(tmpfile.file.fileno())
+        tmpfile.close()
+
+        cons = Utility.Consensus()
+        cons.parse(tmpfile.name)
+
+        expected = [ 2/3.0, 2/3.0, 2.0/2, 1.0/3]
+
+        for pos in range (0, len(expected)):
+            actual = cons.get_conserve(pos)
+            print("Pos={} expected={} actual={}".format(pos, expected[pos], actual))
+            self.assertEqual(expected[pos], actual, "Pos={} expected={} actual={}".format(pos, expected[pos], actual))
+
+        os.remove(tmpfile.name)
+
+    def test_get_conserve_ambig(self):
+        tmpfile = tempfile.NamedTemporaryFile(delete=False)
+        tmpfile.write(">seq1\n")
+        tmpfile.write("ATNG\n")
+        tmpfile.write(">seq2\n")
+        tmpfile.write("GCGT\n")
+        tmpfile.write(">seq3\n")
+        tmpfile.write("GTGC\n")
+        tmpfile.flush()
+        os.fsync(tmpfile.file.fileno())
+        tmpfile.close()
+
+        cons = Utility.Consensus()
+        cons.parse(tmpfile.name)
+
+        expected = [ 2/3.0, 2/3.0, 2.25/3, 1.0/3]
+
+        for pos in range (0, len(expected)):
+            actual = cons.get_conserve(pos, is_count_ambig=True)
+            print("Pos={} expected={} actual={}".format(pos, expected[pos], actual))
+            self.assertEqual(expected[pos], actual, "Pos={} expected={} actual={}".format(pos, expected[pos], actual))
+
+        os.remove(tmpfile.name)
+
+    def test_get_conserve_gap(self):
+        tmpfile = tempfile.NamedTemporaryFile(delete=False)
+        tmpfile.write(">seq1\n")
+        tmpfile.write("AT-G\n")
+        tmpfile.write(">seq2\n")
+        tmpfile.write("GCGT\n")
+        tmpfile.write(">seq3\n")
+        tmpfile.write("GTGC\n")
+        tmpfile.flush()
+        os.fsync(tmpfile.file.fileno())
+        tmpfile.close()
+
+        cons = Utility.Consensus()
+        cons.parse(tmpfile.name)
+
+        expected = [ 2/3.0, 2/3.0, 2.25/3, 1.0/3]
+
+        for pos in range (0, len(expected)):
+            actual = cons.get_conserve(pos, is_count_ambig=True, is_count_gaps=True)
+            print("Pos={} expected={} actual={}".format(pos, expected[pos], actual))
+            self.assertEqual(expected[pos], actual, "Pos={} expected={} actual={}".format(pos, expected[pos], actual))
+
+        os.remove(tmpfile.name)
+
 
 if __name__ == '__main__':
     unittest.main()

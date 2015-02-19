@@ -41,6 +41,11 @@ collate_dnds$Diverge <- 1 - collate_dnds$Conserve
 colnames(collate_dnds)[grep("^Codons$", colnames(collate_dnds), perl=TRUE)] <- "CodonDepth"
 collate_dnds$dNdS <- collate_dnds$dN/collate_dnds$dS
 collate_dnds$dNdS[collate_dnds$dS==0] <- NA
+collate_dnds$ErrFractn <- collate_dnds$Err/(collate_dnds$Reads)
+collate_dnds$AmbigCodonFractn <- 1 - collate_dnds$CodonDepth/collate_dnds$Reads
+collate_dnds$Err_N_Fractn <- collate_dnds$Err_N/collate_dnds$CodonDepth
+collate_dnds$Err_S_Fractn <- collate_dnds$Err_S/collate_dnds$CodonDepth 
+collate_dnds$Pad_Fractn <- collate_dnds$Pad/(collate_dnds$Reads)
 
 # Average across all codon sites in a window
 per_window_ave <- ddply(.data=collate_dnds, .variables="Window_Start", 
@@ -49,7 +54,12 @@ per_window_ave <- ddply(.data=collate_dnds, .variables="Window_Start",
                                      Window_Conserve=mean(x$Conserve, na.rm=TRUE),
                                      Window_Entropy=mean(x$Entropy, na.rm=TRUE),
                                      Window_Subst=mean(x$Subst, na.rm=TRUE),
-                                     Window_CodonDepth=mean(x$CodonDepth, na.rm=TRUE))
+                                     Window_CodonDepth=mean(x$CodonDepth, na.rm=TRUE),
+                                     Window_ErrFractn=mean(x$ErrFractn, na.rm=TRUE),
+                                     Window_AmbigCodonFractn=mean(x$AmbigCodonFractn, na.rm=TRUE),
+                                     Window_Err_N_Fractn=mean(x$Err_N_Fractn, na.rm=TRUE),
+                                     Window_Err_S_Fractn=mean(x$Err_S_Fractn, na.rm=TRUE)
+                                     )
                         })
 collate_dnds <- merge(x=collate_dnds, y=per_window_ave, by="Window_Start", all=TRUE, sort=TRUE)
 
@@ -433,17 +443,32 @@ plot_win_subst_div_vs_nowin_div <- function(nowindow_leaf_diversity, nowindow_ph
                                                 value.name="LeafVal.Win")
   window_leaf_diversity_melt$LeafMeasure.Win <- paste0(window_leaf_diversity_melt$LeafMeasure.Win, window_measure_suffix)
   
-  # Scatterplot Window Diversity Vs  Non-Window Diversity  
-  win_nowindow_leaf_combo <- merge(x=window_leaf_diversity_melt, y=nowindow_leaf_diversity_melt, by="CodonSite", all=TRUE)
-  fig <- ggplot(win_nowindow_leaf_combo, aes(x=LeafVal.NoWin, y=LeafVal.Win)) + 
-    facet_grid(LeafMeasure.Win~LeafMeasure.NoWin, scales="free") + 
-    geom_point(shape=1, alpha=0.1) + 
-    geom_smooth(method="lm") + 
-    xlab(paste0("\n", nowindow_title, " Sequence Diversity")) + 
-    ylab(paste0(window_title, " Sequence Diversity\n")) + 
-    ggtitle(paste0("Scatterplot ", window_title, " Sequence Diversity Vs ", nowindow_title, " Sequence Diversity"))
-  print(fig)
   
+#   win_nowindow_leaf_combo <- merge(x=window_leaf_diversity_melt, y=nowindow_leaf_diversity_melt, by="CodonSite", all=TRUE)
+#   fig <- ggplot(win_nowindow_leaf_combo, aes(x=LeafVal.NoWin, y=LeafVal.Win)) + 
+#     facet_grid(LeafMeasure.Win~LeafMeasure.NoWin, scales="free") + 
+#     geom_point(shape=1, alpha=0.1) + 
+#     geom_smooth(method="lm") + 
+#     xlab(paste0("\n", nowindow_title, " Sequence Diversity")) + 
+#     ylab(paste0(window_title, " Sequence Diversity\n")) + 
+#     ggtitle(paste0("Scatterplot ", window_title, " Sequence Diversity Vs ", nowindow_title, " Sequence Diversity"))
+#   print(fig)
+#   
+  win_nowindow_leaf_combo <- merge(x=subset(win_codon_dat, select=c(CodonSite, CodonDepth, Diverge, Entropy)), 
+                                       y=subset(nowindow_leaf_diversity, select=c(CodonSite, CodonDepth, Diverge, Entropy)), 
+                                   by="CodonSite", all.x=TRUE,  all.y=FALSE, 
+                                   suffixes=c(window_measure_suffix, nowindow_measure_suffix))
+  
+  sapply(c("CodonDepth", "Diverge", "Entropy"), function(colname) {
+      fig <- ggplot(win_nowindow_leaf_combo, aes_string(x=paste0(colname, nowindow_measure_suffix), 
+                                                        y=paste0(colname, window_measure_suffix))) + 
+        geom_point(shape=1, alpha=0.1) + 
+        geom_smooth(method="lm") + 
+        xlab(paste0("\n", nowindow_title, " ", colname)) + 
+        ylab(paste0(window_title, " ", colname, "\n")) + 
+        ggtitle(paste0("Scatterplot ", window_title, " ", colname, " Vs ", nowindow_title, " ", colname))
+      print(fig)
+  })
   
   # Scatterplot Window Phylogeny Substitutions Vs  Non-Window Sequence Diversity  
   win_subst_nowindow_leaf_combo <- merge(x=window_phylo_subst_melt, y=nowindow_leaf_diversity_melt, by="CodonSite", all=TRUE)
@@ -544,7 +569,7 @@ kable(summary(orig_conserve_dat$CodonDat), format="html", caption="Original Read
 #+ fig.width=12, fig.height=12
 plot_win_subst_div_vs_nowin_div(nowindow_leaf_diversity=orig_conserve_dat$CodonDat, 
                          nowindow_phylo_subst=expected_dnds, win_codon_dat=collate_dnds,
-                         nowindow_title="OLriginal Reads", window_title="Window", 
+                         nowindow_title="Original Reads", window_title="Window", 
                          nowindow_measure_suffix=".Orig", window_measure_suffix=".Win")
 
 
@@ -867,178 +892,3 @@ sites_low_act_div_exp_diversify <- intersect(full_popn_conserve_dat$CodonDat[ful
 summary(collate_dnds[collate_dnds$CodonSite %in% sites_low_act_div_exp_diversify, ])
 
 
-
-#' What covariates determine the distance from the actual dN/dS to expected dN/dS?
-#' --------------------------------------------------------------------------------------
-#' 
-#'  What are the patterns when the actual dn/ds is far from the true dn/ds?
-#'  Find distance from actual dn/ds to true dn/ds.
-#'  What is that distance by Full Population N, S, Subst?
-#'  What is the distance by Full Population Site Diversity?
-#'  what is the distance by Full Population Site Entropy?
-#'  What is the distance by Nucleotide Site?
-#'  What is the distance by Codon Depth?
-#'  What is the distance by Window Entropy?
-#'  What is the distance by Window Diversity?
-#' Do linear modelling to find the covariates.
-
-collate_subset <- subset(collate_dnds, select=c(Window_Start, CodonSite, Reads, CodonDepth, Diverge, Entropy, N, S, Subst, dNdS,
-                                                Window_Diverge, Window_Entropy, Window_Subst, Window_CodonDepth))
-colnames(collate_subset)[-c(1, 2)] <- paste0(colnames(collate_subset)[-c(1, 2)], ".Act")
-
-exp_subset <- subset(expected_dnds, select=c(CodonSite, N, S, Subst, Omega))
-colnames(exp_subset)[5] <- "dNdS"
-colnames(exp_subset)[-1] <- paste0(colnames(exp_subset)[-1], ".Exp")
-
-
-collate_exp_dnds <- merge(x=collate_subset, 
-                          y=exp_subset,
-                          by="CodonSite", all.x=TRUE, all.y=FALSE, suffixes=c(".Act", ".Exp"))
-
-full_popn_conserve_subset <- subset(full_popn_conserve_dat$CodonDat, select=-c(CodonDepth, Conserve))
-colnames(full_popn_conserve_subset)[-1] <- paste0(colnames(full_popn_conserve_subset)[-1], ".Exp")
-
-collate_exp_dnds <- merge(x=collate_exp_dnds, y=full_popn_conserve_subset, by="CodonSite", all.x=TRUE, all.y=FALSE, suffixes=c(".Act", ".Exp"))
-
-collate_exp_dnds$Diff_dNdS <- collate_exp_dnds$dNdS.Act - collate_exp_dnds$dNdS.Exp
-summary(collate_exp_dnds)
-
-# N.Exp, S.Exp
-lmfit <- glm(Diff_dNdS~N.Exp+S.Exp+
-               CodonSite+CodonDepth.Act+N.Act+S.Act+
-               Diverge.Exp+Entropy.Exp+Diverge.Act+Entropy.Act+
-               Window_CodonDepth.Act+Window_Diverge.Act+Window_Entropy.Act, 
-             data=collate_exp_dnds)
-bestfit <- stepAIC(lmfit)
-
-lmfit <- glm(Diff_dNdS~N.Exp, data=collate_exp_dnds)
-summary(lmfit)
-
-lmfit <- glm(Diff_dNdS~S.Exp, data=collate_exp_dnds)
-summary(lmfit)
-
-
-lmfit <- glm(Diff_dNdS~N.Exp+S.Exp, data=collate_exp_dnds)
-summary(lmfit)
-
-# N.Exp, S.Exp
-lmfit <- glm(Diff_dNdS~N.Exp+S.Exp+Subst.Exp, data=collate_exp_dnds)
-summary(lmfit)
-
-# CodonDepth, S.Act (most)
-lmfit <- glm(Diff_dNdS~CodonSite+CodonDepth.Act+N.Act+S.Act+Subst.Act, data=collate_exp_dnds)
-summary(lmfit)
-
-collate_exp_dnds$Diverge.ExpPerc <- collate_exp_dnds$Diverge.Exp*100
-collate_exp_dnds$Entropy.ExpPerc <- collate_exp_dnds$Entropy.Exp*100
-lmfit <- glm(Diff_dNdS~Diverge.ExpPerc+Entropy.ExpPerc, data=collate_exp_dnds)
-summary(lmfit)
-
-# Scaling the values by a straight factor does not change the p-values
-lmfit <- glm(Diff_dNdS~Diverge.Exp+Entropy.Exp, data=collate_exp_dnds)
-summary(lmfit)
-
-lmfit <- glm(Diff_dNdS~Diverge.Act+Entropy.Act, data=collate_exp_dnds)
-summary(lmfit)
-
-collate_exp_dnds$Entropy.ActLog <- log10(collate_exp_dnds$Entropy.Act)
-collate_exp_dnds$Entropy.ActLog[collate_exp_dnds$Entropy.Act==0] <- NA
-lmfit <- glm(Diff_dNdS~Entropy.ActLog, data=collate_exp_dnds)
-summary(lmfit)
-
-
-lmfit <- glm(Diff_dNdS~Entropy.Act, data=collate_exp_dnds)
-summary(lmfit)
-
-
-lmfit <- glm(Diff_dNdS~Window_CodonDepth.Act+Window_Diverge.Act+Window_Entropy.Act, data=collate_exp_dnds)
-summary(lmfit)
-
-lmfit <- glm(Diff_dNdS~Window_CodonDepth.Act, data=collate_exp_dnds)
-summary(lmfit)
-
-# When you include everything, only S.Exp, CodonSite, CodonDepth.Act, S.Act are sig
-# N.act no longer sig
-lmfit <- glm(Diff_dNdS~N.Exp+S.Exp+Subst.Exp+
-               CodonSite+CodonDepth.Act+N.Act+S.Act+Subst.Act+
-               Diverge.Exp+Entropy.Exp+Diverge.Act+Entropy.Act+
-               Window_CodonDepth.Act+Window_Diverge.Act+Window_Entropy.Act, 
-             data=collate_exp_dnds)
-summary(lmfit)
-
-# Only include any variable that was significant in a previous fit.  they are all significant again.
-lmfit <- glm(Diff_dNdS~S.Exp+CodonSite+CodonDepth.Act+N.Act+S.Act,
-             data=collate_exp_dnds)
-summary(lmfit)
-
-# Don't Keep N.Act
-anova(glm(Diff_dNdS~S.Exp+CodonSite+CodonDepth.Act+S.Act,data=collate_exp_dnds),
-      glm(Diff_dNdS~S.Exp+CodonSite+CodonDepth.Act+N.Act+S.Act,data=collate_exp_dnds),
-      test="Chisq")
-
-
-# Keep S.exp
-anova(glm(Diff_dNdS~CodonSite+CodonDepth.Act+S.Act,data=collate_exp_dnds),
-      glm(Diff_dNdS~S.Exp+CodonSite+CodonDepth.Act+S.Act,data=collate_exp_dnds),
-      test="Chisq")
-
-# Interaction is better
-anova(glm(Diff_dNdS~S.Exp*CodonSite*CodonDepth.Act*S.Act,data=collate_exp_dnds),
-      glm(Diff_dNdS~S.Exp+CodonSite+CodonDepth.Act+S.Act,data=collate_exp_dnds),
-      test="Chisq")
-
-anova(glm(Diff_dNdS~S.Exp+CodonSite+CodonDepth.Act+S.Act,data=collate_exp_dnds),
-      glm(Diff_dNdS~S.Exp*CodonSite*CodonDepth.Act*S.Act,data=collate_exp_dnds),
-      test="Chisq")
-
-
-# But the pvalues for interaction say only codonsite:codonDepth is significant
-lmfit <- glm(Diff_dNdS~S.Exp*CodonSite*CodonDepth.Act*S.Act,data=collate_exp_dnds)
-summary(lmfit)
-
-anova(glm(Diff_dNdS~S.Exp+(CodonSite*CodonDepth.Act)+S.Act,data=collate_exp_dnds),
-      glm(Diff_dNdS~S.Exp*CodonSite*CodonDepth.Act*S.Act,data=collate_exp_dnds),
-      test="Chisq")
-
-anova(glm(Diff_dNdS~CodonSite*CodonDepth.Act,data=collate_exp_dnds),
-      glm(Diff_dNdS~S.Exp*CodonSite*CodonDepth.Act*S.Act,data=collate_exp_dnds),
-      test="Chisq")
-
-
-# Plot Covariates
-ggplot(collate_exp_dnds, aes(x=CodonSite, y=log10(Diff_dNdS+0.000000000000000000000000000000000001))) + 
-  geom_point(shape=1, alpha=0.1) + 
-  geom_smooth(method="lm") + 
-  xlab("\nCodon Site") + 
-  ylab("Actual Window-Codon Site dN/dS - Expected Site dN/dS") + 
-  ggtitle("Plot Covariates Against Difference Between Actual Window-Site dN/dS and Expected Site dN/dS")
-
-
-ggplot(collate_exp_dnds, aes(x=CodonDepth.Act, y=Diff_dNdS)) + 
-  geom_point(shape=1, alpha=0.1) + 
-  geom_smooth(method="lm") + 
-  xlab("\nActual Codon Depth ") + 
-  ylab("Actual Window-Codon Site dN/dS - Expected Site dN/dS") + 
-  ggtitle("Plot Covariates Against Difference Between Actual Window-Site dN/dS and Expected Site dN/dS")
-
-ggplot(collate_exp_dnds, aes(x=CodonDepth.Act, y=log10(Diff_dNdS+0.0001))) + 
-  geom_point(shape=1, alpha=0.1) + 
-  geom_smooth(method="lm") + 
-  xlab("\nActual Codon Depth ") + 
-  ylab("Actual Window-Codon Site dN/dS - Expected Site dN/dS") + 
-  ggtitle("Plot Covariates Against Difference Between Actual Window-Site dN/dS and Expected Site dN/dS")
-
-
-ggplot(collate_exp_dnds, aes(x=S.Exp, y=log10(Diff_dNdS+0.0001))) + 
-  geom_point(shape=1, alpha=0.1) + 
-  geom_smooth(method="lm") + 
-  xlab("\nExpected Synonymous Substitutions ") + 
-  ylab("Actual Window-Codon Site dN/dS - Expected Site dN/dS") + 
-  ggtitle("Plot Covariates Against Difference Between Actual Window-Site dN/dS and Expected Site dN/dS")
-
-ggplot(collate_exp_dnds, aes(x=S.Exp, y=Diff_dNdS)) + 
-  geom_point(shape=1, alpha=0.1) + 
-  geom_smooth(method="lm") + 
-  xlab("\nExpected Synonymous Substitutions ") + 
-  ylab("Actual Window-Codon Site dN/dS - Expected Site dN/dS") + 
-  ggtitle("Plot Covariates Against Difference Between Actual Window-Site dN/dS and Expected Site dN/dS")

@@ -288,12 +288,125 @@ else:
             for nuc_pos_0based in range(0, aln.get_alignment_len()):
                 outrow = dict()
                 outrow["NucSite"] = nuc_pos_0based + 1
-                outrow["Conserve"] = aln.get_conserve(nuc_pos_0based)
-                outrow["Entropy"] = aln.get_metric_entropy(nuc_pos_0based)
-                outrow["NucDepth"] = aln.get_depth(nuc_pos_0based)
+                outrow["Conserve"] = aln.get_conserve(nuc_pos_0based, is_count_ambig=True, is_count_gaps=True, is_count_pad=False)
+                outrow["Entropy"] = aln.get_shannon_entropy(nuc_pos_0based, is_count_ambig=True, is_count_gaps=True, is_count_pad=False)
+                outrow["NucDepth"] = aln.get_depth(nuc_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
                 codon_pos_0based = nuc_pos_0based / Utility.NUC_PER_CODON
                 outrow["CodonDepth"] = codon_depths[codon_pos_0based]
                 writer.writerow(outrow)
+
+
+# Get stats on merged read error, length, N's
+for msa_fasta in [reference_fasta,      # full population, no sequencing
+                      art_output_prefix + ".msa.fasta",
+                      art_output_prefix + ".errFree.msa.fasta",
+                      bwa_output_prefix + ".consensus.bwa.msa.fasta",
+                      bwa_output_prefix + ".errFree.consensus.bwa.msa.fasta"]:
+        nuc_conserve_csv = msa_fasta.replace(".fasta", ".conserve.csv").replace(".msa", "")
+
+
+import Bio.SeqIO as SeqIO
+import re
+full_popn_recdict = SeqIO.to_dict(SeqIO.parse(reference_fasta, "fasta"))
+consec_rec = SeqIO.read(consensus_fasta, "fasta")
+
+output_cmp_msa_csv  = art_output_prefix + ".cmp.msa.csv"
+output_err_msa_csv  = art_output_prefix + ".err.msa.csv"
+with open(output_cmp_msa_csv, 'w') as fh_out_cmp_msa_csv, open(output_err_msa_csv, 'w') as fh_out_err_msa_csv:
+    writer_cmp = csv.DictWriter(fh_out_cmp_msa_csv,
+                            fieldnames=["Read",     # Read name
+                                        "Template",  # Read Template from Full Population
+                                        "Source",  # Source of read  [Orig, OrigErrFree, Aln, AlnErrFree]
+                                        "Start",  # 1-based start bp wrt ref
+                                        "End",  # 1-basee end bp wrt ref
+                                        "Ns",   # total N's
+                                        "Consensus_Mismatch",  # Total read bases that don't match the consensus.  Tells us actual diversity.
+                                        "Template_Consensus_Mismatch",  # Total bases in the template that don't match the full population consensus.  Tells us expected diversity.
+                                        "SeqErr",   # Total read bases that don't match template.  Does not include N's
+                                        "Conserve2Nonconserve", # Total template bases matching consensus converted to nonconsensus base in read.  Tells us if expected diversity is lower than actual
+                                        "Nonconserve2Conserve",  # Total template bases that didn't match consensus convered to consensus base in read.  tells us if expected diversity is higher than actual.
+
+                            ])
+    writer_cmp.writeheader()
+
+    writer_err = csv.DictWriter(fh_out_err_msa_csv,
+                            fieldnames=["Read",     # Read name
+                                        "Template",  # Read Template from Full Population
+                                        "Source",  # Source of read  [Orig, OrigErrFree, Aln, AlnErrFree]
+                                        "Start",  # 1-based start bp wrt ref
+                                        "End",  # 1-basee end bp wrt ref
+                                        "NucSite",
+                                        "MutationType"  # N, Conserve2Nonconserve or Nonconserve2Conserve
+
+                            ])
+    writer_err.writeheader()
+
+    for source, msa_fasta in [("Orig", art_output_prefix + ".msa.fasta"),
+                              ("OrigErrFree", art_output_prefix + ".errFree.msa.fasta"),
+                              ("Aln", bwa_output_prefix + ".consensus.bwa.msa.fasta"),
+                              ("AlnErrFree", bwa_output_prefix + ".errFree.consensus.bwa.msa.fasta")]:
+
+        # Count the number of mismatches.
+        # Count number of N's
+        cmp_outrow = dict()
+        cmp_outrow["Source"] = source
+
+        for record in SeqIO.parse(msa_fasta, "fasta"):
+            template, read = record.id.split("_")
+            cmp_outrow["Template"] = template
+            cmp_outrow["Read"] = read
+            start = re.search(r"[^\-]", str(record.seq)).start() + 1  # 1-based
+            end = re.search(r"[^\-][\-]*$", str(record.seq)).start() + 1  # 1-based
+            cmp_outrow["Start"] = start
+            cmp_outrow["End"] = end
+            cmp_outrow["Ns"] = str(record.seq).count("N")
+
+            # Only look non-left/right padded slice
+            read_seq = str(record.seq[start-1:end])
+            template_seq = str(full_popn_recdict[template].seq[start-1:end])
+            consensus_seq = str(consec_rec.seq[start-1:end])
+
+            ns = 0
+            seq_err = 0
+            consensus_mismatch = 0
+            template_consensus_mismatch = 0
+            conserve2Nonconserve = 0
+            nonconserve2Conserve = 0
+            err_outrow = dict()
+            err_outrow["Source"] = source
+            err_outrow["Template"] = template
+            err_outrow["Read"] = read
+            err_outrow["Start"] = start
+            err_outrow["End"] = end
+            for i in range(0, len(read_seq)):
+                if read_seq[i] != consensus_seq[i]:
+                    consensus_mismatch += 1
+                if template_seq[i] != consensus_seq[i]:
+                    template_consensus_mismatch += 1
+
+                if read_seq[i] != template_seq[i]:
+                    err_outrow["NucSite"] = start + i
+                    if read_seq[i] == "N":
+                        ns += 1
+                        err_outrow["MutationType"] = "N"
+                    else:
+                        seq_err += 1
+                        if template_seq[i] == consensus_seq[i]:
+                            conserve2Nonconserve += 1
+                            err_outrow["MutationType"] = "Conserve2Nonconserve"
+                        else:
+                            nonconserve2Conserve += 1
+                            err_outrow["MutationType"] = "Nonconserve2Conserve"
+
+                    writer_err.writerow(err_outrow)
+
+            cmp_outrow["Ns"] = ns
+            cmp_outrow["SeqErr"] = seq_err
+            cmp_outrow["Consensus_Mismatch"] = consensus_mismatch
+            cmp_outrow["Conserve2Nonconserve"] = conserve2Nonconserve
+            cmp_outrow["Nonconserve2Conserve"] = nonconserve2Conserve
+            cmp_outrow["Template_Consensus_Mismatch"] = template_consensus_mismatch
+            writer_cmp.writerow(cmp_outrow)
 
 
 
@@ -301,9 +414,9 @@ else:
 # Pass Info to R for plotting into HTML format
 ####################################################################
 
-Rscript_wdir =  os.path.abspath(os.path.dirname(__file__) + os.sep + "R")
+Rscript_wdir =  os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + os.sep + "R")
 # Output the R config file (workaround cuz can't seem to set commandline parameters for rmd knitr scripts)
-Rcov_config_file = os.path.abspath(os.path.dirname(__file__) + os.sep + "R" + os.sep + "small_cov.config")
+Rcov_config_file = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + os.sep + "R" + os.sep + "small_cov.config")
 with open(Rcov_config_file, 'w') as fh_out_rconfig:
     fh_out_rconfig.write("FULL_POPN_CONSERVE_CSV={}".format(reference_fasta.replace(".fasta", ".conserve.csv")) + "\n")
     fh_out_rconfig.write("ART_FOLD_COVER={}".format(ART_FOLD_COVER) + "\n")
@@ -320,6 +433,7 @@ with open(Rcov_config_file, 'w') as fh_out_rconfig:
     fh_out_rconfig.write("ORIG_CONSERVE_CSV={}".format(art_output_prefix + ".conserve.csv") + "\n")
     fh_out_rconfig.write("ALN_CONSERVE_CSV={}".format(bwa_output_prefix + ".consensus.bwa.conserve.csv") + "\n")
     fh_out_rconfig.write("INDELIBLE_RATES_CSV={}".format(INDELIBLE_RATES_CSV) + "\n")
+    fh_out_rconfig.write("CMP_READ_ERR_CSV={}".format(output_cmp_msa_csv) + "\n")
 
 Rscript_cmd = ("library(knitr); " +
                "setwd('{}'); ".format(Rscript_wdir) +
@@ -329,9 +443,8 @@ subprocess.check_call(["Rscript", "-e", Rscript_cmd], env=os.environ)
 shutil.copy(Rscript_wdir + os.sep + "small_cov.html", bwa_output_prefix + ".cov.html")
 
 
-# At each nuc site, count number of errors in Original Reads
-# At each nuc site, count number of conserved base -> non-conserved base due to sequencing error in Original Reads
-# At each nuc site, count number of mutation -> conserved-base due to sequencing error in Original Reads
-# At each nuc site, count number of errors in Aligned Reads
-# At each nuc site, count number of conserved base -> non-conserved base due to sequencing error in Aligned Reads
-# At each nuc site, count number of mutation -> conserved-base due to sequencing error in Aligned Reads
+
+
+
+
+

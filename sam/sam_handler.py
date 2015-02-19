@@ -323,7 +323,7 @@ def create_msa_fasta_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
             else:
                 LOGGER.warn("Sequence has no mate " + qname)
 
-
+# TODO:  make stop codon remove optional
 def __write_seq(fh_out, name, seq, max_prop_N, breadth_thresh):
     """
     Helper function to write out sequence to fasta file handle if has sufficient bases.
@@ -333,6 +333,12 @@ def __write_seq(fh_out, name, seq, max_prop_N, breadth_thresh):
     :param name:
     :param seq:
     """
+    # Set stop codons to NNN so that HyPhy doesn't auto-remove a site without telling us
+    for nuc_pos in range(0, len(seq), Utility.NUC_PER_CODON):
+        codon = seq[nuc_pos:nuc_pos+Utility.NUC_PER_CODON]
+        if Utility.CODON2AA.get(codon, "") == Utility.STOP_AA:
+            seq = seq[0:nuc_pos] + "NNN" + seq[nuc_pos+Utility.NUC_PER_CODON:]
+
     if seq.count('N') / float(len(seq)) <= max_prop_N and (seq.count("N") + seq.count("-"))/float(len(seq)) <= (1.0-breadth_thresh):
         # Newick tree formats don't like special characters.  Convert them to underscores.
         newick_nice_qname = re.sub(pattern=NEWICK_NAME_RE, repl='_', string=name)
@@ -342,7 +348,7 @@ def __write_seq(fh_out, name, seq, max_prop_N, breadth_thresh):
     return False
 
 
-
+# TODO:  make stop codon removal optional
 def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cutoff, read_qual_cutoff,
                               max_prop_N, breadth_thresh, start_pos=None, end_pos=None, is_insert=False, ref_len=None):
     """
