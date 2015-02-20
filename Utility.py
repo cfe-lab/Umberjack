@@ -2,6 +2,7 @@ import os
 import errno
 import math
 import re
+import Bio.Phylo  as Phylo
 
 NUC_PER_CODON = 3
 STOP_AA = "*"
@@ -610,3 +611,25 @@ def convert_fasta (lines):
 # # Only handles the start positions for now
 # def convert_1codon_to_1nuc(codon_startpos_1based):
 #     return ((codon_startpos_1based - 1) * NUC_PER_CODON) + 1
+
+def get_tree_len_depth(treefilename):
+    """
+    Returns tuple of (sum of all branch lengths in tree (excluding root branch), deepest root to tip distance)
+    :param treefilename:
+    :return: total branch length sum of tree (excluding root branch), deepest root to tip distance
+    :rtype: (float, float)
+    """
+    tree = Phylo.read(treefilename, "newick")
+
+    root_branch_length = tree.clade.branch_length  # set to 1.0  for some odd reason
+    tree_branch_length  = tree.clade.total_branch_length()  # sum of all branch lengths including root branch length
+    unroot_tree_len = tree_branch_length  - root_branch_length
+    clade_depths = tree.depths()
+    longest_depth = 0.0
+
+    for clade, depth in clade_depths.iteritems():
+        if clade.is_terminal():
+            if longest_depth < depth:
+                longest_depth = depth
+
+    return unroot_tree_len, longest_depth

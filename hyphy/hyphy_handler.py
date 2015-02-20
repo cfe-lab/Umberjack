@@ -16,6 +16,17 @@ HYPHY_EXE = "HYPHYMP"
 HYPHY_BASEDIR = "/usr/local/lib/hyphy/TemplateBatchFiles/"
 
 
+# Columns in the HyPhy dN/dS tab-separates values file
+HYPHY_TSV_DN_COL = 'dN'
+HYPHY_TSV_DS_COL = 'dS'
+HYPHY_TSV_S_COL = 'Observed S Changes'
+HYPHY_TSV_N_COL = 'Observed NS Changes'
+HYPHY_TSV_SCALED_DN_MINUS_DS_COL = 'Scaled dN-dS'
+HYPHY_TSV_PROB_FULLSEQ_S_COL = 'P{S leq. observed}'
+HYPHY_TSV_NEG_PROB_FULLSEQ_S_COL = 'P{S geq. observed}'
+HYPHY_TSV_EXP_S_COL = 'E[S Sites]'
+HYPHY_TSV_EXP_N_COL = 'E[NS Sites]'
+
 
 def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=HYPHY_EXE, hyphy_basedir=HYPHY_BASEDIR, threads=1):
         hyphy_filename_prefix = os.path.splitext(codon_fasta_filename)[0]  # Remove .fasta suffix

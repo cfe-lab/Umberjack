@@ -7,6 +7,7 @@ import logging
 import fasttree.fasttree_handler as fasttree
 import sys
 import re
+import hyphy.hyphy_handler as hyphy_handler
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
@@ -15,16 +16,6 @@ formatter = logging.Formatter('%(asctime)s - [%(levelname)s] [%(name)s] [%(proce
 console_handler.setFormatter(formatter)
 LOGGER.addHandler(console_handler)
 
-# Columns in the HyPhy dN/dS tab-separates values file
-HYPHY_TSV_DN_COL = 'dN'
-HYPHY_TSV_DS_COL = 'dS'
-HYPHY_TSV_S_COL = 'Observed S Changes'
-HYPHY_TSV_N_COL = 'Observed NS Changes'
-HYPHY_TSV_SCALED_DN_MINUS_DS_COL = 'Scaled dN-dS'
-HYPHY_TSV_PROB_FULLSEQ_S_COL = 'P{S leq. observed}'
-HYPHY_TSV_NEG_PROB_FULLSEQ_S_COL = 'P{S geq. observed}'
-HYPHY_TSV_EXP_S_COL = 'E[S Sites]'
-HYPHY_TSV_EXP_N_COL = 'E[NS Sites]'
 
 class _SiteDnDsInfo:
     """
@@ -63,34 +54,6 @@ class _SiteDnDsInfo:
         self.total_exp_nonsyn_subs += exp_nonsyn_subs
         self.window_dnds_subs.append([dnds, syn_subs, nonsyn_subs, reads, exp_syn_subs, exp_nonsyn_subs])
 
-    def get_simple_ave_dnds_weighted_by_reads(self):
-        """
-        Finds average of (observed Nonsyn substitutions/observedsynonumous substitions) for all windows covering this site.
-        Does not normalize by expected subst.
-        Weight average by bnongap reads in window
-        :return:
-        """
-        if not self.window_dnds_subs:
-            return None
-        else:
-            total_weighted_site_dnds_over_all_windows = 0.0
-            total_reads_at_site_over_all_windows = 0.0
-            total_windows = 0.0
-            # for (site_dnds, site_syn_subst, site_nonsyn_subst, reads) in self.window_dnds_subs:
-            #     if site_syn_subst != 0:   # sometimes there are zero observed synonymous substitutions.  Thus dn/ds = None.
-            #         total_weighted_site_dnds_over_all_windows += ((site_nonsyn_subst/site_syn_subst) * reads)
-            #         total_reads_at_site_over_all_windows += reads
-            # if not total_reads_at_site_over_all_windows:
-            #     return None
-            # return total_weighted_site_dnds_over_all_windows / total_reads_at_site_over_all_windows
-            for (site_dnds, site_syn_subst, site_nonsyn_subst, reads, exp_syn_subs, exp_nonsyn_subs) in self.window_dnds_subs:
-                if site_syn_subst != 0:   # sometimes there are zero observed synonymous substitutions.  Thus dn/ds = None.
-                    total_weighted_site_dnds_over_all_windows += (site_nonsyn_subst/site_syn_subst)
-                    total_windows += 1
-            if not total_windows:
-                return None
-            return total_weighted_site_dnds_over_all_windows / total_windows
-
 
     def get_weighted_ave_dnds(self):
         """
@@ -110,6 +73,7 @@ class _SiteDnDsInfo:
             if not total_subs_at_site_over_all_windows:
                 return None
             return total_weighted_site_dnds_over_all_windows / total_subs_at_site_over_all_windows
+
 
     def get_weighted_byreads_ave_dnds(self):
         """
@@ -131,6 +95,7 @@ class _SiteDnDsInfo:
             if not total_reads_at_site_over_all_windows:
                 return None
             return total_weighted_site_dnds_over_all_windows / total_reads_at_site_over_all_windows
+
 
     def get_weighted_byreads_ave_dnds_nolowsyn(self):
         """
@@ -268,14 +233,6 @@ class SeqDnDsInfo:
                                               syn_subs=syn_subs, nonsyn_subs=nonsyn_subs,
                                               exp_syn_subs=exp_syn_subs, exp_nonsyn_subs=exp_nonsyn_subs)
 
-
-    def get_site_simple_ave_dnds_weighted_by_reads(self, site_1based):
-        """
-        simple average(non syns / syn)  weighted by total sub at site
-        :param site_1based:
-        :return:
-        """
-        return self.dnds_seq[site_1based-1].get_simple_ave_dnds_weighted_by_reads()
 
     def get_site_ave_dnds(self, site_1based):
         """
@@ -596,13 +553,13 @@ def get_seq_dnds_info(dnds_tsv_dir, ref, ref_codon_len):
 
             reader = csv.DictReader(dnds_fh, delimiter='\t',)
             for offset, codon_row in enumerate(reader):    # Every codon site is a row in the *.dnds.tsv file
-                dN = float(codon_row[HYPHY_TSV_DN_COL])
-                dS = float(codon_row[HYPHY_TSV_DS_COL])
-                dn_minus_ds = float(codon_row[HYPHY_TSV_SCALED_DN_MINUS_DS_COL])
-                syn_subs = float(codon_row[HYPHY_TSV_S_COL])
-                nonsyn_subs = float(codon_row[HYPHY_TSV_N_COL])
-                exp_syn_subs = float(codon_row[HYPHY_TSV_EXP_S_COL])
-                exp_nonsyn_subs = float(codon_row[HYPHY_TSV_EXP_N_COL])
+                dN = float(codon_row[hyphy_handler.HYPHY_TSV_DN_COL])
+                dS = float(codon_row[hyphy_handler.HYPHY_TSV_DS_COL])
+                dn_minus_ds = float(codon_row[hyphy_handler.HYPHY_TSV_SCALED_DN_MINUS_DS_COL])
+                syn_subs = float(codon_row[hyphy_handler.HYPHY_TSV_S_COL])
+                nonsyn_subs = float(codon_row[hyphy_handler.HYPHY_TSV_N_COL])
+                exp_syn_subs = float(codon_row[hyphy_handler.HYPHY_TSV_EXP_S_COL])
+                exp_nonsyn_subs = float(codon_row[hyphy_handler.HYPHY_TSV_EXP_N_COL])
                 ref_codon_1based = win_start_codon_1based_wrt_ref + offset
                 codons = codons_by_window_pos[offset]
 
@@ -617,212 +574,6 @@ def get_seq_dnds_info(dnds_tsv_dir, ref, ref_codon_len):
     return seq_dnds_info
 
 
-def collect_dnds(output_dir, output_csv_filename, comments=None):
-    """
-    Collects everything related to dnds into 1 table.  Does not do any aggregation of values.  Useful for debugging.
-    :return:
-    """
-    # TODO:  do not put this here
-
-
-    with open(output_csv_filename, 'w') as fh_out:
-        if comments:
-            fh_out.write(comments)
-
-        writer = csv.DictWriter(fh_out, fieldnames=["Window_Start", "Window_End",
-                                                    "Reads",  # Max read depth for the window (not necessary for the codon site)
-                                                    "CodonSite",  # 1-based codon site
-                                                    "CodonDepth",  # Total unambiguous codon (depth) at the codon site
-                                                    "Conserve",  # Average per-base fraction of conservation across the codon
-                                                    "Entropy",  # Average per-base metric entropy across the codon
-                                                    "N",  # Observed Nonsynonymous substitutions
-                                                    "S",  # Observed Nonsynonymous substitutions
-                                                    "EN",  # Expected Nonsynonymous substitutions
-                                                    "ES",  # Expected Synonymous substitutions
-                                                    "dN", "dS",
-                                                    "dN_minus_dS", # dN-dS scaled by the total substitutions at the codon site
-                                                    "AmbigBase",  # N nucleotide
-                                                    "Pad", # left or right pad gap
-                                                    "Err",  # Nucleotide errors within the codon
-                                                    "Err_N", # nonsynonymous AA change due to sequence error
-                                                    "Err_S",  # synonymous AA change due to sequence error
-                                                    "Ambig_N",  # Ambiguous base changes the AA.  Should be always 0
-                                                    "Ambig_S", # ambigous base does not change the AA.
-                                                    "TreeLen",  # Tree length
-                                                    "TreeDepth", # deepest tip to root distance
-        ]
-                                )
-        writer.writeheader()
-        for slice_fasta_filename in glob.glob(output_dir + os.sep + "*.fasta"):
-
-            # *.{start bp}_{end bp}.fasta filenames use 1-based nucleotide position numbering
-            slice_fasta_fileprefix = slice_fasta_filename.split('.fasta')[0]
-
-            tree_filename = slice_fasta_filename.replace(".fasta", ".tree")
-            tree_len, tree_depth = get_tree_len_depth(tree_filename)
-
-            win_nuc_range = slice_fasta_fileprefix.split('.')[-1]
-            # Window ends at this 1-based nucleotide position with respect to the reference
-            win_start_nuc_pos_1based_wrt_ref, win_end_nuc_pos_1based_wrt_ref = [int(x) for x in win_nuc_range.split('_')]
-            # Window starts at this 1-based codon position with respect to the reference
-            win_start_codon_1based_wrt_ref = win_start_nuc_pos_1based_wrt_ref/Utility.NUC_PER_CODON + 1
-
-
-            codons_by_window_pos = Utility.get_total_codons_by_pos(msa_fasta_filename=slice_fasta_filename)
-            reads = Utility.get_total_seq_from_fasta(slice_fasta_filename)
-            consensus = Utility.Consensus()
-            consensus.parse(slice_fasta_filename)
-
-            ns, pad, seq_err, err_aa_change, err_aa_nochange, ambig_aa_change, ambig_aa_nochange = error_by_codonpos(slice_fasta_filename, win_start_nuc_pos_1based_wrt_ref)
-
-            outrow = dict()
-            outrow["Window_Start"] = win_start_nuc_pos_1based_wrt_ref
-            outrow["Window_End"] = win_end_nuc_pos_1based_wrt_ref
-            outrow["Reads"] = reads
-
-            dnds_tsv_filename = slice_fasta_filename.replace(".fasta", ".dnds.tsv")
-            if os.path.exists(dnds_tsv_filename):
-                with open(dnds_tsv_filename, 'rU') as fh_dnds_tsv:
-                    reader = csv.DictReader(fh_dnds_tsv, delimiter='\t')
-                    for offset, codon_row in enumerate(reader):    # Every codon site is a row in the *.dnds.tsv file
-                        outrow["CodonSite"] = win_start_codon_1based_wrt_ref + offset
-                        outrow["CodonDepth"] = codons_by_window_pos[offset]
-                        outrow["Conserve"] = consensus.get_ave_conserve(offset, offset + Utility.NUC_PER_CODON, is_count_ambig=True, is_count_gaps=True, is_count_pad=True)
-                        outrow["Entropy"] = consensus.get_ave_shannon_entropy(offset, offset + Utility.NUC_PER_CODON, is_count_ambig=True, is_count_gaps=True, is_count_pad=True)
-                        outrow["N"] = float(codon_row[HYPHY_TSV_N_COL])
-                        outrow["S"] = float(codon_row[HYPHY_TSV_S_COL])
-                        outrow["ES"] = float(codon_row[HYPHY_TSV_EXP_S_COL])
-                        outrow["EN"] = float(codon_row[HYPHY_TSV_EXP_N_COL])
-                        outrow["dN"] = float(codon_row[HYPHY_TSV_DN_COL])
-                        outrow["dS"] = float(codon_row[HYPHY_TSV_DS_COL])
-                        outrow["dN_minus_dS"] = float(codon_row[HYPHY_TSV_SCALED_DN_MINUS_DS_COL])
-
-                        outrow["AmbigBase"] = ns[offset]
-                        outrow["Pad"] = pad[offset]
-                        outrow["Err"] = seq_err[offset]
-                        outrow["Err_N"] = err_aa_change[offset]
-                        outrow["Err_S"] = err_aa_nochange[offset]
-                        outrow["Ambig_N"] = ambig_aa_change[offset]
-                        outrow["Ambig_S"] = ambig_aa_nochange[offset]
-                        outrow["TreeLen"] = tree_len
-                        outrow["TreeDepth"] = tree_depth
-                        writer.writerow(outrow)
-            else:
-                for offset, codons in enumerate(codons_by_window_pos):
-                    outrow["CodonSite"] = win_start_codon_1based_wrt_ref + offset
-                    outrow["CodonDepth"] = codons
-                    outrow["Conserve"] = consensus.get_ave_conserve(offset, offset + Utility.NUC_PER_CODON, is_count_ambig=True, is_count_gaps=True, is_count_pad=True)
-                    outrow["Entropy"] = consensus.get_ave_shannon_entropy(offset, offset + Utility.NUC_PER_CODON, is_count_ambig=True, is_count_gaps=True, is_count_pad=True)
-
-                    outrow["AmbigBase"] = ns[offset]
-                    outrow["Pad"] = pad[offset]
-                    outrow["Err"] = seq_err[offset]
-                    outrow["Err_N"] = err_aa_change[offset]
-                    outrow["Err_S"] = err_aa_nochange[offset]
-                    outrow["Ambig_N"] = ambig_aa_change[offset]
-                    outrow["Ambig_S"] = ambig_aa_nochange[offset]
-                    outrow["TreeLen"] = tree_len
-                    outrow["TreeDepth"] = tree_depth
-                    writer.writerow(outrow)
-
-def get_tree_len_depth(treefilename):
-    """
-    :param treefilename:
-    :return: total branch length sum of tree (does not include root branch), deepest depth
-    :rtype int:
-    """
-    import Bio.Phylo  as Phylo # TODO:  don't put this here
-    tree = Phylo.read(treefilename, "newick")
-
-
-    root_branch_length = tree.clade.branch_length  # set to 1.0  for some odd reason
-    tree_branch_length  = tree.clade.total_branch_length()  # sum of all branch lengths including root branch length
-    unroot_tree_len = tree_branch_length  - root_branch_length
-
-
-
-    clade_depths = tree.depths()
-    longest_depth = 0.0
-
-    for clade, depth in clade_depths.iteritems():
-        if clade.is_terminal():
-            #print "leaf " + clade.name + " depth=" + str(depth)  + " distfromroot=" + str(tree.distance(clade)) + " branchlen=" + str(clade.branch_length)
-            if longest_depth < depth:
-                longest_depth = depth
-
-    return unroot_tree_len, longest_depth
-
-
-def error_by_codonpos(slice_msa_fasta, slice_start_wrt_ref_1based):
-    # Collect read error stats per window - codon
-    import Bio.SeqIO as SeqIO
-    import re
-    import math
-    full_popn_recdict = SeqIO.to_dict(SeqIO.parse("/home/thuy/gitrepo/SlidingWindow/test/simulations/data/small.cov2.indiv1k.codon400.bwa.rand/mixed/small.cov2.indiv1k.codon400.bwa.rand.mixed.fasta", "fasta"))
-    consec_rec = SeqIO.read("/home/thuy/gitrepo/SlidingWindow/test/simulations/data/small.cov2.indiv1k.codon400.bwa.rand/mixed/small.cov2.indiv1k.codon400.bwa.rand.mixed.consensus.fasta", "fasta")
-
-    longest_seq = Utility.get_longest_seq_size_from_fasta(slice_msa_fasta)
-    total_codons = int(math.ceil(float(longest_seq)/Utility.NUC_PER_CODON))
-    ns = [0] * total_codons
-    pad = [0] * total_codons
-    seq_err = [0] * total_codons
-    err_aa_change = [0] * total_codons
-    err_aa_nochange = [0] * total_codons
-    ambig_aa_change = [0] * total_codons  # aa change due to ambiguous base.  Should be 0
-    ambig_aa_nochange = [0] * total_codons  # no aa change even though ambiguous base
-
-
-    for record in SeqIO.parse(slice_msa_fasta, "fasta"):
-        template, read = record.id.split("_")
-
-        # The read is a subset of the slice
-        # first nongap char 0-based nucleotide position wrt slice
-        read_start_wrt_slice_0based = re.search(r"[^\-]", str(record.seq)).start()
-        # last nongap char 0-based nucleotide position wrt slice
-        read_end_wrt_slice_0based = re.search(r"[^\-][\-]*$", str(record.seq)).start()
-
-        # The 0-based codon position with respect to the slice for the first codon that isn't left padded with gap chars
-        read_codon_start_wrt_slice_0based = int(math.ceil(float(read_start_wrt_slice_0based)/Utility.NUC_PER_CODON))
-        # The 0-based codon position with respect to the slice for the last codon that isn't right padded with gap chars
-        read_codon_end_wrt_slice_0based = ((read_end_wrt_slice_0based+1)/Utility.NUC_PER_CODON) - 1
-
-        # NB:  the nonpadded portion of the read might not start on a codon, but the MSA should always start on a codon
-        for nuc_pos_wrt_slice_0based in range(0, longest_seq, Utility.NUC_PER_CODON):
-            read_codon = str(record.seq[nuc_pos_wrt_slice_0based:nuc_pos_wrt_slice_0based + Utility.NUC_PER_CODON])
-            read_codon += "-" * (Utility.NUC_PER_CODON - len(read_codon))  # right-pad with gaps in case the nucleotide sequence doesn't end on codon end
-
-            nuc_pos_wrt_ref_0based = slice_start_wrt_ref_1based-1 + nuc_pos_wrt_slice_0based
-            template_codon = str(full_popn_recdict[template].seq[nuc_pos_wrt_ref_0based:nuc_pos_wrt_ref_0based + Utility.NUC_PER_CODON])
-
-            codon_pos_wrt_slice_0based = nuc_pos_wrt_slice_0based/Utility.NUC_PER_CODON
-            is_codon_has_err = False
-            is_codon_has_ambig = False
-            for i in range(0, Utility.NUC_PER_CODON):
-                if read_codon[i] == "N":
-                    is_codon_has_ambig = True
-                    ns[codon_pos_wrt_slice_0based] += 1
-                elif (read_codon[i] == "-" and (codon_pos_wrt_slice_0based < read_codon_start_wrt_slice_0based or
-                                                        codon_pos_wrt_slice_0based > read_codon_end_wrt_slice_0based)):
-                    pad[codon_pos_wrt_slice_0based] += 1
-                    is_codon_has_ambig = True
-                elif read_codon[i] != template_codon[i]:  # sequence error
-                    is_codon_has_err = True
-                    seq_err[codon_pos_wrt_slice_0based] += 1
-
-            # aa change or no aa-change due to sequence error
-            if is_codon_has_err and Utility.CODON2AA.get(read_codon) and Utility.CODON2AA.get(template_codon):
-                if Utility.CODON2AA.get(read_codon) == Utility.CODON2AA.get(template_codon):
-                    err_aa_nochange[codon_pos_wrt_slice_0based] += 1
-                else:
-                    err_aa_change[codon_pos_wrt_slice_0based] += 1
-            elif is_codon_has_ambig and Utility.CODON2AA.get(read_codon) and Utility.CODON2AA.get(template_codon):
-                if Utility.CODON2AA.get(read_codon) == Utility.CODON2AA.get(template_codon):
-                    ambig_aa_nochange[codon_pos_wrt_slice_0based] += 1
-                else:
-                    ambig_aa_change[codon_pos_wrt_slice_0based] += 1
-
-
-    return ns, pad, seq_err, err_aa_change, err_aa_nochange, ambig_aa_change, ambig_aa_nochange
 
 
 def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, output_csv_filename, comments, smooth_dist=50):
@@ -855,7 +606,7 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, output_csv_filename, comments,
         writer = csv.DictWriter(dnds_fh,
                                 fieldnames=["Ref", "Site", "aveDnDs", "dNdSWeightBySubst", "dN_minus_dS", "Windows",
                                             "Codons", "NonSyn", "Syn", "Subst", "dNdSWeightByReads",
-                                            "multisiteAvedNdS", "multisitedNdSWeightBySubst", "simpleDnDs", "dNdSWeightByReadsNoLowSyn"])
+                                            "multisiteAvedNdS", "multisitedNdSWeightBySubst", "dNdSWeightByReadsNoLowSyn"])
 
         writer.writeheader()
         for site in range(1, seq_dnds_info.get_seq_len() + 1):
@@ -876,7 +627,6 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, output_csv_filename, comments,
             smooth_dist_end = min(site+smooth_dist, seq_dnds_info.get_seq_len())
             outrow["multisiteAvedNdS"] = seq_dnds_info.get_multisite_ave_dnds(site_start_1based=smooth_dist_start, site_end_1based=smooth_dist_end)
             outrow["multisitedNdSWeightBySubst"] = seq_dnds_info.get_multisite_weighted_bysubst_ave_dnds(site_start_1based=smooth_dist_start, site_end_1based=smooth_dist_end)
-            outrow["simpleDnDs"] = seq_dnds_info.get_site_simple_ave_dnds_weighted_by_reads(site_1based=site)
             outrow["dNdSWeightByReadsNoLowSyn"] = seq_dnds_info.get_weighted_byreads_ave_dnds_nolowsyn(site_1based=site)
             writer.writerow(outrow)
 

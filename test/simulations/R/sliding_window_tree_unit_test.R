@@ -50,7 +50,7 @@ smooth_dist <- as.numeric(unlist(strsplit(args[grep("smooth_dist", args)], "="))
 #' -----------------------------
 #' 
 #' 
-# Cols:  Ref  Site  aveDnDs  dNdSWeightBySubst	dN_minus_dS	Windows	Codons	NonSyn	Syn	Subst	dNdSWeightByReads	multisiteAvedNdS	multisitedNdSWeightBySubst	simpleDnDs  dNdSWeightByReadsNoLowSyn
+# Cols:  Ref  Site  aveDnDs  dNdSWeightBySubst	dN_minus_dS	Windows	Codons	NonSyn	Syn	Subst	dNdSWeightByReads	multisiteAvedNdS	multisitedNdSWeightBySubst  dNdSWeightByReadsNoLowSyn
 actual_dnds <- read.table(actual_dnds_filename, header=TRUE, na.strings="None", comment.char = "#", sep=",")
 dim(actual_dnds)
 head(actual_dnds)
@@ -101,6 +101,8 @@ expected_dnds$MultisiteAveDnDs <- apply(expected_dnds, 1, function(row) {
 })
 
 
+#' Compare Full Population INDELible dN/dS with Full Population HyPhy dN/dS
+#' ============================================================================
 
 # Read in Indelible's intended dN/dS
 # Cols: Site,Interval,Scaling_factor,Rate_class,Omega
@@ -121,8 +123,8 @@ indelhyphy <- na.omit(indelhyphy)
 
 #' **Scatterplot Full Population HyPhy Actual dN/dS vs Indelible Expected dN/dS**
 ggplot(indelhyphy, aes(x=Indelible_Omega, y=Hyphy_Omega)) + 
-  geom_point() +
-  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
+  geom_point(na.rm=TRUE) +
+  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC", na.rm=TRUE) +
   geom_abline(slope=1) + 
   ylab("HyPhy dN/dS\n") + 
   xlab("\nIndelible dN/dS") + 
@@ -133,7 +135,7 @@ ggplot(indelhyphy, aes(x=Indelible_Omega, y=Hyphy_Omega)) +
 #' **Boxplot Full Population HyPhy Actual dN/dS vs Indelible Expected dN/dS**
 ggplot(indelhyphy, aes(x=as.factor(Indelible_Omega), y=Hyphy_Omega)) + 
   geom_boxplot() +
-  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
+  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC", na.rm=TRUE) +
   ylab("HyPhy dN/dS\n") + 
   xlab("\nIndelible dN/dS") + 
   scale_y_continuous(breaks=seq(0, max(indelhyphy$Hyphy_Omega), 0.5)) + 
@@ -143,7 +145,9 @@ ggplot(indelhyphy, aes(x=as.factor(Indelible_Omega), y=Hyphy_Omega)) +
 
 
 
-
+#' Compare Codon Site dN/dS Averaged Over Windows With Full Population HyPhy dN/dS
+#' ============================================================================
+#' 
 #' **Scatterplot actual vs expected dn ds together**
 fullDat <- cbind(actual_dnds, 
                  Expected=expected_dnds$Omega, 
@@ -155,78 +159,44 @@ fullDat <- cbind(actual_dnds,
 summary(fullDat)
 
 
-ggplot(fullDat  , aes(x=Expected, y=aveDnDs)) + 
-  geom_point() +
-  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
-  geom_abline(slope=1) + 
-  ylab("Inferred\n") + 
-  xlab("\nExpected") + 
-  #coord_fixed(ratio=1) + 
-  theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
-  ggtitle("Inferred Ave dN/dS vs Expected dn/ds")
+scatterplot_actual_v_expected <- function(expected_colname, expected_title, actual_colname, actual_title) {
+  fig <- ggplot(fullDat  , aes_string(x=expected_colname, y=actual_colname)) + 
+    geom_point(na.rm=TRUE) +
+    geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC", na.rm=TRUE) +
+    geom_abline(slope=1) + 
+    ylab("Inferred\n") + 
+    xlab("\nExpected") + 
+    #coord_fixed(ratio=1) + 
+    theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
+    ggtitle(paste0("Inferred ", actual_title, " Vs Expected ", expected_colname) )
+  print(fig)
+  
+  actual_col <- fullDat[, actual_colname]
+  ave <- mean(actual_col, na.rm=TRUE) 
+  most_outlier <- max(abs( c(max(actual_col - ave, na.rm=TRUE), 
+                             min(actual_col - ave, na.rm=TRUE))))
+  stdev <- sd(actual_col, na.rm=TRUE)
+  if (most_outlier > 4 * stdev) {
+    fig <- ggplot(fullDat[abs(actual_col - ave) < 3 * stdev, ]  , aes_string(x=expected_colname, y=actual_colname)) + 
+      geom_point(na.rm=TRUE) +
+      geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC", na.rm=TRUE) +
+      geom_abline(slope=1) + 
+      ylab("Inferred\n") + 
+      xlab("\nExpected") + 
+      #coord_fixed(ratio=1) + 
+      theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
+      ggtitle(paste0("No Outliers: Inferred ", actual_title, " Vs Expected ", expected_title) )
+    print(fig)
+  }
+}
 
-
-
-ggplot(fullDat, aes(x=Expected, y=dNdSWeightByReadsNoLowSyn)) + 
-  geom_point() +
-  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
-  ylab("Inferred\n") + 
-  xlab("\nExpected") + 
-  #coord_fixed(ratio=1) + 
-  geom_abline(slope=1) + 
-  theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
-  ggtitle("Inferred dN/dS weighted by reads (windows with low syn subst excl) vs Expected dn/ds")
-
-
-ggplot(fullDat, aes(x=ExpectedMinus, y=dN_minus_dS)) + 
-  geom_point() +
-  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
-  ylab("Inferred\n") + 
-  xlab("\nExpected") + 
-  #coord_fixed(ratio=1) + 
-  geom_abline(slope=1) + 
-  theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
-  ggtitle("Inferred dN-dS vs Expected dn-dS")
-
-ggplot(fullDat, aes(x=Expected, y=dNdSWeightBySubst)) + 
-  geom_point() +
-  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
-  ylab("Inferred\n") + 
-  xlab("\nExpected") + 
-  geom_abline(slope = 1) + 
-  #coord_fixed(ratio=1) + 
-  theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
-  ggtitle("Inferred dn/ds Weighted by Substitutions vs Expected dn/ds")
-
-ggplot(fullDat, aes(x=Expected, y=dNdSWeightByReads)) + 
-  geom_point() +
-  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
-  ylab("Inferred\n") + 
-  xlab("\nExpected") + 
-  geom_abline(slope = 1) + 
-  theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
-  #coord_fixed(ratio=1) + 
-  ggtitle("Inferred dN/dS Weighted by Reads vs Expected dn/ds")
-
-ggplot(fullDat, aes(x=ExpectedMultisite, y=multisiteAvedNdS)) + 
-  geom_point() +
-  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
-  ylab("Inferred\n") + 
-  xlab("\nExpected") + 
-  geom_abline(slope = 1) + 
-  theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
-  #coord_fixed(ratio=1) + 
-  ggtitle("Inferred vs Expected dn/ds, Inferred dn/ds Averaged Across Surrounding Sites")
-
-ggplot(fullDat, aes(x=ExpectedMultisite, y=multisitedNdSWeightBySubst)) + 
-  geom_point() +
-  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
-  ylab("Inferred\n") + 
-  xlab("\nExpected") + 
-  theme(axis.title=element_text(size=32), axis.text=element_text(size=24) ) + 
-  #coord_fixed(ratio=1) + 
-  geom_abline(slope = 1) + 
-  ggtitle("Inferred vs Expected dn/ds, Inferred dn/ds Averaged Across Surrounding Sites, Weighted by Substitutions")
+scatterplot_actual_v_expected("Expected", "dN/dS", "aveDnDs", "Site Ave dN/dS")
+scatterplot_actual_v_expected("Expected", "dN/dS", "dNdSWeightByReads", "Site Ave dN/dS Weighted by Reads")
+scatterplot_actual_v_expected("Expected", "dN/dS", "dNdSWeightByReadsNoLowSyn", "Site Ave dN/dS Weighted by Reads (Exclude Low Syn Subst)")
+scatterplot_actual_v_expected("Expected", "dN/dS", "dNdSWeightBySubst", "Site Ave dN/dS Weighted by Substitutions")
+scatterplot_actual_v_expected("ExpectedMinus", "dN-dS", "dN_minus_dS", "Site Ave dN-dS")
+scatterplot_actual_v_expected("ExpectedMultisite", "Multisite Ave dN/dS", "multisiteAvedNdS", "Multisite Ave dN/dS")
+scatterplot_actual_v_expected("ExpectedMultisite", "Multisite Ave dN/dS", "multisitedNdSWeightBySubst", "Multisite Ave dN/dS Weighted by Substitutions")
 
 
 #' **Smoothed Scatterplot of Site dn/ds across the genome**
@@ -235,7 +205,7 @@ fullDatBydatsource <- reshape2:::melt.data.frame(data=fullDat, na.rm = FALSE, id
                                               measure.vars=c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", "dN_minus_dS",
                                                              "multisiteAvedNdS", "multisitedNdSWeightBySubst", 
                                                              "Expected", "ExpectedMultisite", "ExpectedMinus", 
-                                                             "simpleDnDs", "dNdSWeightByReadsNoLowSyn"),
+                                                             "dNdSWeightByReadsNoLowSyn"),
                                               variable.name="datsource", value.name="dnds")
 head(fullDatBydatsource)
 tail(fullDatBydatsource)
@@ -243,7 +213,7 @@ str(fullDatBydatsource)
 summary(fullDatBydatsource)
 ggplot(fullDatBydatsource[fullDatBydatsource$datsource %in% c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", "Expected"),], 
        aes(x=Site, y=dnds, color=datsource) ) + 
-  geom_smooth() + 
+  geom_smooth(na.rm=TRUE) + 
   xlab("Codon Site") + 
   ylab("dN/dS") + 
   ggtitle("dn/ds by site") + 
@@ -252,7 +222,7 @@ ggplot(fullDatBydatsource[fullDatBydatsource$datsource %in% c("aveDnDs", "dNdSWe
 
 ggplot(fullDatBydatsource[fullDatBydatsource$datsource %in% c("dNdSWeightByReadsNoLowSyn", "Expected"),], 
        aes(x=Site, y=dnds, color=datsource) ) + 
-  geom_smooth() + 
+  geom_smooth(na.rm=TRUE) + 
   xlab("Codon Site") + 
   ylab("dN/dS") + 
   ggtitle("dn/ds by site") + 
@@ -314,7 +284,7 @@ ggplot(fullDatBydatsource[fullDatBydatsource$datsource %in% c("dN_minus_dS", "Ex
 #+ fig.width=20
 ggplot(fullDatBydatsource[fullDatBydatsource$datsource %in% c("dN_minus_dS", "ExpectedMinus"),], 
        aes(x=Site, y=dnds, color=datsource) ) + 
-  geom_smooth() + 
+  geom_smooth(na.rm=TRUE) + 
   xlab("Codon Site") + 
   ylab("dN-dS") + 
   ggtitle("Smoothed dn-ds") + 
@@ -327,7 +297,7 @@ ggplot(fullDatBydatsource[fullDatBydatsource$datsource %in% c("dN_minus_dS", "Ex
 #+ fig.width=20
 ggplot(fullDatBydatsource[fullDatBydatsource$datsource %in% c("multisiteAvedNdS", "multisitedNdSWeightBySubst", "ExpectedMultisite"),], 
        aes(x=Site, y=dnds, color=datsource) ) + 
-  geom_smooth() + 
+  geom_smooth(na.rm=TRUE) + 
   xlab("Codon Site") + 
   ylab("dN/dS") + 
   ggtitle("Multisite dn/ds") + 
@@ -345,34 +315,6 @@ ggplot(fullDatBydatsource[fullDatBydatsource$datsource %in% c("multisiteAvedNdS"
   ggtitle("Multisite dn/ds") + 
   theme(plot.title=element_text(size=36), axis.title=element_text(size=32), axis.text=element_text(size=24), 
         legend.text=element_text(size=24), legend.title=element_blank())
-
-#' **Boxplot of expected vs actual dN/dS weighted by substitutions**
-#' 
-#+ fig.width=20
-ggplot(fullDat[!is.na(fullDat$Expected), ], aes(x=cut(x=Expected, breaks=seq(0, max(Expected)+0.1, 0.1), include.lowest=TRUE), y=dNdSWeightBySubst) ) + 
-  geom_boxplot() + 
-  xlab("Expected dn/dS") + 
-  ylab("Actual dN/dS") + 
-  #scale_y_continuous(breaks=seq(0, max(!is.na(fullDat$dNdSWeightBySubst)), 0.25)) + 
-  ggtitle("Boxplot of Actual dN/dS vs Expected dN/dS Weighted by Substitutions") + 
-  theme(plot.title=element_text(size=36), axis.title=element_text(size=32), axis.text=element_text(size=12), 
-        axis.text.x = element_text(angle = 90, hjust = 1),
-        legend.text=element_text(size=24), legend.title=element_blank())
-
-
-
-#' **Boxplot of expected vs actual dN/dS weighted by substitutions, exclude sites with < 1 synonymous substitutions**
-#' 
-#+ fig.width=20
-ggplot(fullDat[!is.na(fullDat$Expected), ], aes(x=cut(x=Expected, breaks=seq(0, max(Expected)+0.1, 0.1), include.lowest=TRUE), y=dNdSWeightByReadsNoLowSyn) ) + 
- geom_boxplot() + 
- xlab("Expected dn/dS") + 
- ylab("Actual dN/dS") + 
- #scale_y_continuous(breaks=seq(0, max(!is.na(fullDat$dNdSWeightByReadsNoLowSyn)), 0.25)) + 
- ggtitle("Boxplot of Actual dN/dS vs Expected dN/dS Weighted by Subst, Exlude Low Syn Sites") + 
- theme(plot.title=element_text(size=36), axis.title=element_text(size=32), axis.text=element_text(size=12), 
-       axis.text.x = element_text(angle = 90, hjust = 1),
-       legend.text=element_text(size=24), legend.title=element_blank())
 
 
 
@@ -397,7 +339,7 @@ head(fullDatSubst)
 #+ fig.width=20
 ggplot(fullDatSubst[fullDatSubst$substSource %in% c("NonSyn", "ExpectedNonSyn"),], aes(x=Site, y=total, color=substSource) ) + 
   geom_line() + 
-  geom_smooth() + 
+  geom_smooth(na.rm=TRUE) + 
   xlab("Codon Site") + 
   ylab("Nonsynonymous Substitutions") + 
   ggtitle("Nonsynonymous Substitutions Across Phylogeny")
@@ -407,7 +349,7 @@ ggplot(fullDatSubst[fullDatSubst$substSource %in% c("NonSyn", "ExpectedNonSyn"),
 #+ fig.width=20
 ggplot(fullDatSubst[fullDatSubst$substSource %in% c("Syn", "ExpectedSyn"),], aes(x=Site, y=total, color=substSource) ) + 
   geom_line() + 
-  geom_smooth() + 
+  geom_smooth(na.rm=TRUE) + 
   xlab("Codon Site") + 
   ylab("Synonymous Substitutions") + 
   ggtitle("Synonymous Substitutions Across Phylogeny")
@@ -417,7 +359,7 @@ ggplot(fullDatSubst[fullDatSubst$substSource %in% c("Syn", "ExpectedSyn"),], aes
 #+ fig.width=20
 ggplot(fullDatSubst[fullDatSubst$substSource %in% c("Subst", "ExpectedSubst"),], aes(x=Site, y=total, color=substSource) ) + 
   geom_line() + 
-  geom_smooth() + 
+  geom_smooth(na.rm=TRUE) + 
   xlab("Codon Site") + 
   ylab("Substitutions") + 
   ggtitle("Substitutions Across Phylogeny")
@@ -427,11 +369,13 @@ ggplot(fullDatSubst[fullDatSubst$substSource %in% c("Subst", "ExpectedSubst"),],
 #+ fig.width=20
 ggplot(actual_dnds, aes(x=Site, y=Windows) ) + 
   geom_line() + 
-  geom_smooth() + 
+  geom_smooth(na.rm=TRUE) + 
   xlab("Codon Site Along Genome") + 
   ylab("Windows") + 
   ggtitle("Windows Across Genome")
 
+#' TODO:  Strip indelible compjarisons to another R file
+#' 
 #' **Plot the expected mutation scaling factor across the genome**
 #' 
 #+ fig.width=20
@@ -448,80 +392,31 @@ ggplot(expected_dnds, aes(x=Site, y=Omega) ) + geom_line() +
   ylab("dn/dS Expected") + 
   ggtitle("Expected Selection Along Genome")
 
-#' **Paired test without assumption of normalcy**
-htest <-  wilcox.test(fullDat$dNdSWeightBySubst, fullDat$Expected, paired=TRUE, exact=TRUE, na.action="na.exclude")
-print (htest)
 
+# Returns a table of Lin's concordance correlation values
+print_table_corr <- function() {
+  site_dnds_corr <- sapply(c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", "dNdSWeightByReadsNoLowSyn"),
+                           function(col) {
+                             dnds_ccc <- epi.ccc(fullDat[, col], fullDat$Expected)
+                             return (dnds_ccc$rho.c$est)
+                           })
+  
+  multisite_dnds_corr <- sapply(c("multisiteAvedNdS", "multisitedNdSWeightBySubst"),
+                                function(col) {
+                                  dnds_ccc <- epi.ccc(fullDat[, col], fullDat$ExpectedMultisite)
+                                  return (dnds_ccc$rho.c$est)
+                                })
+  
+  site_dn_minus_ds_corr <- sapply(c("dN_minus_dS"),
+                                  function(col) {
+                                    dnds_ccc <- epi.ccc(fullDat[, col], fullDat$ExpectedMinus)
+                                    return (dnds_ccc$rho.c$est)
+                                  })
+  corr_vals <- data.frame(Concordance=c(site_dnds_corr, multisite_dnds_corr, site_dn_minus_ds_corr))
+}
 
-#' **Find how correlated the actual ave dn/ds  vs expected dn/ds are**
-dnds_cor <- cor(fullDat$aveDnDs, fullDat$Expected, method="spearman", use="complete.obs")
-print(dnds_cor)
-
-
-#' **Find how correlated the actual simple  dn/ds  vs expected dn/ds are**
-dnds_cor <- cor(fullDat$simpleDnDs, fullDat$Expected, method="spearman", use="complete.obs")
-print(dnds_cor)
-
-
-#' **Find how correlated the actual dn/ds weighted by substitutions vs expected dn/ds are**
-dnds_cor <- cor(fullDat$dNdSWeightBySubst, fullDat$Expected, method="spearman", use="complete.obs")
-print(dnds_cor)
-
-#' **Find how correlated the actual dn-ds vs expected dn-ds are**
-dnds_cor <- cor(fullDat$dN_minus_dS, fullDat$ExpectedMinus, method="spearman", use="complete.obs")
-print(dnds_cor)
-
-#' **Find how correlated the actual dn/ds weighted by reads vs expected dn/ds are**
-dnds_cor <- cor(fullDat$dNdSWeightByReads, fullDat$Expected, method="spearman", use="complete.obs")
-print(dnds_cor)
-
-#' **Find how correlated the actual dn/ds weighted by reads (windows low syn subs excl) vs expected dn/ds are**
-dnds_cor <- cor(fullDat$dNdSWeightByReadsNoLowSyn, fullDat$Expected, method="spearman", use="complete.obs")
-print(dnds_cor)
-
-
-#' **Find how correlated the actual dn/ds smoothed over surrounding sites vs expected dn/ds are**
-dnds_cor <- cor(fullDat$multisiteAvedNdS, fullDat$ExpectedMultisite, method="spearman", use="complete.obs")
-print(dnds_cor)
-
-# **Find how correlated the actual dn/ds smoothed over surrounding sites weighted by substitutions vs expected dn/ds are**
-dnds_cor <- cor(fullDat$multisitedNdSWeightBySubst, fullDat$ExpectedMultisite, method="spearman", use="complete.obs")
-print(dnds_cor)
-
-
-#' **Find how concordance correlated the actual ave dn/ds  vs expected dn/ds are**
-dnds_ccc <- epi.ccc(fullDat$aveDnDs, fullDat$Expected)
-print(dnds_ccc$rho.c)
-
-#' **Find how concordance correlated the actual simple  dn/ds  vs expected dn/ds are**
-dnds_ccc <- epi.ccc(fullDat$simpleDnDs, fullDat$Expected)
-print(dnds_ccc$rho.c)
-
-
-#' **Find how concordance correlated the actual dn/ds weighted by substitutions vs expected dn/ds are**
-dnds_ccc <-  epi.ccc(fullDat$dNdSWeightBySubst, fullDat$Expected)
-print(dnds_ccc$rho.c)
-
-#' **Find how concordance correlated the actual dn-ds vs expected dn-ds are**
-dnds_ccc <-  epi.ccc(fullDat$dN_minus_dS, fullDat$ExpectedMinus)
-print(dnds_ccc$rho.c)
-
-#' **Find how concordance correlated the actual dn/ds weighted by reads vs expected dn/ds are**
-dnds_ccc <-  epi.ccc(fullDat$dNdSWeightByReads, fullDat$Expected)
-print(dnds_ccc$rho.c)
-
-#' **Find how concordance correlated the actual dn/ds weighted by reads (windows low syn subst excl) vs expected dn/ds are**
-dnds_ccc <-  epi.ccc(fullDat$dNdSWeightByReadsNoLowSyn, fullDat$Expected)
-print(dnds_ccc$rho.c)
-
-
-#' **Find how concordance correlated the actual dn/ds smoothed over surrounding sites vs expected dn/ds are**
-dnds_ccc <-  epi.ccc(fullDat$multisiteAvedNdS, fullDat$ExpectedMultisite)
-print(dnds_ccc$rho.c)
-
-#' **Find how concordance correlated the actual dn/ds smoothed over surrounding sites weighted by substitutions vs expected dn/ds are**
-dnds_ccc <-  epi.ccc(fullDat$multisitedNdSWeightBySubst, fullDat$ExpectedMultisite)
-print(dnds_ccc$rho.c)
+table_corr <- print_table_corr()
+kable(table_corr, format="html", caption="Concordance Correlation")
 
 # **Find concordance at each mutation rate**
 
@@ -544,8 +439,8 @@ kable(dnds_ccc, format="html", row.names=FALSE, caption="Concordance Correlation
 plot_mut_corr<- function(scaling_factor) {
   fig <- ggplot(fullDat[fullDat$Scaling_factor==scaling_factor & fullDat$ExpectedSyn >=1, ],
          aes(x=Expected, y=dNdSWeightByReadsNoLowSyn)) + 
-    geom_point() +
-    geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
+    geom_point(na.rm=TRUE) +
+    geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC", na.rm=TRUE) +
     geom_abline(slope=1) + 
     ylab("Inferred\n") + 
     xlab("\nExpected") + 
@@ -556,8 +451,8 @@ plot_mut_corr<- function(scaling_factor) {
   
   fig <- ggplot(fullDat[fullDat$Scaling_factor==scaling_factor & fullDat$ExpectedSyn >=1, ], 
                 aes(x=Expected, y=dNdSWeightByReads)) + 
-    geom_point() +
-    geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC") +
+    geom_point(na.rm=TRUE) +
+    geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC", na.rm=TRUE) +
     geom_abline(slope=1) + 
     ylab("Inferred\n") + 
     xlab("\nExpected") + 

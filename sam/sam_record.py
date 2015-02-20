@@ -314,7 +314,7 @@ class SamRecord:
                 pass
             else:
                 raise ValueError("Unable to handle CIGAR token: {} - quitting".format(token))
-                sys.exit()
+
 
 
     def get_ref_align_len(self):

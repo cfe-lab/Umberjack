@@ -35,10 +35,12 @@ art_stddev_insert_size = sys.argv[9]
 
 PICARD_BIN_DIR = sys.argv[10]
 
-BWA_OUT_DIR = sys.argv[11]
-PROCS = int(sys.argv[12])
-SEED = int(sys.argv[13])
-INDELIBLE_RATES_CSV = sys.argv[14]
+BWA_BIN_DIR = sys.argv[11]
+BWA_OUT_DIR = sys.argv[12]
+
+PROCS = int(sys.argv[13])
+SEED = int(sys.argv[14])
+INDELIBLE_RATES_CSV = sys.argv[15]
 
 CONSENSUS_NAME = "consensus"
 MIN_BASE_Q = 20
@@ -116,7 +118,7 @@ else:
 
     bwa_log = bwa_output_prefix + ".bwa.log"
     bwa_db_prefix = BWA_OUT_DIR + os.sep + os.path.basename(consensus_fasta).replace(".fasta", "")
-    BWA_BUILD_CMD = ["/home/thuy/programs/bwa/bwa-0.7.8/bwa", "index",
+    BWA_BUILD_CMD = [BWA_BIN_DIR + os.sep + "bwa", "index",
                      "-p", bwa_db_prefix, # prefix of db index
                         consensus_fasta,  # fasta to align against
                         ]
@@ -129,7 +131,7 @@ else:
 
         for fq_prefix, output_sam in [(art_output_prefix, bwa_output_prefix + ".consensus.bwa.sam"),
                                (art_output_prefix + ".errFree", bwa_output_prefix + ".errFree.consensus.bwa.sam")]:
-            BWA_CMD = ["/home/thuy/programs/bwa/bwa-0.7.8/bwa",
+            BWA_CMD = [BWA_BIN_DIR + os.sep + "bwa",
                   "mem",
                   "-t", "10", # threads
                   "-k", "5",  # seed len
