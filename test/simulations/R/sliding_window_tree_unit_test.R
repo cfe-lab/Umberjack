@@ -13,8 +13,7 @@ config<-read.table(CONFIG_FILENAME, sep="=", col.names=c("key","value"), as.is=c
 
 actual_dnds_filename <- config[config$key=="ACTUAL_DNDS_FILENAME",]$val
 expected_dnds_filename <-  config[config$key=="EXPECTED_DNDS_FILENAME",]$val
-expected_dnds_start_nuc_pos <-  as.numeric(config[config$key=="EXPECTED_DNDS_START_NUC_POS",]$val)
-expected_dnds_end_nuc_pos <-  as.numeric(config[config$key=="EXPECTED_DNDS_END_NUC_POS",]$val)
+
 
 
 indelible_dnds_filename <- config[config$key=="INDELIBLE_DNDS_FILENAME", ]$val
@@ -24,26 +23,14 @@ indelible_dnds_filename <- config[config$key=="INDELIBLE_DNDS_FILENAME", ]$val
 #'  EXPECTED_DNDS_FILENAME=`r expected_dnds_filename`
 #'  
 #'  INDELIBLE_DNDS_FILENAME=`r indelible_dnds_filename`
-#'  
-#'  EXPECTED_DNDS_START_NUC_POS=`r expected_dnds_start_nuc_pos`
-#'  
-#'  EXPECTED_DNDS_END_NUC_POS=`r expected_dnds_end_nuc_pos`
 
 actual_dnds_file <- file(actual_dnds_filename, open="rt")
 comments <- readLines(actual_dnds_file, 1) # Read one line 
 close(actual_dnds_file)
 
 args <- unlist(strsplit(comments, ','))
-start_nuc_pos <- as.numeric(unlist(strsplit(args[grep("start_nuc_pos", args)], "="))[2])
-end_nuc_pos <- as.numeric(unlist(strsplit(args[grep("end_nuc_pos", args)], "="))[2])
-start_codon <- (start_nuc_pos %/% 3) + 1
-end_codon <- end_nuc_pos %/% 3
 smooth_dist <- as.numeric(unlist(strsplit(args[grep("smooth_dist", args)], "="))[2])
 
-#'  start_codon=`r start_codon`
-#'  
-#'  end_codon=`r end_codon`
-#'  
 #'  smooth_dist=`r smooth_dist`
 
 #' **`r comments`**
@@ -61,22 +48,12 @@ summary(actual_dnds)
 # Parse the expected dnds filename for it start and end nucleotide positions (1-based)
 
 expected_dnds <- read.table(expected_dnds_filename, header=TRUE, sep="\t")  # Site  Interval	Scaling_factor	Rate_class	Omega
-expected_dnds_start_codon <- (expected_dnds_start_nuc_pos %/% 3) + 1
-expected_dnds$Site <- as.numeric(rownames(expected_dnds)) + expected_dnds_start_codon -1
-expected_dnds_end_codon <- max(expected_dnds$Site)
+expected_dnds$Site <- as.numeric(rownames(expected_dnds))
 expected_dnds$Omega <- expected_dnds$dN/expected_dnds$dS
 expected_dnds$Omega[expected_dnds$dS == 0] <- NA
 dim(expected_dnds)
 head(expected_dnds)
 str(expected_dnds)
-summary(expected_dnds)
-
-
-intersect_start_codon <- max(expected_dnds_start_codon, start_codon)
-intersect_end_codon <- min(expected_dnds_end_codon, end_codon)
-actual_dnds <- actual_dnds[actual_dnds$Site >= intersect_start_codon & actual_dnds$Site <=intersect_end_codon,]
-summary(actual_dnds)
-expected_dnds <- expected_dnds[expected_dnds$Site >= intersect_start_codon & expected_dnds$Site <=intersect_end_codon,]
 summary(expected_dnds)
 
 
@@ -107,7 +84,6 @@ expected_dnds$MultisiteAveDnDs <- apply(expected_dnds, 1, function(row) {
 # Read in Indelible's intended dN/dS
 # Cols: Site,Interval,Scaling_factor,Rate_class,Omega
 indelible_dnds <- read.table(indelible_dnds_filename, header=TRUE, sep=",")
-indelible_dnds <- indelible_dnds[indelible_dnds$Site >= intersect_start_codon & indelible_dnds$Site <=intersect_end_codon,]
 summary(indelible_dnds)
 head(indelible_dnds)
 
