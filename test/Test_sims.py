@@ -205,12 +205,14 @@ class TestSims(unittest.TestCase):
         actual_sites_dnds = phylo_dnds.calc_popn_dnds(leaf_fasta=leaf_fasta, ancestor_fasta=ancestor_fasta, treefile=indelible_tree_handle)
         indelible_tree_handle.close()
 
-        with open(expected_sites_dnds_csv, 'rU') as fh_expected:
+        actual_out_csv = expected_sites_dnds_csv.replace(".csv", ".actual.csv")
+        with open(expected_sites_dnds_csv, 'rU') as fh_expected, open(actual_out_csv, 'w') as fh_actual_out:
             expected_reader = csv.DictReader(fh_expected)  # Site	Class	Partition	Inserted?	Omega
             for expected_row in  expected_reader:
                 site_1based = int(expected_row["Site"])
                 expected_dnds = float(expected_row["Omega"])
                 actual_dnds = actual_sites_dnds[site_1based-1]
+                fh_actual_out.write(str(actual_dnds) + "\n")
                 if round(expected_dnds, 2) != round(actual_dnds, 2):
                     print "Site: " + str(site_1based) + " ! expected=" + str(expected_dnds) + " actual=" + str(actual_dnds)
                 else:
