@@ -1,9 +1,9 @@
 import unittest
-import sam_handler
 import os
 import logging
 import sys
 
+from sam import sam_handler
 
 
 SAM_FILENAME = "./simulations/data/indelible/cov1x/sample_genomes.100.1x.consensus.sam"

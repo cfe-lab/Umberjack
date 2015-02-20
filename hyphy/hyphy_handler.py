@@ -16,8 +16,19 @@ HYPHY_EXE = "HYPHYMP"
 HYPHY_BASEDIR = "/usr/local/lib/hyphy/TemplateBatchFiles/"
 
 
-# TODO:  multiple correction for pvalue
-def calc_dnds(codon_fasta_filename, tree_filename, pvalue, hyphy_exe=HYPHY_EXE, hyphy_basedir=HYPHY_BASEDIR, threads=1):
+# Columns in the HyPhy dN/dS tab-separates values file
+HYPHY_TSV_DN_COL = 'dN'
+HYPHY_TSV_DS_COL = 'dS'
+HYPHY_TSV_S_COL = 'Observed S Changes'
+HYPHY_TSV_N_COL = 'Observed NS Changes'
+HYPHY_TSV_SCALED_DN_MINUS_DS_COL = 'Scaled dN-dS'
+HYPHY_TSV_PROB_FULLSEQ_S_COL = 'P{S leq. observed}'
+HYPHY_TSV_NEG_PROB_FULLSEQ_S_COL = 'P{S geq. observed}'
+HYPHY_TSV_EXP_S_COL = 'E[S Sites]'
+HYPHY_TSV_EXP_N_COL = 'E[NS Sites]'
+
+
+def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=HYPHY_EXE, hyphy_basedir=HYPHY_BASEDIR, threads=1):
         hyphy_filename_prefix = os.path.splitext(codon_fasta_filename)[0]  # Remove .fasta suffix
         hyphy_modelfit_filename = hyphy_filename_prefix + ".nucmodelfit"
         hyphy_dnds_tsv_filename = hyphy_filename_prefix + ".dnds.tsv"
@@ -36,10 +47,10 @@ def calc_dnds(codon_fasta_filename, tree_filename, pvalue, hyphy_exe=HYPHY_EXE, 
                                          "1",  # Full tree
                                          "1",  # Averaged
                                          "1",  # Approximate extended binomial distro
-                                         str(pvalue),  # pvalue threshold
+                                         "0.05",  # pvalue threshold for determining statistically significant dN/dS > 1 or dN/dS < 1.
                                          "2",  # Export to file
                                          os.path.abspath(hyphy_dnds_tsv_filename),  # dN/dS tsv output file
-                                         "2\n"])  # Count approximate numbers of dN, dS rate classes supported by data
+                                         "1\n"])  # Do not count approximate numbers of dN, dS rate classes supported by data
 
             # Feed window tree into hyphy to find dnds for the window
             with open(hyphy_log, 'w') as hyphy_log_fh:
