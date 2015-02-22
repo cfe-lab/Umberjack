@@ -99,7 +99,7 @@ indelhyphy <- na.omit(indelhyphy)
 
 #' **Scatterplot Full Population HyPhy Actual dN/dS vs Indelible Expected dN/dS**
 ggplot(indelhyphy, aes(x=Indelible_Omega, y=Hyphy_Omega)) + 
-  geom_point(na.rm=TRUE) +
+  geom_point(shape=1, alpha=0.5, na.rm=TRUE) +
   geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC", na.rm=TRUE) +
   geom_abline(slope=1) + 
   ylab("HyPhy dN/dS\n") + 
