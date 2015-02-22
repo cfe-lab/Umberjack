@@ -20,8 +20,10 @@ def collect_dnds(output_dir, output_csv_filename, full_popn_fasta, comments=None
                                                     "Reads",  # Max read depth for the window (not necessary for the codon site)
                                                     "CodonSite",  # 1-based codon site
                                                     "CodonDepth",  # Total unambiguous codon (depth) at the codon site
-                                                    "Conserve",  # Average per-base fraction of conservation across the codon
-                                                    "Entropy",  # Average per-base metric entropy across the codon
+                                                    "Conserve",  # Average per-base fraction of conservation across the codon.  Includes N's and gaps.
+                                                    "Entropy",  # Average per-base metric entropy across the codon.  Includes N's and gaps.
+                                                    "ConserveTrueBase",  # Average per-base fraction of conservation across the codon.  Excludes N's and gaps
+                                                    "EntropyTrueBase",  # Average per-base fraction of entropy across the codon.  Excludes N's and gaps
                                                     "N",  # Observed Nonsynonymous substitutions
                                                     "S",  # Observed Nonsynonymous substitutions
                                                     "EN",  # Expected Nonsynonymous substitutions
@@ -46,7 +48,11 @@ def collect_dnds(output_dir, output_csv_filename, full_popn_fasta, comments=None
             slice_fasta_fileprefix = slice_fasta_filename.split('.fasta')[0]
 
             tree_filename = slice_fasta_filename.replace(".fasta", ".tree")
-            tree_len, tree_depth = Utility.get_tree_len_depth(tree_filename)
+            if os.path.exists(tree_filename):
+                tree_len, tree_depth = Utility.get_tree_len_depth(tree_filename)
+            else:
+                tree_len = None
+                tree_depth = None
 
             win_nuc_range = slice_fasta_fileprefix.split('.')[-1]
             # Window ends at this 1-based nucleotide position with respect to the reference
@@ -76,6 +82,8 @@ def collect_dnds(output_dir, output_csv_filename, full_popn_fasta, comments=None
                         outrow["CodonDepth"] = codons_by_window_pos[offset]
                         outrow["Conserve"] = consensus.get_ave_conserve(offset, offset + Utility.NUC_PER_CODON, is_count_ambig=True, is_count_gaps=True, is_count_pad=True)
                         outrow["Entropy"] = consensus.get_ave_shannon_entropy(offset, offset + Utility.NUC_PER_CODON, is_count_ambig=True, is_count_gaps=True, is_count_pad=True)
+                        outrow["ConserveTrueBase"] = consensus.get_ave_conserve(offset, offset + Utility.NUC_PER_CODON, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
+                        outrow["EntropyTrueBase"] = consensus.get_ave_shannon_entropy(offset, offset + Utility.NUC_PER_CODON, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
                         outrow["N"] = float(codon_row[hyphy_handler.HYPHY_TSV_N_COL])
                         outrow["S"] = float(codon_row[hyphy_handler.HYPHY_TSV_S_COL])
                         outrow["ES"] = float(codon_row[hyphy_handler.HYPHY_TSV_EXP_S_COL])
@@ -100,6 +108,8 @@ def collect_dnds(output_dir, output_csv_filename, full_popn_fasta, comments=None
                     outrow["CodonDepth"] = codons
                     outrow["Conserve"] = consensus.get_ave_conserve(offset, offset + Utility.NUC_PER_CODON, is_count_ambig=True, is_count_gaps=True, is_count_pad=True)
                     outrow["Entropy"] = consensus.get_ave_shannon_entropy(offset, offset + Utility.NUC_PER_CODON, is_count_ambig=True, is_count_gaps=True, is_count_pad=True)
+                    outrow["ConserveTrueBase"] = consensus.get_ave_conserve(offset, offset + Utility.NUC_PER_CODON, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
+                    outrow["EntropyTrueBase"] = consensus.get_ave_shannon_entropy(offset, offset + Utility.NUC_PER_CODON, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
                     outrow["AmbigBase"] = ns[offset]
                     outrow["Pad"] = pad[offset]
                     outrow["Err"] = seq_err[offset]
