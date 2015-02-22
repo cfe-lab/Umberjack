@@ -216,7 +216,7 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
 
 
     # All nucleotide positions are 1-based
-    total_windows = int(math.ceil((end_nucpos - start_nucpos + 1)/window_size))
+    total_windows = int(math.ceil((end_nucpos - start_nucpos + 1)/window_slide))
     LOGGER.debug("There are " + str(total_windows) + " total windows to process")
 
 
@@ -326,7 +326,7 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
                                       max_prop_N=max_prop_n)
 
             # All nucleotide positions are 1-based
-            total_windows = int(math.ceil((end_nucpos - start_nucpos + 1)/window_size))
+            total_windows = int(math.ceil((end_nucpos - start_nucpos + 1)/window_slide))
             LOGGER.debug("Launching " + str(total_windows) + " total windows")
 
             available_replicas = range(1, pool_size)
