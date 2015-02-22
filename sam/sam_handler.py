@@ -97,7 +97,6 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
         ref_len = get_reflen(sam_filename, ref)
     with open(sam_filename, 'r') as sam_fh, open(out_fasta_filename, 'w') as out_fasta_fh:
         prev_mate = None
-        is_expect_mate = False
         for line in sam_fh:
             if line.startswith(SamHeader.TAG_HEADER_PREFIX):  # skip the headers
                 continue
@@ -119,77 +118,113 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
             # From SAM specs:
             # "For a unmapped paired-end or mate-pair read whose mate is mapped, the unmapped read
             #   should have RNAME and POS identical to its mate"
-            if (SamFlag.IS_UNMAPPED & flag or SamFlag.IS_SECONDARY_ALIGNMENT & flag or SamFlag.IS_CHIMERIC_ALIGNMENT & flag or
-                    rname == '*' or cigar == '*' or pos == 0 or mapq < mapping_cutoff or (ref and rname != ref)):
+            #if (SamFlag.IS_UNMAPPED & flag or SamFlag.IS_SECONDARY_ALIGNMENT & flag or SamFlag.IS_CHIMERIC_ALIGNMENT & flag or
+            #        rname == '*' or cigar == '*' or pos == 0 or mapq < mapping_cutoff or (ref and rname != ref)):
+            if SamFlag.IS_UNMAPPED & flag or SamFlag.IS_SECONDARY_ALIGNMENT & flag or SamFlag.IS_CHIMERIC_ALIGNMENT & flag:
                 continue
+
+            is_mate_paired = SamFlag.IS_PAIRED & flag and not SamFlag.IS_MATE_UNMAPPED & flag
 
             mate = sam_record.SamRecord(ref_len=ref_len)
             mate.fill_record_vals(qname, flag, rname, seq, cigar, mapq, qual, pos, rnext, pnext)
 
-            is_mate_paired = SamFlag.IS_PAIRED & flag and not SamFlag.IS_MATE_UNMAPPED & flag and (rnext == "=" or not ref or rnext == ref)
+            is_written = False
 
-            # We are expecting this record or future records to be the next mate in pair
-            if is_expect_mate:
-                if (not prev_mate or not SamFlag.IS_PAIRED & prev_mate.flag or SamFlag.IS_MATE_UNMAPPED & prev_mate.flag or
-                         not (prev_mate.rnext == "=" or not ref or prev_mate.rnext == ref)):
-                    if prev_mate:
-                        LOGGER.error("Invalid logic.  Prevmate.qname=" + prev_mate.qname + " flag=" + str(prev_mate.flag) + " rnext=" + prev_mate.rnext)
-                    raise ValueError("Invalid logic.  Shouldn't get here. - " + line)
-
-                # Check if last sam record and this sam record are for the same paired read
-                if prev_mate.qname == qname and is_mate_paired:
-                    pair = paired_records.PairedRecord(prev_mate, mate)
-                    # TODO:  get a merge_sam_reads functioin that doesn't do all the stats
-                    mseq, stats = pair.merge_sam_reads(q_cutoff=read_qual_cutoff,
-                                                       pad_space_btn_mates="N",
-                                                       do_insert_wrt_ref=is_insert,
-                                                       do_pad_wrt_ref=False,
-                                                       do_pad_wrt_slice=True,
-                                                       slice_start_wrt_ref_1based=start_pos,
-                                                       slice_end_wrt_ref_1based=end_pos)
-                    is_written = __write_seq(out_fasta_fh, pair.get_name(), mseq, max_prop_N, breadth_thresh)
-                    total_written += 1 if is_written else 0
-                else:
-                    # TODO:  dont spit out this warning if we are missing a mate because we rejected its map qual
-                    LOGGER.warn("Sam record inconsistent.  Expected pair for " + prev_mate.qname + " but got " + qname)
-                    # This sam record does not pair with the previous sam record.
-                    # Do low quality masking on the previous record and write it out.
-                    mseq, mqual, stats = prev_mate.get_seq_qual(do_pad_wrt_ref=False,
-                                                         do_pad_wrt_slice=True,
-                                                         do_mask_low_qual=True,
-                                                         q_cutoff=read_qual_cutoff,
-                                                         slice_start_wrt_ref_1based=start_pos,
-                                                         slice_end_wrt_ref_1based=end_pos,
-                                                         do_insert_wrt_ref=is_insert)
-                    is_written = __write_seq(out_fasta_fh, prev_mate.qname, mseq, max_prop_N, breadth_thresh)
-                    total_written += 1 if is_written else 0
-
-            if not is_mate_paired:
-                # Do low quality masking on the this record and write it out.
-                mseq, mqual, stats = mate.get_seq_qual(do_pad_wrt_ref=False,
-                                                do_pad_wrt_slice=True,
-                                                do_mask_low_qual=True,
-                                                q_cutoff=read_qual_cutoff,
-                                                slice_start_wrt_ref_1based=start_pos,
-                                                slice_end_wrt_ref_1based=end_pos,
-                                                do_insert_wrt_ref=is_insert)
-                is_written = __write_seq(out_fasta_fh, mate.qname, mseq, max_prop_N, breadth_thresh)
-                total_written += 1 if is_written else 0
-                is_expect_mate = False
-                prev_mate = None
-            else:
-                if is_expect_mate and prev_mate.qname == qname and is_mate_paired:  # already wrote the pair
-                    is_expect_mate = False
+            if not prev_mate:  # We are not expecting this mate to be a pair with prev_mate.
+                # If this record isn't paired and it passes our thresholds, then just write it out now
+                if not is_mate_paired and mate.mapq >= mapping_cutoff and (not ref or mate.rname == ref):
+                    # Do low quality masking on the this record and write it out.
+                    mseq, mqual, stats = mate.get_seq_qual(do_pad_wrt_ref=False,
+                                                           do_pad_wrt_slice=True,
+                                                           do_mask_low_qual=True,
+                                                           q_cutoff=read_qual_cutoff,
+                                                           slice_start_wrt_ref_1based=start_pos,
+                                                           slice_end_wrt_ref_1based=end_pos,
+                                                           do_insert_wrt_ref=is_insert)
+                    is_written = __write_seq(out_fasta_fh, mate.qname, mseq, max_prop_N, breadth_thresh)
                     prev_mate = None
-                else:
-                    is_expect_mate = True
+                # If this mate is paired, wait until we find the next mate in the pair or
+                # know that the next mate doesn't exist before writing this mate out
+                elif is_mate_paired:
                     prev_mate = mate
+            elif prev_mate:  # We are expecting this mate to be a pair with prev_mate.
+                if not SamFlag.IS_PAIRED & prev_mate.flag and not SamFlag.IS_MATE_UNMAPPED & prev_mate.flag:
+                    raise ValueError("Invalid logic.  Shouldn't get here. - " +
+                                     "Prevmate.qname=" + prev_mate.qname + " flag=" + str(prev_mate.flag) +
+                                     " rnext=" + prev_mate.rnext +
+                                     " mapq=" + str(prev_mate.mapq) + "\n" +
+                                     "LINE=" + line)
+                elif prev_mate.qname == mate.qname and not is_mate_paired:
+                    raise ValueError("Previous mate and this mate have the same qname " + mate.qname +
+                                     " but this mate isn't paired\n" +
+                                     "LINE:" + line)
+                elif prev_mate.qname == qname and is_mate_paired: # prev_mate and this mate are part of the same pair
+                    # Only write out the mates with good map quality and hit our desired ref
+                    if (prev_mate.mapq >= mapping_cutoff and mate.mapq >= mapping_cutoff and
+                            (not ref or prev_mate.rname == ref or prev_mate.rname == "=") and
+                            (not ref or mate.rname == ref or mate.rname == "=")):
+                        pair = paired_records.PairedRecord(prev_mate, mate)
+                        # TODO:  get a merge_sam_reads function that doesn't do all the stats
+                        mseq, stats = pair.merge_sam_reads(q_cutoff=read_qual_cutoff,
+                                                           pad_space_btn_mates="N",
+                                                           do_insert_wrt_ref=is_insert,
+                                                           do_pad_wrt_ref=False,
+                                                           do_pad_wrt_slice=True,
+                                                           slice_start_wrt_ref_1based=start_pos,
+                                                           slice_end_wrt_ref_1based=end_pos)
+                        is_written = __write_seq(out_fasta_fh, pair.get_name(), mseq, max_prop_N, breadth_thresh)
+
+                    elif prev_mate.mapq >= mapping_cutoff  and (not ref or prev_mate.rname == ref or prev_mate.rname == "="):
+                        mseq, mqual, stats = prev_mate.get_seq_qual(do_pad_wrt_ref=False,
+                                                                    do_pad_wrt_slice=True,
+                                                                    do_mask_low_qual=True,
+                                                                    q_cutoff=read_qual_cutoff,
+                                                                    slice_start_wrt_ref_1based=start_pos,
+                                                                    slice_end_wrt_ref_1based=end_pos,
+                                                                    do_insert_wrt_ref=is_insert)
+                        is_written = __write_seq(out_fasta_fh, prev_mate.qname, mseq, max_prop_N, breadth_thresh)
+
+                    elif mate.mapq >= mapping_cutoff  and (not ref or mate.rname == ref or mate.rname == "="):
+                        mseq, mqual, stats = mate.get_seq_qual(do_pad_wrt_ref=False,
+                                                               do_pad_wrt_slice=True,
+                                                               do_mask_low_qual=True,
+                                                               q_cutoff=read_qual_cutoff,
+                                                               slice_start_wrt_ref_1based=start_pos,
+                                                               slice_end_wrt_ref_1based=end_pos,
+                                                               do_insert_wrt_ref=is_insert)
+                        is_written = __write_seq(out_fasta_fh, mate.qname, mseq, max_prop_N, breadth_thresh)
+
+
+                    # Clear the paired mate expectations for next set of sam records
+                    prev_mate = None
+
+                elif prev_mate.qname != mate.qname:  # This sam record does not pair with the previous sam record.
+                    LOGGER.warn("Sam record inconsistent.  Expected pair for " + prev_mate.qname + " but got " + qname)
+
+                    # Write out prev_mate
+                    if prev_mate.mapq >= mapping_cutoff  and (not ref or prev_mate.rname == ref or prev_mate.rname == "="):
+                        mseq, mqual, stats = prev_mate.get_seq_qual(do_pad_wrt_ref=False,
+                                                                    do_pad_wrt_slice=True,
+                                                                    do_mask_low_qual=True,
+                                                                    q_cutoff=read_qual_cutoff,
+                                                                    slice_start_wrt_ref_1based=start_pos,
+                                                                    slice_end_wrt_ref_1based=end_pos,
+                                                                    do_insert_wrt_ref=is_insert)
+                        is_written = __write_seq(out_fasta_fh, prev_mate.qname, mseq, max_prop_N, breadth_thresh)
+
+                    if is_mate_paired:  # May this mate will pair with the next record
+                        prev_mate = mate
+                else:
+                    raise ValueError("Unpossible!")
+
+
+            total_written += 1 if is_written else 0
 
 
 
-        # In case we went through the full sam file but couldn't find the next paired mate to map well to the same ref
+        # In case the last record expects a mate that is not in the sam file
         # Do low quality masking on the previous record and write it out.
-        if is_expect_mate and prev_mate:
+        if prev_mate:
             mseq, mqual = prev_mate.get_seq_qual(do_pad_wrt_ref=False,
                                                  do_pad_wrt_slice=True,
                                                  do_mask_low_qual=True,
