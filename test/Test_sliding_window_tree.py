@@ -122,6 +122,52 @@ class TestSlidingWindowTree(unittest.TestCase):
         shutil.copy("./simulations/R/sliding_window_tree_unit_test.html",
                     ERR_FREE_OUT_DIR + os.sep + "sliding_window_tree_unit_test.html")
 
+    def test_eval_windows_mpi(self):
+        # ART generated reads aligned to population consensus
+        SAM_FILENAME = SIM_DATA_DIR + os.sep + "mixed" + os.sep + "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".mixed.reads.consensus.bwa.sort.query.sam"
+        OUT_DIR =   SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + "Window" + str(WINDOW_SIZE) + ".mpi"
+        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + 'actual_dnds_by_site.csv'
+        START_NUCPOS = 1
+        END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
+        # TODO:  automate check output of R scripts.  Right now, we need to manually view HTML generated from R.
+        # i.e.  it's up to you to open up ./simulations/R/sliding_window_tree_unit_test.html and inspect the graphs/contents.
+
+        # Can't call sliding_window_tree.eval_windows_mpi() directly since we need to invoke it with mpirun
+        subprocess.check_call(["mpirun",
+                               "-H", "localhost",  # host
+                               "-n", "2",  # copies of program per node
+                               "-output-filename", OUT_DIR + os.sep + "Test_sliding_window_tree.log",  # stdout, stderr logfile
+
+                               "python", os.path.dirname(os.path.realpath(__file__)) + os.sep + os.pardir + os.sep + "sliding_window_tree.py",
+                               "--out_dir", OUT_DIR,
+                               "--map_qual_cutoff", str(MAPQ_CUTOFF),
+                               "--read_qual_cutoff", str(READ_QUAL_CUTOFF),
+                               "--max_prop_n", str(MAX_PROP_N),
+                               "--window_size", str(WINDOW_SIZE),
+                               "--window_slide", str(WINDOW_SLIDE),
+                               "--window_breadth_cutoff", str(MIN_WINDOW_BREADTH_COV_FRACTION),
+                               "--window_depth_cutoff", str(MIN_WINDOW_DEPTH_COV),
+                               "--start_nucpos", str(START_NUCPOS),
+                               "--end_nucpos", str(END_NUCPOS),
+                               "--threads_per_window", str(THREADS_PER_WINDOW),
+                               "--output_csv_filename",  ACTUAL_DNDS_FILENAME,
+                               "--mode",  "DNDS",
+                               "--mpi",
+                               SAM_FILENAME,
+                               REF])
+
+
+        rconfig_file = os.path.dirname(__file__) + os.sep +"simulations" + os.sep + "R" + os.sep + "sliding_window_tree_unit_test.config"
+        with open(rconfig_file, 'w') as fh_out_config:
+            fh_out_config.write("ACTUAL_DNDS_FILENAME=" + ACTUAL_DNDS_FILENAME + "\n")
+            fh_out_config.write("EXPECTED_DNDS_FILENAME=" + EXPECTED_DNDS_FILENAME + "\n")
+            fh_out_config.write("INDELIBLE_DNDS_FILENAME=" + INDELIBLE_DNDS_FILENAME + "\n")
+
+        subprocess.check_call(["Rscript", "-e", "library(knitr); setwd('./simulations/R'); spin('sliding_window_tree_unit_test.R')"],
+                              shell=False, env=os.environ)
+        shutil.copy("./simulations/R/sliding_window_tree_unit_test.html",
+                    OUT_DIR + os.sep + "sliding_window_tree_unit_test.html")
+
 
 
 if __name__ == '__main__':
