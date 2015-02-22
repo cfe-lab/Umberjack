@@ -304,6 +304,7 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
     :param str fastree_exe:  full filepath to FastTreeMP executable
     :param bool debug:  if True, outputs full genome multiple sequence alignment
     """
+    from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
     try:
@@ -385,12 +386,12 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
 
                 # Check on replicas
                 if busy_replica_2_request:
-                    requests = [window_replica_info.mpi_request for window_replica_info in busy_replica_2_request.values()]
+                    requests = [window_replica_info.mpi_rcv_request for window_replica_info in busy_replica_2_request.values()]
                     mpi_status = MPI.Status()
                     idx, err_msg = MPI.Request.waitany(requests=requests, status=mpi_status)
                     done_replica_rank = mpi_status.Get_source()
                     available_replicas.extend([done_replica_rank])
-                    busy_replica_2_request.pop(done_replica_rank)
+                    del busy_replica_2_request[done_replica_rank]
                     if err_msg:
                         LOGGER.error("Received error from replica=" + str(done_replica_rank) + " err_msg=" + str(err_msg))
                     else:
@@ -463,9 +464,6 @@ def main():
     parser.add_argument("--end_nucpos", type=int, default=None,
                         help="1-based end nucleotide position in the reference contig.  The last window will start at"
                              " or before this position.")
-    parser.add_argument("--pvalue", type=float, default=0.05,
-                        help=" p-value threshold for determining selection significantly different from neutral"
-                             " evolution.")
     parser.add_argument("--threads_per_window", type=int, default=1,
                         help="threads allotted per window.")
     parser.add_argument("--concurrent_windows", type=int, default=1,
