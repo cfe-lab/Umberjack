@@ -11,6 +11,7 @@ import Utility
 import pool_traceback
 import hyphy.hyphy_handler as hyphy
 import fasttree.fasttree_handler as fasttree
+import math
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
@@ -135,10 +136,11 @@ def eval_window(window_depth_cutoff, window_breadth_cutoff, start_window_nucpos,
 
 
 # TODO:  clean my parameters
-def tabulate_results(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
+def tabulate_results(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
                      end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, output_csv_filename, mode,
                      window_slide, smooth_dist):
 
+    ref_len = sam_handler.get_ref_len(sam_filename, ref)
     comments = ("ref=" + ref + "," +
                 "ref_len=" + str(ref_len) + "," +
                 "sam=" + sam_filename + "," +
@@ -214,15 +216,13 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
 
 
     # All nucleotide positions are 1-based
-    last_window_start_nucpos = min(end_nucpos, ref_len - window_size + 1)
-
-    total_windows = (last_window_start_nucpos - start_nucpos + 1) / Utility.NUC_PER_CODON
+    total_windows = int(math.ceil((end_nucpos - start_nucpos + 1)/window_size))
     LOGGER.debug("There are " + str(total_windows) + " total windows to process")
 
 
     process_results = []
-    for start_window_nucpos in range(start_nucpos, last_window_start_nucpos + 1, window_slide):
-        end_window_nucpos = start_window_nucpos + window_size - 1
+    for start_window_nucpos in range(start_nucpos, end_nucpos, window_slide):
+        end_window_nucpos = min(start_window_nucpos + window_size - 1, end_nucpos)
         window_args = {"window_depth_cutoff": window_depth_cutoff,
                        "window_breadth_cutoff": window_breadth_cutoff,
                        "start_window_nucpos": start_window_nucpos,
@@ -255,7 +255,7 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
 
     LOGGER.debug("Done waiting for window queue.  About to tabulate results.")
 
-    tabulate_results(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
+    tabulate_results(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
                      end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, output_csv_filename, mode, window_slide,
                      smooth_dist)
 
@@ -326,9 +326,7 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
                                       max_prop_N=max_prop_n)
 
             # All nucleotide positions are 1-based
-            ref_len = sam_handler.get_ref_len(sam_filename, ref)
-            last_window_start_nucpos = min(end_nucpos, ref_len - window_size + 1)
-            total_windows = (last_window_start_nucpos - start_nucpos + 1) / Utility.NUC_PER_CODON
+            total_windows = int(math.ceil((end_nucpos - start_nucpos + 1)/window_size))
             LOGGER.debug("Launching " + str(total_windows) + " total windows")
 
             available_replicas = range(1, pool_size)
@@ -338,11 +336,11 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
 
 
 
-            while start_window_nucpos <= last_window_start_nucpos or busy_replica_2_request:
+            while start_window_nucpos < end_nucpos or busy_replica_2_request:
 
                 # Assign work to replicas
-                while start_window_nucpos <= last_window_start_nucpos and available_replicas:
-                    end_window_nucpos = start_window_nucpos + window_size - 1
+                while start_window_nucpos < end_nucpos and available_replicas:
+                    end_window_nucpos = min(start_window_nucpos + window_size - 1, end_nucpos)
 
                     window_args = {"window_depth_cutoff": window_depth_cutoff,
                                    "window_breadth_cutoff": window_breadth_cutoff,
@@ -405,7 +403,7 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
             LOGGER.debug("Done terminating replicas.")
 
             LOGGER.debug("About to tabulate results")
-            tabulate_results(ref, ref_len, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n,
+            tabulate_results(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n,
                              start_nucpos, end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff,
                              output_csv_filename, mode,window_slide, smooth_dist)
 
