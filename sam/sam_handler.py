@@ -3,14 +3,11 @@ import os
 import sys
 import subprocess
 import logging
-import math
 from sam_constants import SamFlag as SamFlag
 from sam_constants import  SamHeader as SamHeader
 import sam_record
 import paired_records
 import Utility
-
-
 
 NEWICK_NAME_RE = re.compile('[:;\-\(\)\[\]]')
 
@@ -23,22 +20,18 @@ console_handler.setFormatter(formatter)
 LOGGER.addHandler(console_handler)
 
 
-
-
-
-
-
-
-
+# TODO:  max_prop_N doesn't make sense if we include left and right pad gaps in the sequence length
 # TODO:  make stop codon remove optional
-def __write_seq(fh_out, name, seq, max_prop_N, breadth_thresh):
+def __write_seq(fh_out, name, seq, max_prop_N, breadth_thresh, is_mask_stop_codon):
     """
     Helper function to write out sequence to fasta file handle if has sufficient bases.
+    :param file fh_out:  python file handle
+    :param str name: Sequence Name
+    :param str seq:  Sequence
+    :param float max_prop_N: maximum fraction allowed N
+    :param breadth_thresh:
+    :param is_mask_stop_codon:
     :return  True if sequence written out
-    :rtype : boolean
-    :param fh_out:
-    :param name:
-    :param seq:
     """
     # Set stop codons to NNN so that HyPhy doesn't auto-remove a site without telling us
     for nuc_pos in range(0, len(seq), Utility.NUC_PER_CODON):
@@ -56,31 +49,45 @@ def __write_seq(fh_out, name, seq, max_prop_N, breadth_thresh):
 
 
 # TODO:  make stop codon removal optional
-def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cutoff, read_qual_cutoff,
-                              max_prop_N, breadth_thresh, start_pos=None, end_pos=None, is_insert=False, ref_len=None):
+def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cutoff, read_qual_cutoff, max_prop_N,
+                              breadth_thresh, start_pos=None, end_pos=None, is_insert=False, is_mask_stop_codon=False,
+                              ref_len=None):
     """
-    Parse SAM file contents for query-ref (pairwise) aligned sequences for a specific reference contig.
-    For paired-end reads, merges the reads into a single sequence with gaps with respect to the reference.
-    Creates a pseudo-multiple sequence alignment on all the query sequences and reference.
+    Parse SAM file contents for sequences aligned to a reference.
+    Extracts the portion of the read that fits into the desired slice of the genome.
+    For paired-end reads, merges the mates into a single sequence with gaps with respect to the reference.
+    Creates a multiple sequence alignment (MSA) for the desired slice.
+    Left and right pads the reads according to the positions within the slice.
     Writes the MSA sequences to out_fasta_filename.
     Converts query names so that they are compatible with Newick format in phylogenetic reconstruction by
         converting colons, semicolons, parentheses to underscores.
 
 
-    Sam file must be query sorted.  Secondary alignments are ignored.
-    NB: Only takes the primary alignment.
+
+    :param is_mask_stop_codon:
+    NB:  Sam file must be query sorted.
+    NB:  Only takes the primary alignment.
 
     :param str sam_filename: full path to sam file.  Must be queryname sorted.
-    :param str ref: name of reference contig to form MSA alignments to.  If None, then splits out all alignments to any reference.
-    :param str out_fasta_filename: full path of fasta file to write to.  Will completely overwite file.
+    :param str ref: name of reference contig to form MSA alignments to.
+                    If None, then splits out all alignments to any reference that fit within the desired slice positions.
+                    Setting the ref to None is only useful when the reads are aligned to a set of multiple sequence aligned
+                    reference contigs, and you don't care which reference the read hits, just that it fits in the slice.
+    :param str out_fasta_filename: full path to output multiple sequence aligned fasta file for the sequences in the slice.
     :param int mapping_cutoff:  Ignore alignments with mapping quality lower than the cutoff.
     :param int read_qual_cutoff: Convert bases with quality lower than this cutoff to N unless both mates agree.
-    :param float max_prop_N:  Do not output merged sequences with proportion of N higher than the cutoff
+    :param float max_prop_N:  Do not output reads with proportion of N higher than the cutoff.  Only counts the bases within the slice.
+                                This only makes a difference if the slice is expected to be much wider than the (merged) read length.
+    :param float breadth_thresh:  Fraction of the slice that the read must cover with actual bases A, C, G, T.
+                                Reads below this threshold are excluded from output.
     :param int start_pos: 1-based start nucleotide start position of slice.  If None, then uses beginning of ref.
     :param int end_pos: 1-based end nucleotide start position of slice.  If None, then uses end of ref.
+    :param bool is_insert: whether to exclude insertions to the reference.
+                If include insertions, then the insertions will be multiple sequence aligned further by MAFFT.
+    :param bool is_mask_stop_codon: whether to mask stop codons with "NNN".
+                Most useful when you want to do codon analysis aftwards, as many codon models do not allow stop codons.
     :param int ref_len: length of reference.  If None, then takes length from sam headers.
     """
-
 
     LOGGER.debug("About to slice fasta " + out_fasta_filename + " from " + sam_filename)
     if os.path.exists(out_fasta_filename) and os.path.getsize(out_fasta_filename):

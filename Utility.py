@@ -44,7 +44,7 @@ CODON2AA = {
     'CGN' : 'R','MGR' : 'R',
     'TCN' : 'S','AGY' : 'S',
     'ACN' : 'T',
-    'TAY' : 'W',
+    'TAY' : 'Y',
     'GTN' : 'V',
     'TAR' : '*','TRA' : '*',
     }
@@ -272,6 +272,10 @@ class Consensus:
 
     __base_count = {'A': 0, 'C': 0, 'T': 0, 'G': 0, 'N':0, '-':0, 'X':0}
 
+    # ? means unkknown amino acid.  X means left or right pad gap in amino acid
+    __aa_count = {'?':0, 'A':0, 'B':0, 'C':0, 'D':0, 'E':0, 'F':0, 'G':0, 'H':0,
+                     'I':0, 'K':0, 'L':0, 'M':0, 'N':0, 'P':0, 'Q':0, 'R':0, 'S':0,
+                     'T':0, 'V':0, 'W':0, 'Y':0, '*':0, 'X':0}
     TRUE_BASES = ["A", "C", "G", "T"]
     AMBIG_BASES = ["N"]
     GAPS = ["-"]
@@ -281,6 +285,7 @@ class Consensus:
 
     def __init__(self):
         self.seq = []
+        self.aa_seq = []  # Assumes that the sequence starts on ORF
 
     def parse(self, msa_fasta_filename):
         """
@@ -305,6 +310,9 @@ class Consensus:
         """
         Add a sequence to the consensus
         """
+
+        # Collect the Nucleotide level stats
+
         # Find the position of the first non-gap char.  Anything before this is a left-pad gap.
         truebase_start = re.search(r"[^\-]", seq).start()
         # Find the position of the last non-gap char.  Anything after this is a right-pad gap.
@@ -315,6 +323,39 @@ class Consensus:
                 self.add_base(base, pos_0based=pos_0based)  # Inner gap, or ACGT, or N
             else:
                 self.add_base("X", pos_0based=pos_0based)  # left or right pad gap
+
+        # # Collect the codon level stats
+        # truecodon_start = truebase_start/NUC_PER_CODON
+        # truecodon_end = truebase_end/NUC_PER_CODON
+        #
+        # for nuc_pos in range(0, len(seq), 3):
+        #     codon = seq[nuc_pos:nuc_pos + NUC_PER_CODON]
+        #     codon += ("N" * (NUC_PER_CODON - len(codon)))  # right pad with N's
+        #     codon_pos = nuc_pos/NUC_PER_CODON
+        #
+        #     if truecodon_start <= codon_pos <= truecodon_end:
+        #         self.add_codon(codon, codon_pos_0based=codon_pos)   # actual codon
+        #     else:
+        #         self.add_codon("X", codon_pos_0based=codon_pos)  # left or right pad gap
+
+
+    def add_codon(self, codon, codon_pos_0based):
+        """
+        :param codon:
+        :param codon_pos_0based:  0-based codon position
+        :return:
+        """
+        # Replace the gaps,  pads with N's so that we can translate the codons.
+        codon = codon.upper().replace("-", "N")
+
+        if codon_pos_0based >= len(self.aa_seq):
+            for i in range(codon_pos_0based - len(self.aa_seq) + 1):
+                self.seq.append(Consensus.__base_count.copy())
+
+        aa = CODON2AA.get(codon, "?")  # TODO:  don't hardcode this.  ? means unknown aa
+
+        if self.aa_seq[codon_pos_0based].has_key(aa):
+            self.aa_seq[codon_pos_0based][aa] += 1
 
 
     def add_base(self, base, pos_0based):
@@ -542,6 +583,26 @@ class Consensus:
                           if (is_count_ambig or letter != "N") and (is_count_gaps or letter != "-") and (is_count_pad or letter != "X")])
         return total_seqs
 
+
+    def get_ambig_count(self, pos_0based):
+        return self.seq[pos_0based]["N"]  # TODO:  don't hardcode
+
+    def get_pad_count(self, pos_0based):
+        """
+        Here, pad refers to gaps external to the sequence.  I.e.  left and right pad gaps.
+        """
+        return self.seq[pos_0based]["X"]  # TODO:  don't hardcode
+
+    def get_gap_count(self, pos_0based):
+        """
+        Here, gap refers to gap internal in the sequence.  I.e.  surrounded by N, A, C, G, T on either side.
+        """
+        return self.seq[pos_0based]["X"]  # TODO:  don't hardcode
+
+    def get_codon_depth(self, codon_pos_0based, is_count_ambig=False, is_count_pad=False):
+        total_seqs = sum([count for letter, count in self.codon_seq[codon_pos_0based].iteritems()
+                          if (is_count_ambig or letter != "?") and (is_count_pad or letter != "X")])
+        return total_seqs
 
 
 

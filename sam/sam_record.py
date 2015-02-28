@@ -55,7 +55,7 @@ class SamRecord:
         self.mapq = int(sam_row_dict["mapq"])
         self.qual = sam_row_dict["qual"]
         self.pos = int(sam_row_dict["pos"])
-        self.rnext = int(sam_row_dict["rnext"])
+        self.rnext = sam_row_dict["rnext"]
         self.pnext = int(sam_row_dict["pnext"])
         self.mate_record = None
 
