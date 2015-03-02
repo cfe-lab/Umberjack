@@ -26,11 +26,14 @@ config_file = sys.argv[1]
 config = ConfigParser.RawConfigParser()
 config.read(config_file)
 
+OUTDIR = os.path.dirname(config_file)  # Output directory for simulated data
+
+
 SEED = config.getint(SECTION, "SEED")
 FILENAME_PREFIX = config.get(SECTION, "FILENAME_PREFIX")
 NUM_CODON_SITES = config.getint(SECTION, "NUM_CODON_SITES")
 NUM_INDIV = config.getint(SECTION, "NUM_INDIV")
-OUTDIR = config.get(SECTION, "OUTDIR")
+
 
 INDELIBLE_BIN_DIR = config.get(SECTION, "INDELIBLE_BIN_DIR")
 INDELIBLE_SCALING_RATES = config.get(SECTION, "INDELIBLE_SCALING_RATES")

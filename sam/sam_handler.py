@@ -22,10 +22,10 @@ LOGGER.addHandler(console_handler)
 
 # TODO:  max_prop_N doesn't make sense if we include left and right pad gaps in the sequence length
 # TODO:  make stop codon remove optional
-def __write_seq(fh_out, name, seq, max_prop_N, breadth_thresh, is_mask_stop_codon):
+def __write_seq(fh_out, name, seq, max_prop_N, breadth_thresh, is_mask_stop_codon=False):
     """
     Helper function to write out sequence to fasta file handle if has sufficient bases.
-    :param file fh_out:  python file handle
+    :param FileIO fh_out:  python file handle
     :param str name: Sequence Name
     :param str seq:  Sequence
     :param float max_prop_N: maximum fraction allowed N
@@ -179,7 +179,7 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
                                                            do_pad_wrt_slice=True,
                                                            slice_start_wrt_ref_1based=start_pos,
                                                            slice_end_wrt_ref_1based=end_pos)
-                        is_written = __write_seq(out_fasta_fh, pair.get_name(), mseq, max_prop_N, breadth_thresh)
+                        is_written = __write_seq(out_fasta_fh, pair.get_name(), mseq, max_prop_N, breadth_thresh, is_mask_stop_codon)
 
                     elif prev_mate.mapq >= mapping_cutoff  and (not ref or prev_mate.rname == ref or prev_mate.rname == "="):
                         mseq, mqual, stats = prev_mate.get_seq_qual(do_pad_wrt_ref=False,
@@ -189,7 +189,7 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
                                                                     slice_start_wrt_ref_1based=start_pos,
                                                                     slice_end_wrt_ref_1based=end_pos,
                                                                     do_insert_wrt_ref=is_insert)
-                        is_written = __write_seq(out_fasta_fh, prev_mate.qname, mseq, max_prop_N, breadth_thresh)
+                        is_written = __write_seq(out_fasta_fh, prev_mate.qname, mseq, max_prop_N, breadth_thresh, is_mask_stop_codon)
 
                     elif mate.mapq >= mapping_cutoff  and (not ref or mate.rname == ref or mate.rname == "="):
                         mseq, mqual, stats = mate.get_seq_qual(do_pad_wrt_ref=False,
@@ -199,7 +199,7 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
                                                                slice_start_wrt_ref_1based=start_pos,
                                                                slice_end_wrt_ref_1based=end_pos,
                                                                do_insert_wrt_ref=is_insert)
-                        is_written = __write_seq(out_fasta_fh, mate.qname, mseq, max_prop_N, breadth_thresh)
+                        is_written = __write_seq(out_fasta_fh, mate.qname, mseq, max_prop_N, breadth_thresh, is_mask_stop_codon)
 
 
                     # Clear the paired mate expectations for next set of sam records
@@ -217,7 +217,7 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
                                                                     slice_start_wrt_ref_1based=start_pos,
                                                                     slice_end_wrt_ref_1based=end_pos,
                                                                     do_insert_wrt_ref=is_insert)
-                        is_written = __write_seq(out_fasta_fh, prev_mate.qname, mseq, max_prop_N, breadth_thresh)
+                        is_written = __write_seq(out_fasta_fh, prev_mate.qname, mseq, max_prop_N, breadth_thresh, is_mask_stop_codon)
 
                     if is_mate_paired:  # May this mate will pair with the next record
                         prev_mate = mate
@@ -309,75 +309,11 @@ def create_depth_file_from_bam(bam_filename):
     return depth_filename
 
 
-def sam_to_sort_bam(sam_filename, ref_filename):
-    """
-    Creates index of reference.  This creates a <ref_filename>.fai file.
-    Converts sam to bam file sorted by coordinates.
-    This creates a <sam_filename prefix>.bam and <sam filename prefix>.bam.sort files.
-    Creates index of sorted bam.  This creates a <bam_filename>.index file.
-    Pipes STDERR to STDOUT.
-    Uses default samtools from PATH environment variable.
-
-    :return: full filepath to sorted, indexed bam  file
-    :rtype : str
-    :param str sam_filename: full filepath to sam alignment file
-    :param str ref_filename:  full filepath to reference fasta
-    """
-
-    sam_filename_prefix, file_suffix = os.path.splitext(sam_filename)
-    bam_filename = sam_filename_prefix + ".bam"
-
-    # index reference
-    index_ref_filename = ref_filename + ".fai"
-    subprocess.check_call(['samtools', 'faidx', ref_filename], stderr=subprocess.STDOUT, shell=False)
-
-    # convert sam to bam
-    subprocess.check_call(['samtools', 'view', '-Sb', '-o', bam_filename, sam_filename],
-                          stderr=subprocess.STDOUT, shell=False)
-
-    # Sort the bam file by leftmost position on the reference assembly.  Required for samtools depth.
-    sorted_bam_filename_prefix = sam_filename_prefix + ".sort"
-    sorted_bam_filename = sorted_bam_filename_prefix + ".bam"
-    subprocess.check_call(['samtools', 'sort', bam_filename, sorted_bam_filename_prefix], stderr=subprocess.STDOUT, shell=False)
-
-    # index sorted bam file
-    subprocess.check_call(['samtools', 'index', sorted_bam_filename, ], stderr=subprocess.STDOUT, shell=False)
-
-    return sorted_bam_filename
-
-
-def get_ave_coverage_from_bam (bam_filename, ref, pos_start, pos_end):
-    """
-    If the depth file does not exist, then create one.
-    Reads the depth file and returns average coverage in the specified region.
-
-    :param str bam_filename: full path to bam file of alignments against the ref
-    :param str ref: name of reference sequence to get coverage for
-    :param int pos_start: region starting position, 1-based
-    :param int pos_end: region ending position, 1-based
-    :return: average per-base coverage for the specified reference and region.
-    :rtype : float
-    """
-    import os
-
-    depth_filename = bam_filename + ".depth"
-    if not os.path.isfile(depth_filename) or os.path.getsize(depth_filename) <= 0:
-        create_depth_file_from_bam(bam_filename)
-
-    total_coverage = 0
-    with open(depth_filename, 'r') as depth_fh:
-        for line in depth_fh:
-            # Output of samtools depth:
-            # <reference>   <position>  <depth>
-            line_ref, line_pos, line_depth = line.rstrip().split('\t')
-            if line_ref == ref and int(line_pos) >= pos_start and int(line_pos) <= pos_end:
-                total_coverage += int(line_depth)
-
-    ave_coverage = round(float(total_coverage) / (pos_end - pos_start + 1), 0)
-    return ave_coverage
-
 
 def get_ref_len(sam_filename, ref):
+    """
+    Gets the length of the desired reference from the sam file header.
+    """
     with open(sam_filename, 'rU') as fh:
         for line in fh:
             if line.startswith("@SQ"):
