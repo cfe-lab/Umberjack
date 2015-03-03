@@ -1,13 +1,17 @@
-@ref1
+@ref1   Target  Slice=4,13
 TAGGCCTAGACATTGACAGGT
 +
 HHHHHHHHHHHHHHHHHHHHH
+@ref2   This reference is here to test what happens if mates align to another reference than our target
+TAGGCCTAGACATTGACAAAA
++
+HHHHHHHHHHHHHHHHHHHHH
 # Both reads mapped to same reference, no inserts, high quality, No conflict.  Expect:  accept all seq.
-@read1/1    flag=99,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read1/1    flag=99,rname=ref1,mapq=40,cigar=8M,tlen=10
 ---GCCTAGAC----------
 +
 ---HHHHHHHH----------
-@read1/2    flag=147,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read1/2    flag=147,rname=ref1,mapq=40,cigar=8M,tlen=10
 -----CTAGACAT--------
 +
 -----HHHHHHHH--------
@@ -16,11 +20,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHH--------
 # Both reads mapped to same reference, no inserts, low quality, No conflict.  Expect:  mask low quality.
-@read2/1    flag=99,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read2/1    flag=99,rname=ref1,mapq=40,cigar=8M,tlen=10
 ---GCCTAGAC----------
 +
 ---!HHHHHH!----------
-@read2/2    flag=147,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read2/2    flag=147,rname=ref1,mapq=40,cigar=8M,tlen=10
 -----CTAGACAT--------
 +
 -----HHHHH!H!--------
@@ -29,11 +33,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---!HHHHHH!H!--------
 # Both reads mapped to same reference, no inserts, no conflict, base with hi/low qual in mates.  Expect:  Accept all seq.
-@read3/1    flag=99,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read3/1    flag=99,rname=ref1,mapq=40,cigar=8M,tlen=10
 ---GCCTAGAC----------
 +
 ---HHHHHHHH----------
-@read3/2    flag=147,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read3/2    flag=147,rname=ref1,mapq=40,cigar=8M,tlen=10
 -----CTAGACAT--------
 +
 -----HHHHH!HH--------
@@ -42,11 +46,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHH--------
 # Both reads mapped to same reference, no inserts, no conflict, base with lo/hi qual in mates.  Expect:  Accept all seq.
-@read4/1    flag=99,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read4/1    flag=99,rname=ref1,mapq=40,cigar=8M,tlen=10
 ---GCCTAGAC----------
 +
 ---HHHHHHH!----------
-@read4/2    flag=147,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read4/2    flag=147,rname=ref1,mapq=40,cigar=8M,tlen=10
 -----CTAGACAT--------
 +
 -----HHHHHHHH--------
@@ -55,11 +59,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHH--------
 # Both reads mapped to same reference, no inserts.  Conflict, hi/low qual in mates.  Expect:  Accept high qual base in seq1.
-@read5/1    flag=99,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read5/1    flag=99,rname=ref1,mapq=40,cigar=8M,tlen=10
 ---GCCTAGAG----------
 +
 ---HHHHHHHH----------
-@read5/2    flag=147,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read5/2    flag=147,rname=ref1,mapq=40,cigar=8M,tlen=10
 -----CTAGACAT--------
 +
 -----HHHHH!HH--------
@@ -68,11 +72,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHH--------
 # Both reads mapped to same reference, no inserts.  Conflict, lo/hi qual in mates.  Expect:  Accept high qual base in seq2.
-@read6/1    flag=99,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read6/1    flag=99,rname=ref1,mapq=40,cigar=8M,tlen=10
 ---GCCTAGAG----------
 +
 ---HHHHHHH!----------
-@read6/2    flag=147,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read6/2    flag=147,rname=ref1,mapq=40,cigar=8M,tlen=10
 -----CTAGACAT--------
 +
 -----HHHHHHHH--------
@@ -81,11 +85,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHH--------
 # Both reads mapped to same reference, no inserts.  Conflict, higher/high qual in mates.  Expect:  Accept higher qual base in seq1.
-@read7/1    flag=99,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read7/1    flag=99,rname=ref1,mapq=40,cigar=8M,tlen=10
 ---GCCTAGAG----------
 +
 ---HHHHHHHH----------
-@read7/2    flag=147,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read7/2    flag=147,rname=ref1,mapq=40,cigar=8M,tlen=10
 -----CTAGACAT--------
 +
 -----HHHHHGHH--------
@@ -94,11 +98,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHH--------
 # Both reads mapped to same reference, no inserts.  Conflict, hi/higher qual in mates.  Expect:  Accept higher qual base in seq2.
-@read8/1    flag=99,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read8/1    flag=99,rname=ref1,mapq=40,cigar=8M,tlen=10
 ---GCCTAGAG----------
 +
 ---HHHHHHHG----------
-@read8/2    flag=147,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read8/2    flag=147,rname=ref1,mapq=40,cigar=8M,tlen=10
 -----CTAGACAT--------
 +
 -----HHHHHHHH--------
@@ -107,11 +111,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHH--------
 # Both reads mapped to same reference, no inserts.  Conflict, high/high equal qual in mates.  Expect:  Mask
-@read9/1    flag=99,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read9/1    flag=99,rname=ref1,mapq=40,cigar=8M,tlen=10
 ---GCCTAGAG----------
 +
 ---HHHHHHHH----------
-@read9/2    flag=147,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read9/2    flag=147,rname=ref1,mapq=40,cigar=8M,tlen=10
 -----CTAGACAT--------
 +
 -----HHHHHHHH--------
@@ -120,11 +124,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHH--------
 # Both reads mapped to same reference, no inserts.  Conflict, lo/lo equal qual in mates.  Expect:  Mask
-@read10/1    flag=99,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read10/1    flag=99,rname=ref1,mapq=40,cigar=8M,tlen=10
 ---GCCTAGAG----------
 +
 ---HHHHHHH!----------
-@read10/2    flag=147,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read10/2    flag=147,rname=ref1,mapq=40,cigar=8M,tlen=10
 -----CTAGACAT--------
 +
 -----HHHHH!HH--------
@@ -133,11 +137,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHH--------
 # Both reads mapped to same reference, concordant insert, high quality.  Expect:  accept all seq.
-@read11/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,rnext==,tlen=10
+@read11/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,tlen=10
 ---GCCTTAGAC----------
 +
 ---HHHHHHHHH----------
-@read11/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,rnext==,tlen=10
+@read11/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,tlen=10
 -----CTTAGACAT--------
 +
 -----HHHHHHHHH--------
@@ -146,11 +150,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHHH--------
 # Both reads mapped to same reference, concordant insert, low quality.  Expect:  Mask low qual insert.
-@read12/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,rnext==,tlen=10
+@read12/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,tlen=10
 ---GCCTTAGAC----------
 +
 ---HHHH!HHHH----------
-@read12/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,rnext==,tlen=10
+@read12/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,tlen=10
 -----CTTAGACAT--------
 +
 -----HH!HHHHHH--------
@@ -159,11 +163,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHH!HHHHHH--------
 # Both reads mapped to same reference, concordant insert, hi/lo quality.  Expect:  accept all seq since combined qual hi.
-@read13/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,rnext==,tlen=10
+@read13/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,tlen=10
 ---GCCTTAGAC----------
 +
 ---HHHH!HHHH----------
-@read13/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,rnext==,tlen=10
+@read13/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,tlen=10
 -----CTTAGACAT--------
 +
 -----HH1HHHHHH--------
@@ -172,11 +176,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHH1HHHHHH--------
 # Both reads mapped to same reference.  Discordant insert, high/low quality.  Expected: keep insert with higher quality seq1.
-@read14/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,rnext==,tlen=10
+@read14/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,tlen=10
 ---GCCTAAGAC----------
 +
 ---HHHHHHHHH----------
-@read14/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,rnext==,tlen=10
+@read14/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,tlen=10
 -----CTTAGACAT--------
 +
 -----HH!HHHHHH--------
@@ -185,11 +189,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHHH--------
 # Both reads mapped to same reference.  Discordant insert, low/hi quality.  Expected: keep insert with higher quality seq2.
-@read15/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,rnext==,tlen=10
+@read15/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,tlen=10
 ---GCCTAAGAC----------
 +
 ---HHHH!HHHH----------
-@read15/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,rnext==,tlen=10
+@read15/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,tlen=10
 -----CTTAGACAT--------
 +
 -----HHHHHHHHH--------
@@ -198,11 +202,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHHH--------
 # Both reads mapped to same reference.  Discordant insert, low/low quality.  Expected: mask insert
-@read16/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,rnext==,tlen=10
+@read16/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,tlen=10
 ---GCCTAAGAC----------
 +
 ---HHHH!HHHH----------
-@read16/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,rnext==,tlen=10
+@read16/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,tlen=10
 -----CTTAGACAT--------
 +
 -----HH!HHHHHH--------
@@ -211,11 +215,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHH!HHHHHH--------
 # Both reads mapped to same reference.  Discordant insert, higher/hi quality.  Expected: accept insert in seq1
-@read17/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,rnext==,tlen=10
+@read17/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,tlen=10
 ---GCCTAAGAC----------
 +
 ---HHHHHHHHH----------
-@read17/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,rnext==,tlen=10
+@read17/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,tlen=10
 -----CTTAGACAT--------
 +
 -----HHGHHHHHH--------
@@ -224,11 +228,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHHH--------
 # Both reads mapped to same reference.  Discordant insert, hi/higher quality.  Expected: accept insert in seq2
-@read18/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,rnext==,tlen=10
+@read18/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,tlen=10
 ---GCCTAAGAC----------
 +
 ---HHHHGHHHH----------
-@read18/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,rnext==,tlen=10
+@read18/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,tlen=10
 -----CTTAGACAT--------
 +
 -----HHHHHHHHH--------
@@ -237,11 +241,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHHH--------
 # Both reads mapped to same reference.  Missing insert, no/hi quality.  Expected: discard insert.
-@read19/1    flag=99,rname=ref1,mapq=40,cigar=2M6M,rnext==,tlen=10
+@read19/1    flag=99,rname=ref1,mapq=40,cigar=2M6M,tlen=10
 -----CTAGACAT--------
 +
 -----HHHHHHHH--------
-@read19/2    flag=147,rname=ref1,mapq=40,cigar=4M1I4M,rnext==,tlen=10
+@read19/2    flag=147,rname=ref1,mapq=40,cigar=4M1I4M,tlen=10
 ---GCCTAAGAC----------
 +
 ---HHHHGHHHH----------
@@ -250,11 +254,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHH--------
 # Both reads mapped to same reference.  Missing insert, no/lo quality.  Expected: discard insert.
-@read20/1    flag=99,rname=ref1,mapq=40,cigar=8M,rnext==,tlen=10
+@read20/1    flag=99,rname=ref1,mapq=40,cigar=8M,tlen=10
 -----CTAGACAT--------
 +
 -----HHHHHHHH--------
-@read20/2    flag=147,rname=ref1,mapq=40,cigar=4M1I4M,rnext==,tlen=10
+@read20/2    flag=147,rname=ref1,mapq=40,cigar=4M1I4M,tlen=10
 ---GCCTAAGAC----------
 +
 ---HHHH!HHHH----------
@@ -263,11 +267,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHH--------
 # Both reads mapped to same reference.  Discordant insert, hi/hi equal quality.  Expected: mask insert.
-@read21/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,rnext==,tlen=10
+@read21/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,tlen=10
 ---GCCTAAGAC----------
 +
 ---HHHHGHHHH----------
-@read21/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,rnext==,tlen=10
+@read21/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,tlen=10
 -----CTGAGACAT--------
 +
 -----HHGHHHHHH--------
@@ -276,11 +280,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHGHHHHHH--------
 # Both reads mapped to same reference.  Multiple char insert discordant, higer/hi, hi/lo, lo/lo, hi/no, lo/no quality.  Expected: discard insert if mate missing.  Mask if low.
-@read22/1    flag=99,rname=ref1,mapq=40,cigar=4M5I4M,rnext==,tlen=10
+@read22/1    flag=99,rname=ref1,mapq=40,cigar=4M5I4M,tlen=10
 ---GCCTAAAAAAGAC----------
 +
 ---HHHHHH!H!HHHH----------
-@read22/2    flag=147,rname=ref1,mapq=40,cigar=2M3I6M,rnext==,tlen=10
+@read22/2    flag=147,rname=ref1,mapq=40,cigar=2M3I6M,tlen=10
 -----CTTTTAGACAT--------
 +
 -----HHG!!HHHHHH--------
@@ -289,37 +293,37 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHH!HHHHHH--------
 # Both reads mapped to same reference.  Insert in 1 mate outside of overlap, high quality.  Expect: take seq1 insert.
-@read23/1    flag=99,rname=ref1,mapq=40,cigar=2M1I6M,rnext==,tlen=10
+@read23/1    flag=99,rname=ref1,mapq=40,cigar=2M1I6M,tlen=10
 ---GCCCTAGAC----------
 +
 ---HHHHHHHHH----------
-@read23/2    flag=147,rname=ref1,mapq=40,cigar=7M,rnext==,tlen=13
+@read23/2    flag=147,rname=ref1,mapq=40,cigar=7M,tlen=13
 ------TAGACAT--------
 +
 ------HHHHHHH--------
-@merged_read23 inserts=8
+@merged_read23 inserts=6
 ---GCCCTAGACAT--------
 +
 ---HHHHHHHHHHH--------
 # Both reads mapped to same reference, insert in 2 mate outside of overlap, high quality.  Expect: take seq2 insert.
-@read24/1    flag=99,rname=ref1,mapq=40,cigar=7M,rnext==,tlen=13
+@read24/1    flag=99,rname=ref1,mapq=40,cigar=7M,tlen=13
 ------TAGACAT--------
 +
 ------HHHHHHH--------
-@read24/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,rnext==,tlen=10
+@read24/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,tlen=10
 ---GCCCTAGAC----------
 +
 ---HHHHHHHHH----------
-@merged_read24 inserts=8
+@merged_read24 inserts=6
 ---GCCCTAGACAT--------
 +
 ---HHHHHHHHHHH--------
 # Both reads mapped to same reference.  Insert in 1 mate outside of overlap, lo quality.  Expect: Exclude seq1 insert.
-@read25/1    flag=99,rname=ref1,mapq=40,cigar=2M1I6M,rnext==,tlen=10
+@read25/1    flag=99,rname=ref1,mapq=40,cigar=2M1I6M,tlen=10
 ---GCCCTAGAC----------
 +
 ---HH!HHHHHH----------
-@read25/2    flag=147,rname=ref1,mapq=40,cigar=7M,rnext==,tlen=13
+@read25/2    flag=147,rname=ref1,mapq=40,cigar=7M,tlen=13
 ------TAGACAT--------
 +
 ------HHHHHHH--------
@@ -328,11 +332,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHH--------
 # Both reads mapped to same reference, insert in 2 mate outside of overlap, lo quality.  Expect: Ignore seq2 insert.
-@read26/1    flag=99,rname=ref1,mapq=40,cigar=7M,rnext==,tlen=13
+@read26/1    flag=99,rname=ref1,mapq=40,cigar=7M,tlen=13
 ------TAGACAT--------
 +
 ------HHHHHHH--------
-@read26/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,rnext==,tlen=10
+@read26/2    flag=147,rname=ref1,mapq=40,cigar=2M1I6M,tlen=10
 ---GCCCTAGAC----------
 +
 ---HH!HHHHHH----------
@@ -341,11 +345,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 ---HHHHHHHHHH--------
 # 2nd read mapped to desired reference, insert in what would be overlapping region if they hit the same ref, high quality.  Expect: keep insert in seq2.
-@read27/1    flag=99,rname=ref2,mapq=40,cigar=8M,rnext=ref1,tlen=10
+@read27/1    flag=99,rname=ref2,mapq=40,cigar=8M,tlen=10
 ---GCCTAGAC----------
 +
 ---HHHHHHHH----------
-@read27/2    flag=147,rname=ref1,mapq=40,cigar=5M1I4M,rnext=ref2,tlen=10
+@read27/2    flag=147,rname=ref1,mapq=40,cigar=5M1I4M,tlen=10
 -----CTAGAACATT-------
 +
 -----HHHHHHHHHH-------
@@ -354,11 +358,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 -----HHHHHHHHHH-------
 # 1st read mapped to desired reference, insert in what would be overlapping region if they hit the same ref, high quality. Expect: keep insert in seq1
-@read28/1    flag=99,rname=ref1,mapq=40,cigar=5M1I4M,rnext=ref2,tlen=10
+@read28/1    flag=99,rname=ref1,mapq=40,cigar=5M1I4M,tlen=10
 -----CTAGAACATT-------
 +
 -----HHHHHHHHHH-------
-@read28/2    flag=147,rname=ref2,mapq=40,cigar=8M,rnext=ref1,tlen=10
+@read28/2    flag=147,rname=ref2,mapq=40,cigar=8M,tlen=10
 ---GCCTAGAC----------
 +
 ---HHHHHHHH----------
@@ -367,11 +371,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 -----HHHHHHHHHH-------
 # 1st read mapped to desired reference.  2nd read unmapped.
-@read29/1    flag=73,rname=ref1,mapq=40,cigar=5M1I4M,rnext=ref2,tlen=10
+@read29/1    flag=73,rname=ref1,mapq=40,cigar=5M1I4M,tlen=10
 -----CTAGAACATT-------
 +
 -----HHHHHHHHHH-------
-@read29/2    flag=133,rname=*,mapq=*,cigar=*,rnext=*,tlen=*
+@read29/2    flag=133,rname=*,mapq=*,cigar=*,tlen=*
 ---GCCTAGAC----------
 +
 ---HHHHHHHH----------
@@ -380,11 +384,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 -----HHHHHHHHHH-------
 # 2nd read mapped to desired reference.  1st read unmapped.
-@read30/1    flag=69,rname=*,mapq=*,cigar=*,rnext=*,tlen=*
+@read30/1    flag=69,rname=*,mapq=*,cigar=*,tlen=*
 ---GCCTAGAC----------
 +
 ---HHHHHHHH----------
-@read30/2    flag=137,rname=ref1,mapq=40,cigar=5M1I4M,rnext=ref2,tlen=10
+@read30/2    flag=137,rname=ref1,mapq=40,cigar=5M1I4M,tlen=10
 -----CTAGAACATT-------
 +
 -----HHHHHHHHHH-------
@@ -393,11 +397,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 -----HHHHHHHHHH-------
 # Both reads mapped to same reference.  Both mates after slice.  Expect:  If sliced, no merged read.
-@read31/1    flag=99,rname=ref1,mapq=40,cigar=2M,rnext==,tlen=2
+@read31/1    flag=99,rname=ref1,mapq=40,cigar=2M,tlen=2
 -------------------GT
 +
 -------------------HH
-@read31/2    flag=147,rname=ref1,mapq=40,cigar=2M,rnext==,tlen=2
+@read31/2    flag=147,rname=ref1,mapq=40,cigar=2M,tlen=2
 -----------------AG--
 +
 -----------------HH--
@@ -406,11 +410,11 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 -----------------HHHH
 # Both reads mapped to same reference.  Both mates before slice.  Expect:  If sliced, no merged read.
-@read32/1    flag=99,rname=ref1,mapq=40,cigar=2M,rnext==,tlen=2
+@read32/1    flag=99,rname=ref1,mapq=40,cigar=2M,tlen=2
 TA-------------------
 +
 HH-------------------
-@read32/2    flag=147,rname=ref1,mapq=40,cigar=2M,rnext==,tlen=2
+@read32/2    flag=147,rname=ref1,mapq=40,cigar=2M,tlen=2
 TA-------------------
 +
 HH-------------------
@@ -419,11 +423,11 @@ TA-------------------
 +
 HH-------------------
 # Both reads mapped to same reference.  Mate1 before slice.  Expect:  If slice, only mate2
-@read33/1    flag=99,rname=ref1,mapq=40,cigar=2M,rnext==,tlen=2
+@read33/1    flag=99,rname=ref1,mapq=40,cigar=2M,tlen=2
 TA-------------------
 +
 HH-------------------
-@read33/2    flag=147,rname=ref1,mapq=40,cigar=4M1I4M,rnext==,tlen=10
+@read33/2    flag=147,rname=ref1,mapq=40,cigar=4M1I4M,tlen=10
 -----CTAGGACAT--------
 +
 -----HHHHHHHHH--------
@@ -432,11 +436,11 @@ TANNNCTAGGACAT--------
 +
 HH---HHHHHHHHH--------
 # Both reads mapped to same reference.  Mate2 before slice.  Expect:  If slice, only mate1
-@read34/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,rnext==,tlen=10
+@read34/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,tlen=10
 -----CTAGGACAT--------
 +
 -----HHHHHHHHH--------
-@read34/2    flag=147,rname=ref1,mapq=40,cigar=2M,rnext==,tlen=2
+@read34/2    flag=147,rname=ref1,mapq=40,cigar=2M,tlen=2
 TA-------------------
 +
 HH-------------------
@@ -445,11 +449,11 @@ TANNNCTAGGACAT--------
 +
 HH---HHHHHHHHH--------
 # Both reads mapped to same reference.  Mate1 after slice.  Expect:  If sliced, only mate2
-@read35/1    flag=99,rname=ref1,mapq=40,cigar=2M,rnext==,tlen=2
+@read35/1    flag=99,rname=ref1,mapq=40,cigar=2M,tlen=2
 -------------------GT
 +
 -------------------HH
-@read35/2    flag=147,rname=ref1,mapq=40,cigar=4M1I4M,rnext==,tlen=10
+@read35/2    flag=147,rname=ref1,mapq=40,cigar=4M1I4M,tlen=10
 -----CTAGGACAT--------
 +
 -----HHHHHHHHH--------
@@ -458,11 +462,11 @@ HH---HHHHHHHHH--------
 +
 -----HHHHHHHHH------HH
 # Both reads mapped to same reference.  Mate2 after slice.  Expect:  If sliced, only mate1
-@read36/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,rnext==,tlen=10
+@read36/1    flag=99,rname=ref1,mapq=40,cigar=4M1I4M,tlen=10
 -----CTAGGACAT--------
 +
 -----HHHHHHHHH--------
-@read36/2    flag=147,rname=ref1,mapq=40,cigar=2M,rnext==,tlen=2
+@read36/2    flag=147,rname=ref1,mapq=40,cigar=2M,tlen=2
 -------------------GT
 +
 -------------------HH
@@ -471,11 +475,11 @@ HH---HHHHHHHHH--------
 +
 -----HHHHHHHHH------HH
 # Both reads mapped to same reference.  Inserts are after slice.  Expect:  If sliced, don't have any inserts.
-@read37/1    flag=99,rname=ref1,mapq=40,cigar=1M1I1M,rnext==,tlen=2
+@read37/1    flag=99,rname=ref1,mapq=40,cigar=1M1I1M,tlen=2
 -------------------GAT
 +
 -------------------HHH
-@read37/2    flag=147,rname=ref1,mapq=40,cigar=2M,rnext==,tlen=2
+@read37/2    flag=147,rname=ref1,mapq=40,cigar=2M,tlen=2
 -----------------AG--
 +
 -----------------HH--
@@ -484,11 +488,11 @@ HH---HHHHHHHHH--------
 +
 -----------------HHHHH
 # Both reads mapped to same reference.  Inserts are before slice.  Expect:  If sliced, don't have any inserts.
-@read38/1    flag=99,rname=ref1,mapq=40,cigar=1M1I1M,rnext==,tlen=2+
+@read38/1    flag=99,rname=ref1,mapq=40,cigar=1M1I1M,tlen=2+
 TAA-------------------
 +
 HHH-------------------
-@read38/2    flag=147,rname=ref1,mapq=40,cigar=1M1I1M,rnext==,tlen=2
+@read38/2    flag=147,rname=ref1,mapq=40,cigar=1M1I1M,tlen=2
 TAA-------------------
 +
 HHH-------------------
@@ -496,3 +500,81 @@ HHH-------------------
 TAA-------------------
 +
 HHH-------------------
+# Both reads mapped to same reference.  Concordant. Deletions are before slice.  Mates before slice. Expect:  If sliced, don't have any deletions.
+@read39/1    flag=99,rname=ref1,mapq=40,cigar=1M1D1M,tlen=3
+T-G------------------
++
+H-H------------------
+@read39/2    flag=147,rname=ref1,mapq=40,cigar=1M1D1M,tlen=3
+T-G------------------
++
+H-H------------------
+@merged_read39
+T-G------------------
++
+H-H------------------
+# Both reads mapped to same reference.  Concordant.  Deletion in mate 1,mate2 that causes them to just barely intersect slice.  Expected:  both mates in slice.
+@read40/1    flag=99,rname=ref1,mapq=40,cigar=1M1D2M,tlen=16
+T-GG-----------------
++
+H-HH-----------------
+@read40/2    flag=147,rname=ref1,mapq=40,cigar=3M1D1M,tlen=16
+-----------ATT-A-----
++
+-----------HHH-H-----
+@merged_read40
+T-GGNNNNNNNATT-A-----
++
+H-HH-------HHH-H-----
+# Both reads mapped to same reference.  Disconcordant delete/base.  Deletion in mate 1,mate2 that causes them to just barely intersect slice.  Expected:  Replace discordant deletion with N.
+@read41/1    flag=99,rname=ref1,mapq=40,cigar=1M1D2M,tlen=16
+T-GG-----------------
++
+H-HH-----------------
+@read41/2    flag=147,rname=ref1,mapq=40,cigar=4M7D3M1D1M,tlen=16
+TAGG-------ATT-A-----
++
+HHHH-------HHH-H-----
+@merged_read41
+TNGG-------ATT-A-----
++
+H-HH-------HHH-H-----
+# Both reads mapped to same reference.  Disconcordant base/deletion.  Deletion in mate 1,mate2 that causes them to just barely intersect slice.  Expected:  Replace discordant deletion with N.
+@read42/1    flag=99,rname=ref1,mapq=40,cigar=4M7D3M1D1M,tlen=16
+TAGG-------ATT-A-----
++
+HHHH-------HHH-H-----
+@read42/2    flag=147,rname=ref1,mapq=40,cigar=1M1D2M,tlen=16
+T-GG-----------------
++
+H-HH-----------------
+@merged_read42
+TNGG-------ATT-A-----
++
+H-HH-------HHH-H-----
+# Both reads mapped to same reference.  Concordant. Deletions are after slice.  Mates after slice.  Expect:  If sliced, don't have any deletions.
+@read43/1    flag=99,rname=ref1,mapq=40,cigar=1M1D1M,tlen=4
+------------------G-T
++
+------------------H-H
+@read43/2    flag=147,rname=ref1,mapq=40,cigar=2D,tlen=4
+-----------------AG--
++
+-----------------HH--
+@merged_read43
+-----------------AG-T
++
+-----------------HH-H
+# Both reads mapped to same reference, high quality, No conflict.  Deletion in slice.  Expect:  accept all seq.
+@read44/1    flag=99,rname=ref1,mapq=40,cigar=3M2D3D,tlen=10
+---GCC--GAC----------
++
+---HHH--HHH----------
+@read44/2    flag=147,rname=ref1,mapq=40,cigar=1M2D5M,tlen=10
+-----C--GACAT--------
++
+-----H--HHHHH--------
+@merged_read44
+---GCC--GACAT--------
++
+---HHH--HHHHH--------

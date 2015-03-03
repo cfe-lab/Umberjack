@@ -21,7 +21,8 @@ class PairedRecord:
         self.mate1 = mate1_record
         self.mate2 = mate2_record
         if self.mate1.rname != self.mate2.rname:
-            raise ValueError("mate1_record and mate2_record  must align to the same reference")
+            raise ValueError("mate1_record and mate2_record  must align to the same reference.  " +
+                             "Refs: =(" + str(self.mate1.rname) + ", " + str(self.mate2.rname) + ")")
         self.mate1.fill_mate(self.mate2)
         self.read_start_wrt_ref = None
         self.read_end_wrt_ref = None
@@ -275,7 +276,6 @@ class PairedRecord:
             mseq_with_inserts += sliced_mseq[last_insert_pos_0based_wrt_mseq+1:insert_pos_0based_wrt_mseq+1] + insert_seq
             last_insert_pos_0based_wrt_mseq = insert_pos_0based_wrt_mseq
 
-        # TODO:  assume that bowtie will not let inserts at beginning/end of align, but check
         mseq_with_inserts += sliced_mseq[last_insert_pos_0based_wrt_mseq+1:len(sliced_mseq)]
 
         if merge_rpos_to_insert:
@@ -425,8 +425,8 @@ class PairedRecord:
 
         :param pad_space_btn_mates:
         :param do_pad_wrt_slice:
-        :return:  merged paired-end read
-        :rtype : str
+        :return:  merged paired-end read, AlignStats instance
+        :rtype : (str, AlignStats)
         :param int q_cutoff: quality cutoff below which a base is converted to N if there is no consensus between the mates.
         :param bool do_insert_wrt_ref: whether insertions with respect to reference is allowed.
         """
