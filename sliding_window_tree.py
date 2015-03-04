@@ -20,8 +20,8 @@ formatter = logging.Formatter('%(asctime)s - [%(levelname)s] [%(name)s] [%(proce
 console_handler.setFormatter(formatter)
 LOGGER.addHandler(console_handler)
 
-# LOG_CONFIGFILE = os.path.dirname(os.path.realpath(__file__)) + os.sep + "logging.config"
-# logging.config.fileConfig(LOG_CONFIGFILE, defaults=None, disable_existing_loggers=True)
+# LOG_CONFIGFILE = os.path.dirname(os.path.realpath(__file__)) + os.sep + "logging.conf"
+# logging.conf.fileConfig(LOG_CONFIGFILE, defaults=None, disable_existing_loggers=True)
 # LOGGER = logging.getLogger(__name__)
 
 # For MPI
@@ -449,8 +449,8 @@ def main():
     parser.add_argument("--max_prop_n", type=float, default=0.1,
                         help="maximum fraction of Ns allowed in the merged paired-end read below which the paired-end"
                              " read is ignored")
-    parser.add_argument("--window_size", type=int, default=400, help="window size in nucleotides")
-    parser.add_argument("--window_slide", type=int, default=50, help="Number of bases to slide each window by")
+    parser.add_argument("--window_size", type=int, default=300, help="window size in nucleotides")
+    parser.add_argument("--window_slide", type=int, default=30, help="Number of bases to slide each window by")
     parser.add_argument("--window_breadth_cutoff", type=float, default=0.8,
                         help="fraction of window that merged paired-end read must cover with non-gap and non-N"
                              " nucleotides.  Below this threshold, the read is omitted from the window.")
@@ -466,14 +466,14 @@ def main():
                         help="threads allotted per window.")
     parser.add_argument("--concurrent_windows", type=int, default=1,
                         help="Max number of windows to process concurrently. Ignored when --mpi is defined.")
-    parser.add_argument("--output_csv_filename", default='dnds.tsv',
+    parser.add_argument("--output_csv_filename", default='slidingwindow.out.csv',
                         help="In DNDS mode, the full filepath of final tab-separated values file containing selection information for"
                              " each codon site in the reference from averaged over multiple windows.")
     parser.add_argument("--hyphy_exe", help="full filepath of HYPHYMP executable.  Default: taken from PATH")
     parser.add_argument("--hyphy_basedir",
                         help="full filepath of HyPhy base directory containing template batch files.  Default:"
                              " /usr/local/lib/hyphy/TemplateBatchFiles/")
-    parser.add_argument("--fastree_exe", help="full filepath of FastTreeMP executable.  Default: taken from PATH")
+    parser.add_argument("--fastree_exe", help="full filepath of FastTreeMP or FastTree executable.  Default: taken from PATH")
     parser.add_argument("--mode", default='DNDS', help="DNDS: Execute dN/dS analysis for positive (diversifying "
                                                        "selection in codon alignment.  GTR_RATE: Profile "
                                                        "nucleotide substitution rate biases under generalized "
@@ -484,8 +484,8 @@ def main():
                              "If python module mpi4py is not installed, then runs multiple processes on single "
                              "node. Default: false")
 
-    parser.add_argument("--debug", action='store_true',
-                        help="Whether to run the program in debug mode - debug logging, output full genome multiple sequence alignment, etc."
+    parser.add_argument("--output_debug_files", action='store_true',
+                        help="Whether to output all intermediate files, full genome multiple sequence alignment, FastTree stdout/stderr, HyPhy logging, etc"
                              "Default: false")
 
     args = parser.parse_args()
