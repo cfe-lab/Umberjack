@@ -166,8 +166,10 @@ class SamTestCase:
 
         There can be a single target reference in the fastq, but multiple references can be listed.
 
-        Each testcase is represented by a testcase descdription comment, up to 2 mates of a read,  and the expected merged, masked, padded sequence.
+        Each testcase is represented by a testcase description comment, up to 2 mates of a read,  and the expected merged, masked, padded sequence.
         All sequences and qualities are multiple sequence aligned.
+        Each read should include the sam fields flag, rname, mapq, cigar, tlen in the header.
+        The pos, rnext, pnext will be inferred by parse_fastq based on the multiple sequence alignment with the reference and the cigar string.
 
         EG)  There is 1 target reference, "ref1" and 1 testcase
         @ref1   Target  Slice=4,13
@@ -175,11 +177,11 @@ class SamTestCase:
         +
         HHHHHHHHHHHH
         # Comment describing testcase.
-        @read<testcase num>/1
+        @read<testcase num>/1   flag=99,rname=ref1,mapq=40,cigar=8M,tlen=10
         ACGTACGT----
         +
         HHHHHHHH-----
-        @read<testcase num>/2
+        @read<testcase num>/2   flag=147,rname=ref1,mapq=40,cigar=8M,tlen=10
         --------GGGG
         +
         --------HHHH

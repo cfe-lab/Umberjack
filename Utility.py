@@ -641,7 +641,7 @@ def get_consensus_from_msa(msa_fasta_filename, consensus_fasta_filename):
 def convert_fasta (lines):
     """
     Return contents of fasta file as list of tuples (header, sequence)
-    :rtype : list of tuples [[str, str]]
+    :rtype : list of tuples [(str, str)]
     :param lines: list of lines in fasta file
     """
     blocks = []

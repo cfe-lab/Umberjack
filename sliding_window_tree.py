@@ -140,7 +140,7 @@ def tabulate_results(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
                      end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, output_csv_filename, mode,
                      window_slide, smooth_dist):
 
-    ref_len = sam_handler.get_ref_len(sam_filename, ref)
+    ref_len = sam_handler.get_reflen(sam_filename, ref)
     comments = ("ref=" + ref + "," +
                 "ref_len=" + str(ref_len) + "," +
                 "sam=" + sam_filename + "," +
@@ -203,7 +203,7 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
 
     pool = pool_traceback.LoggingPool(processes=concurrent_windows)
 
-    ref_len = sam_handler.get_ref_len(sam_filename, ref)
+    ref_len = sam_handler.get_reflen(sam_filename, ref)
 
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)

@@ -9,7 +9,7 @@ import config.settings as settings
 
 LOGGER = logging.getLogger(__name__)
 
-
+# TODO:  test stop codons
 class TestSamRecord(unittest.TestCase):
 
     TEST_PAD_INSERT_FASTQ = os.path.dirname(os.path.realpath(__file__)) + os.sep + "data" + os.sep + "test.pad.insert.fq"
@@ -38,15 +38,19 @@ class TestSamRecord(unittest.TestCase):
 
             for do_pad_wrt_slice in [True, False]:
                 if not testcase.is_same_ref() and testcase.mate1.rname == testcase.target_ref:
-                    merged_seq, merged_qual, stats = sam_rec1.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=do_pad_wrt_slice,
-                                                                           do_mask_low_qual=True, q_cutoff=TestSamRecord.Q_CUTOFF,
+                    merged_seq, merged_qual, stats = sam_rec1.get_seq_qual(do_pad_wrt_ref=False,
+                                                                           do_pad_wrt_slice=do_pad_wrt_slice,
+                                                                           do_mask_low_qual=True,
+                                                                           q_cutoff=TestSamRecord.Q_CUTOFF,
                                                                            slice_start_wrt_ref_1based=testcase.slice_start,
                                                                            slice_end_wrt_ref_1based=testcase.slice_end,
                                                                            do_insert_wrt_ref=True)
                 elif not testcase.is_same_ref() and testcase.mate2.rname == testcase.target_ref:
                     # Test no padding wrt to ref, no padding wrt slice, include inserts wrt ref
-                    merged_seq, merged_qual, stats = sam_rec2.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=do_pad_wrt_slice,
-                                                                           do_mask_low_qual=True, q_cutoff=TestSamRecord.Q_CUTOFF,
+                    merged_seq, merged_qual, stats = sam_rec2.get_seq_qual(do_pad_wrt_ref=False,
+                                                                           do_pad_wrt_slice=do_pad_wrt_slice,
+                                                                           do_mask_low_qual=True,
+                                                                           q_cutoff=TestSamRecord.Q_CUTOFF,
                                                                            slice_start_wrt_ref_1based=testcase.slice_start,
                                                                            slice_end_wrt_ref_1based=testcase.slice_end,
                                                                            do_insert_wrt_ref=True)
@@ -85,15 +89,19 @@ class TestSamRecord(unittest.TestCase):
 
             for do_pad_wrt_slice in [True, False]:
                 if not testcase.is_same_ref() and testcase.mate1.rname == testcase.target_ref:
-                    merged_seq, merged_qual, stats = sam_rec1.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=do_pad_wrt_slice,
-                                                                           do_mask_low_qual=True, q_cutoff=TestSamRecord.Q_CUTOFF,
+                    merged_seq, merged_qual, stats = sam_rec1.get_seq_qual(do_pad_wrt_ref=False,
+                                                                           do_pad_wrt_slice=do_pad_wrt_slice,
+                                                                           do_mask_low_qual=True,
+                                                                           q_cutoff=TestSamRecord.Q_CUTOFF,
                                                                            slice_start_wrt_ref_1based=testcase.slice_start,
                                                                            slice_end_wrt_ref_1based=testcase.slice_end,
                                                                            do_insert_wrt_ref=False)
                 elif not testcase.is_same_ref() and testcase.mate2.rname == testcase.target_ref:
                     # Test no padding wrt to ref, no padding wrt slice, include inserts wrt ref
-                    merged_seq, merged_qual, stats = sam_rec2.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=do_pad_wrt_slice,
-                                                                           do_mask_low_qual=True, q_cutoff=TestSamRecord.Q_CUTOFF,
+                    merged_seq, merged_qual, stats = sam_rec2.get_seq_qual(do_pad_wrt_ref=False,
+                                                                           do_pad_wrt_slice=do_pad_wrt_slice,
+                                                                           do_mask_low_qual=True,
+                                                                           q_cutoff=TestSamRecord.Q_CUTOFF,
                                                                            slice_start_wrt_ref_1based=testcase.slice_start,
                                                                            slice_end_wrt_ref_1based=testcase.slice_end,
                                                                            do_insert_wrt_ref=False)

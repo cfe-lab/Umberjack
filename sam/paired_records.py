@@ -4,6 +4,7 @@ import sam_constants
 import sam.align_stats
 import math
 from sam.sam_record import SamRecord as SamRecord
+import Utility
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
@@ -308,22 +309,16 @@ class PairedRecord:
         # Do not pad with respect to the reference yet.  Do not pad with respect to the slice yet.
         # Pop out insertions with respect to the reference so that it is easier to find the sequence coordinates wrt ref.
         # Keep track of the insertions and the ref pos right before the insertion.
-        seq1, qual1, stats = self.mate1.get_seq_qual(do_pad_wrt_ref=False,
-                                                       do_pad_wrt_slice=True,
-                                                       do_mask_low_qual=False,
-                                                       q_cutoff=q_cutoff,
-                                                       do_insert_wrt_ref=False,
-                                                       slice_start_wrt_ref_1based=slice_start_wrt_ref_1based,
-                                                       slice_end_wrt_ref_1based=slice_end_wrt_ref_1based,
-                                                       stats=stats)
-        seq2, qual2, stats = self.mate2.get_seq_qual(do_pad_wrt_ref=False,
-                                                       do_pad_wrt_slice=True,
-                                                       do_mask_low_qual=False,
-                                                       q_cutoff=q_cutoff,
-                                                       do_insert_wrt_ref=False,
-                                                       slice_start_wrt_ref_1based=slice_start_wrt_ref_1based,
-                                                       slice_end_wrt_ref_1based=slice_end_wrt_ref_1based,
-                                                       stats=stats)
+        seq1, qual1, stats = self.mate1.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=True,
+                                                     do_mask_low_qual=False, q_cutoff=q_cutoff,
+                                                     slice_start_wrt_ref_1based=slice_start_wrt_ref_1based,
+                                                     slice_end_wrt_ref_1based=slice_end_wrt_ref_1based,
+                                                     do_insert_wrt_ref=False, do_mask_stop_codon=False, stats=stats)
+        seq2, qual2, stats = self.mate2.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=True,
+                                                     do_mask_low_qual=False, q_cutoff=q_cutoff,
+                                                     slice_start_wrt_ref_1based=slice_start_wrt_ref_1based,
+                                                     slice_end_wrt_ref_1based=slice_end_wrt_ref_1based,
+                                                     do_insert_wrt_ref=False, do_mask_stop_codon=False, stats=stats)
 
         if len(seq1) != len(seq2) or len(qual1) != len(qual2) or len(qual1) != len(seq1):
             raise ValueError("Expect left and right pad mate sequences and qualities such that they line up. " +
@@ -412,7 +407,7 @@ class PairedRecord:
 
 
     def merge_sam_reads(self, q_cutoff=10, pad_space_btn_mates="N", do_insert_wrt_ref=False, do_pad_wrt_ref=True,
-                        do_pad_wrt_slice=False, slice_end_wrt_ref_1based=None, slice_start_wrt_ref_1based=None,
+                        do_pad_wrt_slice=False, do_mask_stop_codon=False, slice_end_wrt_ref_1based=None, slice_start_wrt_ref_1based=None,
                         stats=None):
         """
         Merge two sequences that overlap over some portion (paired-end
@@ -429,6 +424,8 @@ class PairedRecord:
         :rtype : (str, AlignStats)
         :param int q_cutoff: quality cutoff below which a base is converted to N if there is no consensus between the mates.
         :param bool do_insert_wrt_ref: whether insertions with respect to reference is allowed.
+        :param bool do_mask_stop_codons: If True, then masks stop codons with "NNN".  Assumes that reference starts at beginning of codon.
+                Performs stop codon masking after masking low quality bases and after including insertions (if do_insert_wrt_ref==True).
         """
 
         mseq = ''
@@ -468,6 +465,19 @@ class PairedRecord:
             mseq, stats = self.__merge_inserts(sliced_mseq=mseq, q_cutoff=q_cutoff,
                                                   slice_start_wrt_ref_1based=read_slice_xsect_start_wrt_ref,
                                                   slice_end_wrt_ref_1based=read_slice_xsect_end_wrt_ref, stats=stats)
+
+        # Mask stop codons
+        # ASSUME:  that reference starts at beginning of a codon
+        if read_slice_xsect_start_wrt_ref % Utility.NUC_PER_CODON == 0:
+            codon_0based_offset_wrt_result_seq = 0
+        else:
+            codon_0based_offset_wrt_result_seq = Utility.NUC_PER_CODON - (read_slice_xsect_start_wrt_ref % Utility.NUC_PER_CODON)
+
+        for nuc_pos_wrt_result_seq_0based in range(codon_0based_offset_wrt_result_seq, len(mseq), Utility.NUC_PER_CODON):
+            codon = mseq[nuc_pos_wrt_result_seq_0based:nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON]
+            if Utility.CODON2AA.get(codon, "") == Utility.STOP_AA:
+                mseq = mseq[0:nuc_pos_wrt_result_seq_0based] + "NNN" + mseq[nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON:]
+
         # Now pad with respect to reference
         if do_pad_wrt_ref:
             mseq = SamRecord.do_pad(seq=mseq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,

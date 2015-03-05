@@ -1,0 +1,39 @@
+@HD	VN:1.4	SO:queryname
+@SQ	SN:targetref	LN:21
+@SQ	SN:wrongref	LN:300
+@CO	Tests that sam records are parsed and mate pairs are selected correctly.
+# qname, flag, rname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual
+tc1_read1	99	targetref	4	30	8M	targetref	6	10	GCCTAGAC	HHHHHHHH	CO:Paired mapped records followed by single mapped record.  Expect paired record merged into 1 seq in fasta.  Single record has 1 seq in fasta.
+tc1_read1	147	targetref	6	30	8M	targetref	4	10	CTAGACAT	HHHHHHHH	CO:Paired mapped records followed by single mapped record.  Expect paired record merged into 1 seq in fasta.  Single record has 1 seq in fasta.
+tc1_read2	0	targetref	5	30	7M	*	0	0	CCTAGAC	HHHHHHH	CO:Paired mapped records followed by single mapped record.  Expect paired record merged into 1 seq in fasta.  Single record has 1 seq in fasta.
+
+tc2_read1	0	targetref	5	30	7M	*	0	0	CCTAGAC	HHHHHHH	CO:single mapped record followed by paired mapped record..  Expect paired record is merged into 1 sequence in fasta.  single record has 1 sequence in fasta.
+tc2_read2	99	targetref	4	30	8M	targetref	6	10	GCCTAGAC	HHHHHHHH	CO:single mapped record followed by paired mapped record..  Expect paired record is merged into 1 sequence in fasta.  single record has 1 sequence in fasta.
+tc2_read2	147	targetref	6	30	8M	targetref	4	10	CTAGACAT	HHHHHHHH	CO:single mapped record followed by paired mapped record..  Expect paired record is merged into 1 sequence in fasta.  single record has 1 sequence in fasta.
+
+
+
+tc3_read1	99	targetref	4	30	8M	targetref	6	10	GCCTAGAC	HHHHHHHH	CO:paired mapped record followed by paired record with only 1st mate mapped.  Expected-paired record is merged into 1 sequence in fasta.  1st mapped mate in last pair has 1 sequence in fasta.
+tc3_read1	147	targetref	6	30	8M	targetref	4	10	CTAGACAT	HHHHHHHH	CO:paired mapped record followed by paired record with only 1st mate mapped.  Expected-paired record is merged into 1 sequence in fasta.  1st mapped mate in last pair has 1 sequence in fasta.
+tc3_read2	73	targetref	5	30	7M	*	0	0	CCTAGAC	HHHHHHH	CO:paired mapped record followed by paired record with only 1st mate mapped.  Expected-paired record is merged into 1 sequence in fasta.  1st mapped mate in last pair has 1 sequence in fasta.
+tc3_read2	133	*	0	255	*	targetref	5	0	*	*	CO:paired mapped record followed by paired record with only 1st mate mapped.  Expected-paired record is merged into 1 sequence in fasta.  1st mapped mate in last pair has 1 sequence in fasta.
+
+
+
+tc4_read1	99	targetref	4	30	8M	targetref	6	10	GCCTAGAC	HHHHHHHH	CO:paired mapped record followed by paired record with only 2nd mate mapped. Expected -  paired record is merged into 1 sequence in fasta.  2nd mapped mate in last pair has 1 sequence in fasta.
+tc4_read1	147	targetref	6	30	8M	targetref	4	10	CTAGACAT	HHHHHHHH	CO:paired mapped record followed by paired record with only 2nd mate mapped. Expected -  paired record is merged into 1 sequence in fasta.  2nd mapped mate in last pair has 1 sequence in fasta.
+tc4_read2	69	*	0	255	*	targetref	5	0	*	*	CO:paired mapped record followed by paired record with only 2nd mate mapped. Expected -  paired record is merged into 1 sequence in fasta.  2nd mapped mate in last pair has 1 sequence in fasta.
+tc4_read2	137	targetref	5	30	7M	*	0	0	CCTAGAC	HHHHHHH	CO:paired mapped record followed by paired record with only 2nd mate mapped. Expected -  paired record is merged into 1 sequence in fasta.  2nd mapped mate in last pair has 1 sequence in fasta.
+
+
+tc5_read1	73	targetref	5	30	7M	*	0	0	CCTAGAC	HHHHHHH	CO:paired record with only 1st mate mapped followed by paired mapped record.  Expected - paired record is merged into 1 sequence in fasta.  1st mapped mate in first pair has 1 sequence in fasta.
+tc5_read1	133	*	0	255	*	targetref	5	0	*	*	CO:paired record with only 1st mate mapped followed by paired mapped record.  Expected - paired record is merged into 1 sequence in fasta.  1st mapped mate in first pair has 1 sequence in fasta.
+tc5_read2	99	targetref	4	30	8M	targetref	6	10	GCCTAGAC	HHHHHHHH	CO:paired record with only 1st mate mapped followed by paired mapped record.  Expected - paired record is merged into 1 sequence in fasta.  1st mapped mate in first pair has 1 sequence in fasta.
+tc5_read2	147	targetref	6	30	8M	targetref	4	10	CTAGACAT	HHHHHHHH	CO:paired record with only 1st mate mapped followed by paired mapped record.  Expected - paired record is merged into 1 sequence in fasta.  1st mapped mate in first pair has 1 sequence in fasta.
+
+
+tc6_read1	69	*	0	255	*	targetref	5	0	*	*	CO:paired record with only 2nd mate mapped followed by paired mapped record.  Expected -  paired record is merged into 1 sequence in fasta.  2nd mapped mate in first pair has 1 sequence in fasta.
+tc6_read1	137	targetref	5	30	7M	*	0	0	CCTAGAC	HHHHHHH	CO:paired record with only 2nd mate mapped followed by paired mapped record.  Expected -  paired record is merged into 1 sequence in fasta.  2nd mapped mate in first pair has 1 sequence in fasta.
+tc6_read2	99	targetref	4	30	8M	targetref	6	10	GCCTAGAC	HHHHHHHH	CO:paired record with only 2nd mate mapped followed by paired mapped record.  Expected -  paired record is merged into 1 sequence in fasta.  2nd mapped mate in first pair has 1 sequence in fasta.
+tc6_read2	147	targetref	6	30	8M	targetref	4	10	CTAGACAT	HHHHHHHH	CO:paired record with only 2nd mate mapped followed by paired mapped record.  Expected -  paired record is merged into 1 sequence in fasta.  2nd mapped mate in first pair has 1 sequence in fasta.
+

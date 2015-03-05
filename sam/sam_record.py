@@ -3,13 +3,10 @@ import logging
 import sys
 import sam_constants
 import align_stats
+import Utility
+import config.settings as settings  # set logging config from logging.conf
 
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(logging.DEBUG)
-console_handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter('%(asctime)s - [%(levelname)s] [%(name)s] [%(process)d] %(message)s')
-console_handler.setFormatter(formatter)
-LOGGER.addHandler(console_handler)
 
 
 
@@ -94,19 +91,37 @@ class SamRecord:
         return mate_slice_intersect_start_wrt_ref, mate_slice_intersect_end_wrt_ref
 
 
+    def is_intersect_slice(self, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
+        """
+        Returns if the mate aligns to the slice region.
+         the 1-based position with respect to the reference of the intersection between the mate and slice.
+        :param slice_start_wrt_ref_1based:  1-based slice start position with respect to reference
+        :param slice_start_wrt_ref_1based:  1-based slice end position with respect to reference
+        :return:  True if the mate hits the slice (even with deletions, insertions, or non bases).  False otherwise.
+        :rtype: bool
+        """
+        return slice_start_wrt_ref_1based <= self.get_seq_end_wrt_ref() and slice_end_wrt_ref_1based >= self.get_seq_start_wrt_ref()
+
+
     def get_seq_qual(self, do_pad_wrt_ref=False, do_pad_wrt_slice=False, do_mask_low_qual=False, q_cutoff=10,
-                     slice_start_wrt_ref_1based=None, slice_end_wrt_ref_1based=None, do_insert_wrt_ref=False, stats=None):
+                     slice_start_wrt_ref_1based=None, slice_end_wrt_ref_1based=None, do_insert_wrt_ref=False,
+                     do_mask_stop_codon=False, stats=None):
         """
         Gets the sequence for the sam record.
-        :param do_pad_wrt_slice: Ignored if do_pad_wrt_ref=True.  If True, then pads with gaps with respect to the slice.
+        ASSUMES:  that sam cigar strings do not allow insertions at beginning or end of alignment (i.e.  local alignment as opposed to global alignment).
+
+
         :param bool do_pad_wrt_ref: Pad sequence with gaps with respect to the reference.
                         If slice_start_wrt_ref and slice_end_wrt_ref are valid, then pads the slice with respect to the reference.
-        :param bool do_insert_wrt_ref: Include insertions with respect to the reference.
-                        If slice_start_wrt_ref and slice_end_wrt_ref are valid, then only includes inserts inside the slice.
+        :param do_pad_wrt_slice: Ignored if do_pad_wrt_ref=True.  If True, then pads with gaps with respect to the slice.
         :param bool do_mask_low_qual: Mask bases with quality < q_cutoff with "N"
         :param int q_cutoff:  quality cutoff
         :param int slice_start_wrt_ref_1based:  If None, then whole sequence returned.   Otherwise, the slice 1-based start position with respect to the reference.
         :param int slice_end_wrt_ref_1based:  If None, then whole sequence returned.  Otherwise the slice end 1-based position with respect to the reference.
+        :param bool do_insert_wrt_ref: Include insertions with respect to the reference.
+                        If slice_start_wrt_ref and slice_end_wrt_ref are valid, then only includes inserts inside the slice.
+        :param bool do_mask_stop_codon:  If True, then masks stop codons with "NNN".  Assumes that the reference starts that the beginning of a codon.
+                Performs the stop codon masking after low quality base masking.
         :param AlignStats stats:  keeps track of stats.  Only counts inserts and quality if you allow inserts and mask quality.
         :return tuple (str, str, AlignStats):  (sequence, quality, AlignStats)
         """
@@ -212,7 +227,7 @@ class SamRecord:
                     result_qual_with_inserts += result_qual[last_insert_pos_0based_wrt_result_seq+1:insert_pos_0based_wrt_result_seq+1] + insert_qual
                     last_insert_pos_0based_wrt_result_seq = insert_pos_0based_wrt_result_seq
 
-            # TODO:  assume that bowtie will not let inserts at beginning/end of align, but check
+
             result_seq_with_inserts += result_seq[last_insert_pos_0based_wrt_result_seq+1:len(result_seq)]
             result_qual_with_inserts += result_qual[last_insert_pos_0based_wrt_result_seq+1:len(result_qual)]
 
@@ -223,6 +238,17 @@ class SamRecord:
             result_qual = result_qual_with_inserts
 
 
+        # Mask stop codons
+        # ASSUME:  that reference starts at beginning of a codon
+        if read_slice_xsect_start_wrt_ref % Utility.NUC_PER_CODON == 0:
+            codon_0based_offset_wrt_result_seq = 0
+        else:
+            codon_0based_offset_wrt_result_seq = Utility.NUC_PER_CODON - (read_slice_xsect_start_wrt_ref % Utility.NUC_PER_CODON)
+
+        for nuc_pos_wrt_result_seq_0based in range(codon_0based_offset_wrt_result_seq, len(result_seq), Utility.NUC_PER_CODON):
+            codon = result_seq[nuc_pos_wrt_result_seq_0based:nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON]
+            if Utility.CODON2AA.get(codon, "") == Utility.STOP_AA:
+                result_seq = result_seq[0:nuc_pos_wrt_result_seq_0based] + "NNN" + result_seq[nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON:]
 
 
         # Pad

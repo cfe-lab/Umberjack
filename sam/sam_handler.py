@@ -1,28 +1,23 @@
 import re
 import os
-import sys
-import subprocess
 import logging
 from sam_constants import SamFlag as SamFlag
 from sam_constants import  SamHeader as SamHeader
 import sam_record
 import paired_records
 import Utility
+import config.settings as settings      # sets the logging configs from logging.conf
+
 
 NEWICK_NAME_RE = re.compile('[:;\-\(\)\[\]]')
 
 
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(logging.DEBUG)
-console_handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter('%(asctime)s - [%(levelname)s] [%(name)s] [%(process)d] %(message)s')
-console_handler.setFormatter(formatter)
-LOGGER.addHandler(console_handler)
 
 
 # TODO:  max_prop_N doesn't make sense if we include left and right pad gaps in the sequence length
-# TODO:  make stop codon remove optional
-def __write_seq(fh_out, name, seq, max_prop_N, breadth_thresh, is_mask_stop_codon=False):
+# TODO:  how do we know that the sequence is on codon start????
+def __write_seq(fh_out, name, seq, max_prop_N, breadth_thresh):
     """
     Helper function to write out sequence to fasta file handle if has sufficient bases.
     :param FileIO fh_out:  python file handle
@@ -30,14 +25,14 @@ def __write_seq(fh_out, name, seq, max_prop_N, breadth_thresh, is_mask_stop_codo
     :param str seq:  Sequence
     :param float max_prop_N: maximum fraction allowed N
     :param breadth_thresh:
-    :param is_mask_stop_codon:
     :return  True if sequence written out
     """
-    # Set stop codons to NNN so that HyPhy doesn't auto-remove a site without telling us
-    for nuc_pos in range(0, len(seq), Utility.NUC_PER_CODON):
-        codon = seq[nuc_pos:nuc_pos+Utility.NUC_PER_CODON]
-        if Utility.CODON2AA.get(codon, "") == Utility.STOP_AA:
-            seq = seq[0:nuc_pos] + "NNN" + seq[nuc_pos+Utility.NUC_PER_CODON:]
+    # # Set stop codons to NNN so that HyPhy doesn't auto-remove a site without telling us
+    # if is_mask_stop_codon:
+    #     for nuc_pos in range(0, len(seq), Utility.NUC_PER_CODON):
+    #         codon = seq[nuc_pos:nuc_pos+Utility.NUC_PER_CODON]
+    #         if Utility.CODON2AA.get(codon, "") == Utility.STOP_AA:
+    #             seq = seq[0:nuc_pos] + "NNN" + seq[nuc_pos+Utility.NUC_PER_CODON:]
 
     if seq.count('N') / float(len(seq)) <= max_prop_N and (seq.count("N") + seq.count("-"))/float(len(seq)) <= (1.0-breadth_thresh):
         # Newick tree formats don't like special characters.  Convert them to underscores.
@@ -109,8 +104,8 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
                 continue
 
             lines_arr = line.rstrip().split('\t')
-            if len(lines_arr) < 11:  # in case there are no alignments
-                break
+            if len(lines_arr) < 11:  # in case there are no alignments on this line
+                continue
 
             qname, flag_str, rname, pos_str, mapq_str, cigar, rnext, pnext, tlen, seq, qual = lines_arr[:11]
             flag = int(flag_str)
@@ -141,13 +136,12 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
                 # If this record isn't paired and it passes our thresholds, then just write it out now
                 if not is_mate_paired and mate.mapq >= mapping_cutoff and (not ref or mate.rname == ref):
                     # Do low quality masking on the this record and write it out.
-                    mseq, mqual, stats = mate.get_seq_qual(do_pad_wrt_ref=False,
-                                                           do_pad_wrt_slice=True,
-                                                           do_mask_low_qual=True,
-                                                           q_cutoff=read_qual_cutoff,
+                    mseq, mqual, stats = mate.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=True,
+                                                           do_mask_low_qual=True, q_cutoff=read_qual_cutoff,
                                                            slice_start_wrt_ref_1based=start_pos,
                                                            slice_end_wrt_ref_1based=end_pos,
-                                                           do_insert_wrt_ref=is_insert)
+                                                           do_insert_wrt_ref=is_insert,
+                                                           do_mask_stop_codon=is_mask_stop_codon)
                     is_written = __write_seq(out_fasta_fh, mate.qname, mseq, max_prop_N, breadth_thresh)
                     prev_mate = None
                 # If this mate is paired, wait until we find the next mate in the pair or
@@ -177,29 +171,28 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
                                                            do_insert_wrt_ref=is_insert,
                                                            do_pad_wrt_ref=False,
                                                            do_pad_wrt_slice=True,
+                                                           do_mask_stop_codon=is_mask_stop_codon,
                                                            slice_start_wrt_ref_1based=start_pos,
                                                            slice_end_wrt_ref_1based=end_pos)
-                        is_written = __write_seq(out_fasta_fh, pair.get_name(), mseq, max_prop_N, breadth_thresh, is_mask_stop_codon)
+                        is_written = __write_seq(out_fasta_fh, pair.get_name(), mseq, max_prop_N, breadth_thresh)
 
                     elif prev_mate.mapq >= mapping_cutoff  and (not ref or prev_mate.rname == ref or prev_mate.rname == "="):
-                        mseq, mqual, stats = prev_mate.get_seq_qual(do_pad_wrt_ref=False,
-                                                                    do_pad_wrt_slice=True,
-                                                                    do_mask_low_qual=True,
-                                                                    q_cutoff=read_qual_cutoff,
+                        mseq, mqual, stats = prev_mate.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=True,
+                                                                    do_mask_low_qual=True, q_cutoff=read_qual_cutoff,
                                                                     slice_start_wrt_ref_1based=start_pos,
                                                                     slice_end_wrt_ref_1based=end_pos,
-                                                                    do_insert_wrt_ref=is_insert)
-                        is_written = __write_seq(out_fasta_fh, prev_mate.qname, mseq, max_prop_N, breadth_thresh, is_mask_stop_codon)
+                                                                    do_insert_wrt_ref=is_insert,
+                                                                    do_mask_stop_codon=is_mask_stop_codon)
+                        is_written = __write_seq(out_fasta_fh, prev_mate.qname, mseq, max_prop_N, breadth_thresh)
 
                     elif mate.mapq >= mapping_cutoff  and (not ref or mate.rname == ref or mate.rname == "="):
-                        mseq, mqual, stats = mate.get_seq_qual(do_pad_wrt_ref=False,
-                                                               do_pad_wrt_slice=True,
-                                                               do_mask_low_qual=True,
-                                                               q_cutoff=read_qual_cutoff,
+                        mseq, mqual, stats = mate.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=True,
+                                                               do_mask_low_qual=True, q_cutoff=read_qual_cutoff,
                                                                slice_start_wrt_ref_1based=start_pos,
                                                                slice_end_wrt_ref_1based=end_pos,
-                                                               do_insert_wrt_ref=is_insert)
-                        is_written = __write_seq(out_fasta_fh, mate.qname, mseq, max_prop_N, breadth_thresh, is_mask_stop_codon)
+                                                               do_insert_wrt_ref=is_insert,
+                                                               do_mask_stop_codon=is_mask_stop_codon)
+                        is_written = __write_seq(out_fasta_fh, mate.qname, mseq, max_prop_N, breadth_thresh)
 
 
                     # Clear the paired mate expectations for next set of sam records
@@ -210,14 +203,13 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
 
                     # Write out prev_mate
                     if prev_mate.mapq >= mapping_cutoff  and (not ref or prev_mate.rname == ref or prev_mate.rname == "="):
-                        mseq, mqual, stats = prev_mate.get_seq_qual(do_pad_wrt_ref=False,
-                                                                    do_pad_wrt_slice=True,
-                                                                    do_mask_low_qual=True,
-                                                                    q_cutoff=read_qual_cutoff,
+                        mseq, mqual, stats = prev_mate.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=True,
+                                                                    do_mask_low_qual=True, q_cutoff=read_qual_cutoff,
                                                                     slice_start_wrt_ref_1based=start_pos,
                                                                     slice_end_wrt_ref_1based=end_pos,
-                                                                    do_insert_wrt_ref=is_insert)
-                        is_written = __write_seq(out_fasta_fh, prev_mate.qname, mseq, max_prop_N, breadth_thresh, is_mask_stop_codon)
+                                                                    do_insert_wrt_ref=is_insert,
+                                                                    do_mask_stop_codon=is_mask_stop_codon)
+                        is_written = __write_seq(out_fasta_fh, prev_mate.qname, mseq, max_prop_N, breadth_thresh)
 
                     if is_mate_paired:  # May this mate will pair with the next record
                         prev_mate = mate
@@ -232,13 +224,10 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
         # In case the last record expects a mate that is not in the sam file
         # Do low quality masking on the previous record and write it out.
         if prev_mate:
-            mseq, mqual = prev_mate.get_seq_qual(do_pad_wrt_ref=False,
-                                                 do_pad_wrt_slice=True,
-                                                 do_mask_low_qual=True,
-                                                 q_cutoff=read_qual_cutoff,
-                                                 slice_start_wrt_ref_1based=start_pos,
-                                                 slice_end_wrt_ref_1based=end_pos,
-                                                 do_insert_wrt_ref=is_insert)
+            mseq, mqual = prev_mate.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=True, do_mask_low_qual=True,
+                                                 q_cutoff=read_qual_cutoff, slice_start_wrt_ref_1based=start_pos,
+                                                 slice_end_wrt_ref_1based=end_pos, do_insert_wrt_ref=is_insert,
+                                                 do_mask_stop_codon=is_mask_stop_codon)
             is_written = __write_seq(out_fasta_fh, prev_mate.qname, mseq, max_prop_N, breadth_thresh)
             total_written += 1 if is_written else 0
 
@@ -268,7 +257,15 @@ def is_query_sort(sam_filename):
                     return False
     return False
 
+
 def get_reflen(sam_filename, ref):
+    """
+    Searches sam header for reference length
+    :param str sam_filename:  path to sam file
+    :param str ref: name of reference
+    :return: length of reference or None if not found in the header
+    :rtype: int
+    """
     with open(sam_filename, 'rU') as fh_in:
         for line in fh_in:
             if not line.startswith(SamHeader.TAG_HEADER_PREFIX):
@@ -285,41 +282,4 @@ def get_reflen(sam_filename, ref):
                         length = int(val)
                 if is_found_ref:
                     return length
-    return None
-
-
-
-def create_depth_file_from_bam(bam_filename):
-    """
-    Gets the coverage from samtools depth.
-    Creates a samtools per-base depth file with the same name as bam_filename but appended with ".depth".
-
-    TODO: what to do with STDERR
-
-    :param str bam_filename:  full path to sorted and indexed bam file
-    :return: returns full filepath to depth file
-    :rtype : str
-    :raise subprocess.CalledProcessError
-    """
-
-    # Get per-base depth
-    depth_filename = bam_filename + ".depth"
-    with open(depth_filename, 'w') as depth_fh:
-        subprocess.check_call(['samtools', 'depth', bam_filename], stdout=depth_fh, shell=False)
-    return depth_filename
-
-
-
-def get_ref_len(sam_filename, ref):
-    """
-    Gets the length of the desired reference from the sam file header.
-    """
-    with open(sam_filename, 'rU') as fh:
-        for line in fh:
-            if line.startswith("@SQ"):
-                fields = line.split("\t")
-                if line.find("SN:" + ref) >= 0:
-                    line_reflen_match = re.search(r"\tLN:(\d+)", line)
-                    return int(line_reflen_match.group(1))
-
     return None
