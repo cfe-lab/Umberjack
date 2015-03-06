@@ -2,19 +2,13 @@ import os
 import Utility
 import csv
 import glob
-import re
 import logging
 import fasttree.fasttree_handler as fasttree
-import sys
 import re
 import hyphy.hyphy_handler as hyphy_handler
 
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(logging.DEBUG)
-console_handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter('%(asctime)s - [%(levelname)s] [%(name)s] [%(process)d] %(message)s')
-console_handler.setFormatter(formatter)
-LOGGER.addHandler(console_handler)
+
 
 
 class _SiteDnDsInfo:

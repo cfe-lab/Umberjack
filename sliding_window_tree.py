@@ -12,17 +12,10 @@ import pool_traceback
 import hyphy.hyphy_handler as hyphy
 import fasttree.fasttree_handler as fasttree
 import math
+import config.settings as settings
 
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(logging.DEBUG)
-console_handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter('%(asctime)s - [%(levelname)s] [%(name)s] [%(process)d] %(message)s')
-console_handler.setFormatter(formatter)
-LOGGER.addHandler(console_handler)
 
-# LOG_CONFIGFILE = os.path.dirname(os.path.realpath(__file__)) + os.sep + "logging.conf"
-# logging.conf.fileConfig(LOG_CONFIGFILE, defaults=None, disable_existing_loggers=True)
-# LOGGER = logging.getLogger(__name__)
 
 # For MPI
 PRIMARY_RANK = 0
@@ -522,4 +515,5 @@ def main():
 
 
 if __name__ == '__main__':
+    settings.setup_logging()
     main()

@@ -6,18 +6,13 @@ import os
 import logging
 import sys
 import ConfigParser
-import indelible.indelible_handler as indelibler
 import hyphy.hyphy_handler as hyphy_handler
 import fasttree.fasttree_handler as fasttree_handler
-import shutil
+import config.settings as settings
 
-
+settings.setup_logging()
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(logging.DEBUG)
-console_handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter('%(asctime)s - [%(levelname)s] [%(name)s] [%(process)d] %(message)s')
-console_handler.setFormatter(formatter)
-LOGGER.addHandler(console_handler)
+
 
 
 SECTION = "sim"

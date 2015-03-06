@@ -1,7 +1,7 @@
 import logging
 import subprocess
 import os
-import config.settings as settings  # Sets the logging configs from logging.conf
+import config.settings as settings
 
 
 LOGGER = logging.getLogger(__name__)
