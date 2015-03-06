@@ -1,5 +1,5 @@
 import unittest
-import sliding_window_tree
+import umberjack
 import os
 import subprocess
 import Utility
@@ -8,7 +8,7 @@ import shutil
 
 # Simulation Configs
 SIM_DIR = os.path.dirname(os.path.realpath(__file__)) + os.sep + "simulations"
-SIM_DATA_FILENAME_PREFIX = "slidingwindow_unittest"
+SIM_DATA_FILENAME_PREFIX = "umberjack_unittest"
 SIM_DATA_DIR = SIM_DIR + os.sep + "data" + os.sep + SIM_DATA_FILENAME_PREFIX
 
 
@@ -42,14 +42,14 @@ WINDOW_PROCS = 3
 
 
 
-class TestSlidingWindowTree(unittest.TestCase):
+class TestUmberjack(unittest.TestCase):
 
     def setUp(self):
         """
         Generate simulated data for unit tests
         """
         # Specify sim_pipeline.py configurations into separate config file
-        config_filename = SIM_DATA_DIR + os.sep + "slidingwindow_unittest.config"
+        config_filename = SIM_DATA_DIR + os.sep + "umberjack_unittest.config"
         subprocess.check_call(["python", SIM_PIPELINE_PY, config_filename])
 
 
@@ -63,7 +63,7 @@ class TestSlidingWindowTree(unittest.TestCase):
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
         # TODO:  automate check output of R scripts.  Right now, we need to manually view HTML generated from R.
         # i.e.  it's up to you to open up ./simulations/R/sliding_window_tree_unit_test.html and inspect the graphs/contents.
-        sliding_window_tree.eval_windows_async(ref=REF, sam_filename=SAM_FILENAME,
+        umberjack.eval_windows_async(ref=REF, sam_filename=SAM_FILENAME,
                                                out_dir=OUT_DIR, map_qual_cutoff=MAPQ_CUTOFF,
                                                read_qual_cutoff=READ_QUAL_CUTOFF, max_prop_n=MAX_PROP_N,
                                                start_nucpos=START_NUCPOS, end_nucpos=END_NUCPOS,
@@ -93,7 +93,7 @@ class TestSlidingWindowTree(unittest.TestCase):
         ERR_FREE_ACTUAL_DNDS_CSV = ERR_FREE_OUT_DIR + os.sep + 'actual_dnds_by_site.csv'
         START_NUCPOS = 1
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
-        sliding_window_tree.eval_windows_async(ref=REF,
+        umberjack.eval_windows_async(ref=REF,
                                                sam_filename=ERR_FREE_SAM_FILENAME,
                                                out_dir=ERR_FREE_OUT_DIR,
                                                map_qual_cutoff=MAPQ_CUTOFF,
@@ -107,7 +107,7 @@ class TestSlidingWindowTree(unittest.TestCase):
                                                threads_per_window=THREADS_PER_WINDOW,
                                                concurrent_windows=WINDOW_PROCS,
                                                output_csv_filename=ERR_FREE_ACTUAL_DNDS_CSV,
-                                               mode=sliding_window_tree.MODE_DNDS,
+                                               mode=umberjack.MODE_DNDS,
                                                window_slide=WINDOW_SLIDE,
                                                smooth_dist=SMOOTH_DIST)
         # TODO:  verify concordance and correlation
@@ -138,7 +138,7 @@ class TestSlidingWindowTree(unittest.TestCase):
                                "-n", "2",  # copies of program per node
                                "-output-filename", OUT_DIR + os.sep + "Test_sliding_window_tree.log",  # stdout, stderr logfile
 
-                               "python", os.path.dirname(os.path.realpath(__file__)) + os.sep + os.pardir + os.sep + "sliding_window_tree.py",
+                               "python", os.path.dirname(os.path.realpath(__file__)) + os.sep + os.pardir + os.sep + "umberjack.py",
                                "--out_dir", OUT_DIR,
                                "--map_qual_cutoff", str(MAPQ_CUTOFF),
                                "--read_qual_cutoff", str(READ_QUAL_CUTOFF),

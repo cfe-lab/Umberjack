@@ -36,36 +36,7 @@ NUC_PER_CODON = 3
 
 class TestSliceMiSeq(unittest.TestCase):
 
-    def test_slice_msa_fasta(self):
-        # TEST CASE:  test that the sliced file is written properly to file
-        start_pos = 3001
-        end_pos = 3400
-        expected_total_seq = 6878
-        slice_fasta_filename = "./simulations/data/out/consensus/mut100_1x_errfree_window400/sample_genomes.100.1x.consensus.msa." + str(start_pos) + "_" + str(end_pos) + ".fasta"
 
-        total_seq = slice_miseq.create_slice_msa_fasta(fasta_filename=MSA_FASTA_FILENAME, out_fasta_filename=slice_fasta_filename,
-                                                       start_pos=start_pos, end_pos=end_pos, breadth_thresh=MIN_WINDOW_BREADTH_COV_FRACTION)
-
-        self.assertTrue(os.path.exists(slice_fasta_filename) and os.path.getsize(slice_fasta_filename) > 0,
-                        msg="Unable to write to sliced multiple-sequence aligned fasta file")
-        self.assertEqual(total_seq, expected_total_seq, msg="Expected total sequences written to file = " +
-                                                            str(expected_total_seq) + " but got " + str(total_seq))
-
-        expected_header = ">otu8542_read8"
-        expected_sequence = "CNCGCGCACGGGCGCGTAGAAGGTGGCGGGCCATTGAGAGATCCTCGAGTGTGNCCGGAGAANCGTAAAGGACGCCTCGGCCCCACACTACTGCACACTCCACAAGATGAAGTANTGGGCATCNCATTCAACCAAGATCACAGTGTACTATGCGAGGTCAAGGTTCGGGGTATAGACGGTCGTGCGATCCCTTCTGGTCGCGCCTCGCACTGTGCCGTGAGATACGGTCTTCGGTGGGCNCACANTAGGTACNATCGACATTCCANNATGTATGGTACGCCGAGTGTCGATTGGAGCCACNGGCTNGNCATTAGTCTAGNACTTGTCANACCATCCAGACGATTAGAACTACTTGCCCTGTTACTCANGCAAGTCGAAGC"
-        is_found_expected_header = False
-
-        with open(slice_fasta_filename, 'r') as slice_fasta_fh:
-            for line in slice_fasta_fh:
-                line = line.rstrip()
-                if line.split()[0] == expected_header:
-                    is_found_expected_header = True
-                    check_seq = slice_fasta_fh.next().rstrip()
-                    is_found_seq = check_seq.find(expected_sequence)
-                    self.assertGreaterEqual(check_seq, is_found_seq,
-                                     msg="Expected sequence " + expected_header + " to be " + expected_sequence + " but got " + check_seq)
-
-        self.assertTrue(is_found_expected_header, msg="Expected to find seq " + expected_header + " but didn't")
 
 
     def test_get_seq_dnds(self):

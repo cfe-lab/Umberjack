@@ -12,7 +12,7 @@ settings.setup_logging()
 
 # Simulation Configs
 SIM_DIR = os.path.dirname(os.path.realpath(__file__)) + os.sep + "simulations"
-SIM_DATA_FILENAME_PREFIX = "slidingwindow_unittest"
+SIM_DATA_FILENAME_PREFIX = "umberjack_unittest"
 SIM_DATA_DIR = SIM_DIR + os.sep + "data" + os.sep + SIM_DATA_FILENAME_PREFIX
 
 
@@ -103,7 +103,7 @@ class TestSamHandler(unittest.TestCase):
     #     Generate simulated data for unit tests
     #     """
     #     # Specify sim_pipeline.py configurations into separate config file
-    #     config_filename = SIM_DATA_DIR + os.sep + "slidingwindow_unittest.config"
+    #     config_filename = SIM_DATA_DIR + os.sep + "umberjack_unittest.config"
     #     subprocess.check_call(["python", SIM_PIPELINE_PY, config_filename])
     #
     #     if not os.path.exists(OUT_DIR):

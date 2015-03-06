@@ -170,7 +170,7 @@ else:
                       "INPUT=" + input_sam,
                       "OUTPUT=" + output_sam,
                       "SORT_ORDER=coordinate"]
-        # Sort by queryname for sliding_window_tree.py
+        # Sort by queryname for umberjack.py
         PICARD_SORT_QUERYNAME_SAM_CMD = ["java", "-jar", PICARD_BIN_DIR + os.sep + "picard.jar",
                       "SortSam",
                       "INPUT=" + input_sam,

@@ -459,7 +459,7 @@ def main():
                         help="threads allotted per window.")
     parser.add_argument("--concurrent_windows", type=int, default=1,
                         help="Max number of windows to process concurrently. Ignored when --mpi is defined.")
-    parser.add_argument("--output_csv_filename", default='slidingwindow.out.csv',
+    parser.add_argument("--output_csv_filename", default='umberjack.out.csv',
                         help="In DNDS mode, the full filepath of final tab-separated values file containing selection information for"
                              " each codon site in the reference from averaged over multiple windows.")
     parser.add_argument("--hyphy_exe", help="full filepath of HYPHYMP executable.  Default: taken from PATH")

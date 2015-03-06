@@ -1,4 +1,4 @@
-# Imports configurations from /SlidingWindow/config/slidingwindow.config file.
+# Imports configurations from /Umberjack/config/umberjack.config file.
 from ConfigParser import SafeConfigParser
 import os
 import logging
@@ -41,11 +41,11 @@ DEFAULT_LOG_CONFIG_DICT =  {
 
 # Execution Configs
 ###########################################
-SECTION = "slidingwindow"
-SLIDINGWINDOW_CONFIG_FILE = os.path.dirname(os.path.realpath(__file__)) + os.sep + "slidingwindow.config"
+SECTION = "umberjack"
+UMBERJACK_CONFIG_FILE = os.path.dirname(os.path.realpath(__file__)) + os.sep + "umberjack.config"
 
 # Set defaults
-if not os.path.exists(SLIDINGWINDOW_CONFIG_FILE):
+if not os.path.exists(UMBERJACK_CONFIG_FILE):
     SAM_FILENAME = None
     REF = None
     OUT_DIR = None
@@ -60,7 +60,7 @@ if not os.path.exists(SLIDINGWINDOW_CONFIG_FILE):
     END_NUCPOS = None
     THREADS_PER_WINDOW = 1
     CONCURRENT_WINDOWS = 1
-    OUTPUT_CSV_FILENAME = "slidingwindow.dnds.csv"
+    OUTPUT_CSV_FILENAME = "umberjack.dnds.csv"
     HYPHY_EXE = "HYPHYMP"
     HYPHY_BASEDIR = "/usr/local/lib/hyphy/TemplateBatchFiles/"
     FASTREE_EXE = "FastTreeMP"
@@ -87,11 +87,11 @@ else:
                                         "hyphy_exe": "HYPHYMP",
                                         "hyphy_basedir": "/usr/local/lib/hyphy/TemplateBatchFiles/",
                                         "fastree_exe": "FastTreeMP",
-                                        "output_csv_filename": "slidingwindow.out.csv",
+                                        "output_csv_filename": "umberjack.out.csv",
                                         "mpi":  False,
                                         "debug": False,
                               })
-    parser.readfp(fp=None, filename=SLIDINGWINDOW_CONFIG_FILE)
+    parser.readfp(fp=None, filename=UMBERJACK_CONFIG_FILE)
 
     SAM_FILENAME = parser.get(SECTION, "sam_filename")
     REF = parser.get(SECTION, "ref")
