@@ -665,6 +665,32 @@ def convert_fasta (lines):
         raise
     return blocks
 
+
+def get_seq_dict(fasta):
+    """
+    :param str fasta:  path to fasta
+    :return  dict  {str: str} :  sequence dict  {sequence name: sequence value}
+    """
+    header2seq = dict()
+    with open(fasta, 'rU') as fh_in:
+        header = None
+        seq = ""
+        for line in fh_in:
+            line = line.rstrip()
+            if line:
+                if line[0] == '>':
+                    if header:
+                        header2seq[header] = seq
+                    header = line[1:]
+                    seq = ""
+                else:
+                    seq += line
+
+        if header:
+            header2seq[header] = seq
+
+    return header2seq
+
 # # Only handles the start positions for now
 # def convert_1nuc_to_1codon(nuc_startpos_1based):
 #     return nuc_startpos_1based/NUC_PER_CODON + 1

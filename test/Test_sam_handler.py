@@ -6,6 +6,9 @@ import Utility
 import shutil
 import tempfile
 import sam_test_case
+import config.settings as settings
+
+settings.setup_logging()
 
 # Simulation Configs
 SIM_DIR = os.path.dirname(os.path.realpath(__file__)) + os.sep + "simulations"
@@ -28,14 +31,14 @@ SIM_SAM = SIM_DATA_DIR + os.sep + "mixed" + os.sep + "aln" + os.sep + SIM_DATA_F
 OUT_DIR = SIM_DIR + os.sep + "out" + SIM_DATA_FILENAME_PREFIX + os.sep + REF
 
 MAPQ_CUTOFF = 20  # alignment quality cutoff
-MAX_PROP_N = 0.1  # maximum proportion of N bases in MSA-aligned sequence
+MAX_PROP_N = 0.5  # maximum proportion of N bases in MSA-aligned sequence
 READ_QUAL_CUTOFF = 20   # Phred quality score cutoff [0,40]
 
 MIN_WINDOW_BREADTH_COV_FRACTION = 0.875
 
 TEST_DIR = os.path.dirname(os.path.realpath(__file__)) + os.sep + "out"
 
-TEST_PAD_INSERT_FASTQ = os.path.dirname(os.path.realpath(__file__)) + os.sep + "data" + os.sep + "test.pad.insert.fq"
+TEST_MERGE_FASTQ = os.path.dirname(os.path.realpath(__file__)) + os.sep + "data" + os.sep + "test.merge.fq"
 TEST_PAIR_SELECTION_SAM = os.path.dirname(os.path.realpath(__file__)) + os.sep + "data" + os.sep + "test.pairselection.sam"
 TEST_PAIR_SELECTION_TARGET_REF = "targetref"
 EXPECTED_TEST_PAIR_SELECTION_FULL_MSA_FASTA = os.path.dirname(os.path.realpath(__file__)) + os.sep + "data" + os.sep + "test.pairselection.msa.fasta"
@@ -47,7 +50,7 @@ class TestSamHandler(unittest.TestCase):
         if os.path.exists(TEST_DIR):
             shutil.rmtree(TEST_DIR)
             os.makedirs(TEST_DIR)
-        self.merge_testcases = sam_test_case.SamTestCase.parse_fastq(TEST_PAD_INSERT_FASTQ)
+        self.merge_testcases = sam_test_case.SamTestCase.parse_fastq(TEST_MERGE_FASTQ)
 
         self.TMPSAM_REF1 = "ref1"
         self.TMPSAM_REF1_LEN = 4
@@ -59,7 +62,7 @@ class TestSamHandler(unittest.TestCase):
         self.TMPSAM_REF_DNE_LEN = None
 
         # Unknown Sort Order Sam
-        self.tmpsam_unsort = tempfile.NamedTemporaryFile('w', dir=TEST_DIR, delete=False)
+        self.tmpsam_unsort = tempfile.NamedTemporaryFile('w', suffix=".nosort.sam", dir=TEST_DIR, delete=False)
         self.tmpsam_unsort.write("@HD\tVN:0.0\tSO:unknown\n")
         self.tmpsam_unsort.write("@PG\tID:fakeid\tPN:programname\tCL:fake command line\tDS:desc\tVN:version0\n")
         self.tmpsam_unsort.write("@CO\trandom comment1\n")
@@ -72,7 +75,7 @@ class TestSamHandler(unittest.TestCase):
         self.tmpsam_unsort.close()
 
         # Queryname Sort Order Sam
-        self.tmpsam_query = tempfile.NamedTemporaryFile('w', dir=TEST_DIR, delete=False)
+        self.tmpsam_query = tempfile.NamedTemporaryFile('w', suffix=".sort.query.sam", dir=TEST_DIR, delete=False)
         self.tmpsam_query.write("@HD\tVN:0.0\tSO:queryname\n")
         self.tmpsam_query.write("@PG\tID:fakeid\tPN:programname\tCL:fake command line\tDS:desc\tVN:version0\n")
         self.tmpsam_query.write("@CO\trandom comment1\n")
@@ -86,7 +89,7 @@ class TestSamHandler(unittest.TestCase):
 
 
         # No header sam
-        self.tmpsam_noheader = tempfile.NamedTemporaryFile('w', dir=TEST_DIR, delete=False)
+        self.tmpsam_noheader = tempfile.NamedTemporaryFile('w', suffix=".noheader.sam", dir=TEST_DIR, delete=False)
         self.tmpsam_noheader.write("read1\t4\t*\t0\t49\t*\t*\t*\t0\tACGT\tHHHH")
         self.tmpsam_noheader.flush()  # flush python buffer
         os.fsync(self.tmpsam_noheader.file.fileno())  # flush os buffer to disk
@@ -144,20 +147,34 @@ class TestSamHandler(unittest.TestCase):
 
 
     @staticmethod
-    def is_same_fasta(fasta1, fasta2):
+    def diff_fasta_line(fasta1, fasta2):
         """
         Checks if fasta contents are the same.  Order matters.  Header contents matter.
         Line endings don't matter.
         Assumes both fastas have each sequence on 1 line.
-        :return:
+        :return:  newline separated concatenation of the line in fasta1 and fasta2 that doesn't match or None if all lines match
+        :rtype: str
         """
         with open(fasta1, 'rU') as fh1, open(fasta2, 'rU') as fh2:
-            for line1 in fh1:
-                line2 = fh2.next()
-                if line1.rstrip() != line2.rstrip():
-                    return False
+            i = -1
+            for i, line1 in enumerate(fh1):
+                try:
+                    line2 = fh2.next()
+                    if line1.rstrip() != line2.rstrip():
+                        return "line " + str(i+1) + ":\n" + line1 + "\n" + line2
+                except StopIteration:  # in case fh2 is already at eof
+                    return "line " + str(i+1) + ":\n" + line1 + "\n<eof>"
 
-        return True
+            try:    # check if fh2 has more lines than fh1
+                line2 = fh2.next()
+                if line2:
+                    i += 1
+                    return "line " + str(i+1) + ":\n<eof>\n" + line2
+            except StopIteration:
+                pass  # in case fh2 is already at eof
+
+
+        return None
 
 
     def test_create_msa_slice_from_sam_pair_selection(self):
@@ -165,52 +182,12 @@ class TestSamHandler(unittest.TestCase):
         Tests that the sam_handler.create_msa_slice_from_sam() is iterating through the records
         and selecting the correct records for pairing.
 
-        Test Missing Mates:
-        - paired mapped record followed by single mapped record.
-            Expected: paired record is merged into 1 sequence into fasta.  single record has 1 sequence in fasta.
-        - single mapped record followed by paired mapped record.
-            Expected: paired record is merged into 1 sequence in fasta.  single record has 1 sequence in fasta.
-
-        Test Unmapped Mates:
-        - paired mapped record followed by paired record with only 1st mate mapped.
-            Expected: paired record is merged into 1 sequence in fasta.  1st mapped mate in last pair has 1 sequence in fasta.
-        - paired mapped record followed by paired record with only 2nd mate mapped.
-            Expected: paired record is merged into 1 sequence in fasta.  2nd mapped mate in last pair has 1 sequence in fasta.
-        - paired record with only 1st mate mapped followed by paired mapped record.
-            Expected: paired record is merged into 1 sequence in fasta.  1st mapped mate in first pair has 1 sequence in fasta.
-        - paired record with only 2nd mate mapped followed by paired mapped record.
-            Expected: paired record is merged into 1 sequence in fasta.  2nd mapped mate in first pair has 1 sequence in fasta.
-
-
-        Test Mates Mapped to wrong ref:
-        - paired record with 1st mate mapped to target ref, 2nd mate mapped to wrong ref, followed by paired record mapped to right ref.
-            Expected: paired record is merged into 1 sequence in fasta.  1st mapped mate in first pair has 1 sequence in fasta.
-        - paired record with 1st mate mapped to wrong ref, 2nd mate mapped to right ref, followed by paired record mapped to right ref.
-            Expected: paired record is merged into 1 sequence in fasta.  1st mapped mate in first pair has 1 sequence in fasta.
-
-        Test Pair Mapped to Wrong Ref:
-        - paired record mapped to wrong ref
-            Expected: paired record not in fasta
-
-        Test Low Map Qual Threshold:
-        - paired record with 1st mate mapped to target ref with low qual, 2nd mate mapped to right ref with high qual, followed by paired record mapped to right ref with high qual.
-            Expected: paired record is merged into 1 sequence in fasta.  1st mapped mate in first pair has 1 sequence in fasta.
-        - paired record with 1st mate mapped to target ref with hi qual, 2nd mate mapped to right ref with low qual, followed by paired record mapped to right ref with high qual.
-            Expected: paired record is merged into 1 sequence in fasta.  2nd mapped mate in first pair has 1 sequence in fasta.
-
-        Test Multiple Alignments:
-        - paired record - 1st mate secondary alignments on target ref & chimeric alignment on target ref, 2nd mate alignment on target ref, followed by
-            paired record mapped to target ref
-            Expected: 1st pair - 2nd mate sequence in fasta.  Last record single mate in fasta.
-        - paired record - 2nd mate secondary alignments on target ref & chimeric alignment on target ref, 1st mate alignment on target ref, followed by
-            paired record mapped to target ref
-            Expected: 1st pair - 1st mate sequence in fasta.  Last record single mate in fasta.
-        - paired record mapped to target ref followed by
-            paired record - 1st mate secondary alignments on target ref,  with chimeric alignment on target ref, 2nd mate alignment on target ref
-            Expected: 1st pair - 2nd mate sequence in fasta.  Last record single mate in fasta.
-        - paired record mapped to target ref followed by
-            paired record - 2nd mate secondary alignments on target ref with chimeric alignment on target ref, 1st mate alignment on target ref
-            Expected: 1st pair - 1st mate sequence in fasta.  Last record single mate in fasta.
+        - Test Missing Mates
+        - Test Unmapped Mates
+        - Test Mates Mapped to wrong ref
+        - Test Pair Mapped to Wrong Ref
+        - Test Low Map Qual Threshold:
+        - Test Secondary, Chimeric Alignments:
 
 
         CIGAR:  Should be tested in sam_record
@@ -218,12 +195,7 @@ class TestSamHandler(unittest.TestCase):
         -
         """
 
-        START_POS = 30
-        END_POS = 60
         ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA = TEST_DIR + os.sep + os.path.basename(TEST_PAIR_SELECTION_SAM).replace(".sam", ".msa.fasta")
-
-
-
 
         # Test that the pairs are selected correctly.   We don't care about slices, breadth thresholds or N's or masking stop codons here.
         # But we do care about mapping quality and target references.
@@ -238,18 +210,100 @@ class TestSamHandler(unittest.TestCase):
                                                             is_insert=False,
                                                             is_mask_stop_codon=False)
 
+
         self.assertTrue(os.path.exists(ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA) and os.path.getsize(ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA) > 0,
                         ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA + " doesn't exist or is empty")
 
-        expected_total_seq = Utility.get_total_seq_from_fasta(EXPECTED_TEST_PAIR_SELECTION_FULL_MSA_FASTA)
-        self.assertEqual(expected_total_seq, actual_written,
-                           "Expected {} but got {} total sequences written to {}".format(expected_total_seq,
-                                                                                         actual_written,
-                                                                                         ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA))
 
-        self.assertTrue(TestSamHandler.is_same_fasta(EXPECTED_TEST_PAIR_SELECTION_FULL_MSA_FASTA, ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA),
+        diff_line = TestSamHandler.diff_fasta_line(EXPECTED_TEST_PAIR_SELECTION_FULL_MSA_FASTA, ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA)
+        self.assertIsNone(diff_line,
                         "Expected full msa fasta " + EXPECTED_TEST_PAIR_SELECTION_FULL_MSA_FASTA + " different than " +
-                        ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA)
+                        ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA + ":\n"  + str(diff_line))
+
+        expected_written = Utility.get_total_seq_from_fasta(EXPECTED_TEST_PAIR_SELECTION_FULL_MSA_FASTA)
+        self.assertEqual(expected_written, actual_written,
+                         "Expect total written seq {} but got {} from {}".format(expected_written, actual_written, ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA))
+
+
+    def test_create_msa_slice_from_sam_unsorted(self):
+        """
+        Tests that the sam_handler.create_msa_slice_from_sam() requires a queryname sorted sam
+        """
+        actual_tmpsam_unsort_msa_fasta = TEST_DIR + os.sep + os.path.basename(self.tmpsam_unsort.name).replace(".sam", ".msa.fasta")
+        self.assertRaises(ValueError, sam.sam_handler.create_msa_slice_from_sam,
+                          sam_filename=self.tmpsam_unsort.name,
+                          ref=TEST_PAIR_SELECTION_TARGET_REF,
+                          out_fasta_filename=actual_tmpsam_unsort_msa_fasta,
+                          mapping_cutoff=MAPQ_CUTOFF,
+                          read_qual_cutoff=READ_QUAL_CUTOFF,
+                          max_prop_N=1.0,
+                          breadth_thresh=0,
+                          start_pos=None, end_pos=None,
+                          is_insert=False,
+                          is_mask_stop_codon=False)
+
+
+    def __write_sam_testcase(self, testcases, samfile):
+        """
+        Writes the sam records to file for the list of SamTestCase
+        """
+        # Assume each testcase has the same reference to length dict SamTestCase.ref2len
+        with open(samfile, 'w') as fh_out:
+            fh_out.write("@HD\tVN:0.0\tSO:queryname\n")
+            for ref, ref_len in testcases[0].ref2len.iteritems():
+                fh_out.write("@SQ\tSN:{}\tLN:{}\n".format(ref, ref_len))
+            for testcase in testcases:
+                lines = testcase.create_sam_lines()
+                fh_out.write(lines)
+
+
+    def test_create_msa_slice_from_sam_maxpropN(self):
+        """
+        Tests that the sam_handler.create_msa_slice_from_sam() filters out sequences that have too many N's or gaps
+        """
+
+        # We only care that the sequences are filtered by fraction of N's.
+        # We don't care about breadth thresholds or slicing.
+        ACTUAL_TEST_MERGE_FULL_MSA_FASTA = TEST_DIR + os.sep + os.path.basename(TEST_MERGE_FASTQ).replace(".fq", ".msa.fasta")
+        TEST_MERGE_SAM = TEST_DIR + os.sep + os.path.basename(TEST_MERGE_FASTQ).replace(".fq", ".sam")
+        self.__write_sam_testcase(self.merge_testcases, TEST_MERGE_SAM)
+
+        self.assertTrue(os.path.exists(TEST_MERGE_SAM) and os.path.getsize(TEST_MERGE_SAM) > 0,
+                        "Expected test case sam for merging records " + TEST_MERGE_SAM + " does not exist or is empty")
+
+        actual_written = sam.sam_handler.create_msa_slice_from_sam(sam_filename=TEST_MERGE_SAM,
+                                                            ref=self.merge_testcases[0].target_ref,
+                                                            out_fasta_filename=ACTUAL_TEST_MERGE_FULL_MSA_FASTA,
+                                                            mapping_cutoff=MAPQ_CUTOFF,
+                                                            read_qual_cutoff=READ_QUAL_CUTOFF,
+                                                            max_prop_N=MAX_PROP_N,
+                                                            breadth_thresh=0,
+                                                            start_pos=None, end_pos=None,
+                                                            is_insert=True,
+                                                            is_mask_stop_codon=True)
+
+        self.assertTrue(os.path.exists(ACTUAL_TEST_MERGE_FULL_MSA_FASTA) and os.path.getsize(ACTUAL_TEST_MERGE_FULL_MSA_FASTA) > 0,
+                        ACTUAL_TEST_MERGE_FULL_MSA_FASTA + " doesn't exist or is empty")
+
+        actual_header2seq = Utility.get_seq_dict(ACTUAL_TEST_MERGE_FULL_MSA_FASTA)
+
+        expected_written = 0
+        for testcase in self.merge_testcases:
+            expected_seq = testcase.get_sliced_merged_read(slice_start_pos_wrt_ref_1based=None, slice_end_pos_wrt_ref_1based=None,
+                                                           do_pad_wrt_slice=True, do_insert_wrt_ref=True, do_mask_stop_codon=True)
+            actual_seq = actual_header2seq.get(testcase.read_name, None)
+
+            if expected_seq.count("N") / float(len(expected_seq)) > MAX_PROP_N:
+                self.assertIsNone(actual_seq,
+                                  "Expect read " + testcase.read_name + " should not be in " + ACTUAL_TEST_MERGE_FULL_MSA_FASTA)
+            else:
+                expected_written += 1
+                self.assertEqual(expected_seq, actual_seq,
+                                 "Expected {} but got {} for testcase {}".format(expected_seq, actual_seq, testcase.read_name))
+
+        self.assertEqual(expected_written, actual_written,
+                         "Expect total written seq {} but got {} from {}".format(expected_written, actual_written, ACTUAL_TEST_MERGE_FULL_MSA_FASTA))
+
 
 
 if __name__ == '__main__':

@@ -6,7 +6,7 @@ from sam_constants import  SamHeader as SamHeader
 import sam_record
 import paired_records
 import Utility
-import config.settings as settings      # sets the logging configs from logging.conf
+
 
 
 NEWICK_NAME_RE = re.compile('[:;\-\(\)\[\]]')
@@ -15,24 +15,19 @@ NEWICK_NAME_RE = re.compile('[:;\-\(\)\[\]]')
 LOGGER = logging.getLogger(__name__)
 
 
-# TODO:  max_prop_N doesn't make sense if we include left and right pad gaps in the sequence length
-# TODO:  how do we know that the sequence is on codon start????
-def __write_seq(fh_out, name, seq, max_prop_N, breadth_thresh):
+def __write_seq(fh_out, name, seq, max_prop_N=1.0, breadth_thresh=0.0):
     """
     Helper function to write out sequence to fasta file handle if has sufficient bases.
+    Renames the sequence name so that it is newick compatible.
     :param FileIO fh_out:  python file handle
     :param str name: Sequence Name
     :param str seq:  Sequence
-    :param float max_prop_N: maximum fraction allowed N
-    :param breadth_thresh:
-    :return  True if sequence written out
+    :param float max_prop_N: maximum fraction allowed N.  Doesn't care about gaps.
+            Setting this to less than 1 only makes sense when a read has not been sliced prior to passing into this function,
+            since the fraction of N's is only calculated on the sequence passed in.
+    :param float breadth_thresh:  minimum fraction of true bases (ACGT) required.  Only calculated on the sequence passed in.
+    :return bool:  True if sequence written out
     """
-    # # Set stop codons to NNN so that HyPhy doesn't auto-remove a site without telling us
-    # if is_mask_stop_codon:
-    #     for nuc_pos in range(0, len(seq), Utility.NUC_PER_CODON):
-    #         codon = seq[nuc_pos:nuc_pos+Utility.NUC_PER_CODON]
-    #         if Utility.CODON2AA.get(codon, "") == Utility.STOP_AA:
-    #             seq = seq[0:nuc_pos] + "NNN" + seq[nuc_pos+Utility.NUC_PER_CODON:]
 
     if seq.count('N') / float(len(seq)) <= max_prop_N and (seq.count("N") + seq.count("-"))/float(len(seq)) <= (1.0-breadth_thresh):
         # Newick tree formats don't like special characters.  Convert them to underscores.
@@ -43,7 +38,7 @@ def __write_seq(fh_out, name, seq, max_prop_N, breadth_thresh):
     return False
 
 
-# TODO:  make stop codon removal optional
+
 def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cutoff, read_qual_cutoff, max_prop_N,
                               breadth_thresh, start_pos=None, end_pos=None, is_insert=False, is_mask_stop_codon=False,
                               ref_len=None):
@@ -57,9 +52,6 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
     Converts query names so that they are compatible with Newick format in phylogenetic reconstruction by
         converting colons, semicolons, parentheses to underscores.
 
-
-
-    :param is_mask_stop_codon:
     NB:  Sam file must be query sorted.
     NB:  Only takes the primary alignment.
 
@@ -81,7 +73,10 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
                 If include insertions, then the insertions will be multiple sequence aligned further by MAFFT.
     :param bool is_mask_stop_codon: whether to mask stop codons with "NNN".
                 Most useful when you want to do codon analysis aftwards, as many codon models do not allow stop codons.
+                Assumes that the reference starts at the beginning of a codon.
     :param int ref_len: length of reference.  If None, then takes length from sam headers.
+    :returns int:  total sequences written to multiple sequence aligned fasta
+    :raises : :py:class:`exceptions.ValueError` if sam file is not queryname sorted according to the sam header
     """
 
     LOGGER.debug("About to slice fasta " + out_fasta_filename + " from " + sam_filename)

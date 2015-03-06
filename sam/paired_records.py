@@ -1,5 +1,4 @@
 import logging
-import sys
 import sam_constants
 import sam.align_stats
 import math
@@ -7,11 +6,6 @@ from sam.sam_record import SamRecord as SamRecord
 import Utility
 
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(logging.DEBUG)
-console_handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter('%(asctime)s - [%(levelname)s] [%(name)s] [%(process)d] %(message)s')
-console_handler.setFormatter(formatter)
-LOGGER.addHandler(console_handler)
 
 class PairedRecord:
     """
@@ -424,7 +418,7 @@ class PairedRecord:
         :rtype : (str, AlignStats)
         :param int q_cutoff: quality cutoff below which a base is converted to N if there is no consensus between the mates.
         :param bool do_insert_wrt_ref: whether insertions with respect to reference is allowed.
-        :param bool do_mask_stop_codons: If True, then masks stop codons with "NNN".  Assumes that reference starts at beginning of codon.
+        :param bool do_mask_stop_codon: If True, then masks stop codons with "NNN".  Assumes that reference starts at beginning of codon.
                 Performs stop codon masking after masking low quality bases and after including insertions (if do_insert_wrt_ref==True).
         """
 
@@ -468,15 +462,17 @@ class PairedRecord:
 
         # Mask stop codons
         # ASSUME:  that reference starts at beginning of a codon
-        if read_slice_xsect_start_wrt_ref % Utility.NUC_PER_CODON == 0:
-            codon_0based_offset_wrt_result_seq = 0
-        else:
-            codon_0based_offset_wrt_result_seq = Utility.NUC_PER_CODON - (read_slice_xsect_start_wrt_ref % Utility.NUC_PER_CODON)
+        # TODO:  handle situation if inserts before slice cause extra or remove stop codon
+        if do_mask_stop_codon:
+            if read_slice_xsect_start_wrt_ref % Utility.NUC_PER_CODON == 1:
+                codon_0based_offset_wrt_result_seq = 0
+            else:
+                codon_0based_offset_wrt_result_seq = Utility.NUC_PER_CODON - ((read_slice_xsect_start_wrt_ref-1) % Utility.NUC_PER_CODON)
 
-        for nuc_pos_wrt_result_seq_0based in range(codon_0based_offset_wrt_result_seq, len(mseq), Utility.NUC_PER_CODON):
-            codon = mseq[nuc_pos_wrt_result_seq_0based:nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON]
-            if Utility.CODON2AA.get(codon, "") == Utility.STOP_AA:
-                mseq = mseq[0:nuc_pos_wrt_result_seq_0based] + "NNN" + mseq[nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON:]
+            for nuc_pos_wrt_result_seq_0based in range(codon_0based_offset_wrt_result_seq, len(mseq), Utility.NUC_PER_CODON):
+                codon = mseq[nuc_pos_wrt_result_seq_0based:nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON]
+                if Utility.CODON2AA.get(codon, "") == Utility.STOP_AA:
+                    mseq = mseq[0:nuc_pos_wrt_result_seq_0based] + "NNN" + mseq[nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON:]
 
         # Now pad with respect to reference
         if do_pad_wrt_ref:

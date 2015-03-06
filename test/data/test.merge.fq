@@ -375,7 +375,7 @@ HHHHHHHHHHHHHHHHHHHHH
 -----CTAGAACATT-------
 +
 -----HHHHHHHHHH-------
-@read29/2    flag=133,rname=*,mapq=*,cigar=*,tlen=*
+@read29/2    flag=133,rname=*,mapq=255,cigar=*,tlen=*
 ---GCCTAGAC----------
 +
 ---HHHHHHHH----------
@@ -384,7 +384,7 @@ HHHHHHHHHHHHHHHHHHHHH
 +
 -----HHHHHHHHHH-------
 # 2nd read mapped to desired reference.  1st read unmapped.
-@read30/1    flag=69,rname=*,mapq=*,cigar=*,tlen=*
+@read30/1    flag=69,rname=*,mapq=255,cigar=*,tlen=*
 ---GCCTAGAC----------
 +
 ---HHHHHHHH----------
@@ -526,7 +526,7 @@ H-HH-----------------
 T-GGNNNNNNNATT-A-----
 +
 H-HH-------HHH-H-----
-# Both reads mapped to same reference.  Disconcordant delete/base.  Deletion in mate 1,mate2 that causes them to just barely intersect slice.  Expected:  Replace discordant deletion with N.
+# Both reads mapped to same reference.  Disconcordant delete/base with hi qual.  Deletion in mate 1,mate2 that causes them to just barely intersect slice.  Expected:  Use base instead of deletion.
 @read41/1    flag=99,rname=ref1,mapq=40,cigar=1M1D2M,tlen=16
 T-GG-----------------
 +
@@ -536,10 +536,10 @@ TAGG-------ATT-A-----
 +
 HHHH-------HHH-H-----
 @merged_read41
-TNGG-------ATT-A-----
+TAGG-------ATT-A-----
 +
-H-HH-------HHH-H-----
-# Both reads mapped to same reference.  Disconcordant base/deletion.  Deletion in mate 1,mate2 that causes them to just barely intersect slice.  Expected:  Replace discordant deletion with N.
+HHHH-------HHH-H-----
+# Both reads mapped to same reference.  Disconcordant base hi qual/deletion.  Deletion in mate 1,mate2 that causes them to just barely intersect slice.  Expected:  use base instead of deletion.
 @read42/1    flag=99,rname=ref1,mapq=40,cigar=4M7D3M1D1M,tlen=16
 TAGG-------ATT-A-----
 +
@@ -549,32 +549,97 @@ T-GG-----------------
 +
 H-HH-----------------
 @merged_read42
+TAGG-------ATT-A-----
++
+HHHH-------HHH-H-----
+# Both reads mapped to same reference.  Disconcordant delete/base with lo qual.  Deletion in mate 1,mate2 that causes them to just barely intersect slice.  Expected:  Mask discordant position.
+@read43/1    flag=99,rname=ref1,mapq=40,cigar=1M1D2M,tlen=16
+T-GG-----------------
++
+H-HH-----------------
+@read43/2    flag=147,rname=ref1,mapq=40,cigar=4M7D3M1D1M,tlen=16
+TAGG-------ATT-A-----
++
+H!HH-------HHH-H-----
+@merged_read43
 TNGG-------ATT-A-----
 +
-H-HH-------HHH-H-----
-# Both reads mapped to same reference.  Concordant. Deletions are after slice.  Mates after slice.  Expect:  If sliced, don't have any deletions.
-@read43/1    flag=99,rname=ref1,mapq=40,cigar=1M1D1M,tlen=4
+H!HH-------HHH-H-----
+# Both reads mapped to same reference.  Disconcordant base lo qual/deletion.  Deletion in mate 1,mate2 that causes them to just barely intersect slice.  Expected:  Mask discordant position.
+@read44/1    flag=99,rname=ref1,mapq=40,cigar=4M7D3M1D1M,tlen=16
+TAGG-------ATT-A-----
++
+H!HH-------HHH-H-----
+@read44/2    flag=147,rname=ref1,mapq=40,cigar=1M1D2M,tlen=16
+T-GG-----------------
++
+H-HH-----------------
+@merged_read44
+TNGG-------ATT-A-----
++
+H!HH-------HHH-H-----
+# Both reads mapped to same reference.  Concordant Deletions. Deletions are after slice.  Mates after slice.  Expect:  Keep deletion.  If sliced, don't have any deletions.  
+@read45/1    flag=99,rname=ref1,mapq=40,cigar=1M1D1M,tlen=4
 ------------------G-T
 +
 ------------------H-H
-@read43/2    flag=147,rname=ref1,mapq=40,cigar=2D,tlen=4
------------------AG--
+@read45/2    flag=147,rname=ref1,mapq=40,cigar=2M1D1M,tlen=4
+-----------------AG-T
 +
------------------HH--
-@merged_read43
+-----------------HH-T
+@merged_read45
 -----------------AG-T
 +
 -----------------HH-H
 # Both reads mapped to same reference, high quality, No conflict.  Deletion in slice.  Expect:  accept all seq.
-@read44/1    flag=99,rname=ref1,mapq=40,cigar=3M2D3D,tlen=10
+@read46/1    flag=99,rname=ref1,mapq=40,cigar=3M2D3D,tlen=10
 ---GCC--GAC----------
 +
 ---HHH--HHH----------
-@read44/2    flag=147,rname=ref1,mapq=40,cigar=1M2D5M,tlen=10
+@read46/2    flag=147,rname=ref1,mapq=40,cigar=1M2D5M,tlen=10
 -----C--GACAT--------
 +
 -----H--HHHHH--------
-@merged_read44
+@merged_read46
 ---GCC--GACAT--------
 +
 ---HHH--HHHHH--------
+# Both reads mapped to same reference, high quality, All conflict.  Expect:  All conflicts, N'ed out.  If there is N filtering, then this merged sequence will not be written out.
+@read47/1    flag=99,rname=ref1,mapq=40,cigar=8M,tlen=8
+---GCCTAGAC----------
++
+---HHHHHHHH----------
+@read47/2    flag=147,rname=ref1,mapq=40,cigar=8M,tlen=8
+---AGTACTCG----------
++
+---HHHHHHHH----------
+@merged_read47
+---NNNNNNNN----------
++
+---HHHHHHHH----------
+# Both reads mapped to same reference, high quality, All conflict except for stop codon.  Expect:  Conflicts N'ed out.  If there is N filtering and stop-codon masking, then this merged sequence will not be written out.
+@read48/1    flag=99,rname=ref1,mapq=40,cigar=8M,tlen=8
+---GCCTAGAC----------
++
+---HHHHHHHH----------
+@read48/2    flag=147,rname=ref1,mapq=40,cigar=8M,tlen=8
+---AGTTAGCG----------
++
+---HHHHHHHH----------
+@merged_read48
+---NNNTAGNN----------
++
+---HHHHHHHH----------
+# Both reads mapped to same reference, high quality, TAG (stop codon) but not at beginning of codon.  No inserts.  Expect:  Even if there is stop codon masking, the TAG still exists in the merged sequence.
+@read49/1    flag=99,rname=ref1,mapq=40,cigar=7M,tlen=8
+---GCTAGAC-----------
++
+---HHHHHHH-----------
+@read49/2    flag=147,rname=ref1,mapq=40,cigar=7M,tlen=8
+---GCTAGAC-----------
++
+---HHHHHHH-----------
+@merged_read49
+---GCTAGAC-----------
++
+---HHHHHHH-----------

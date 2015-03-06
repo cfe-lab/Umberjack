@@ -1,10 +1,8 @@
-import re
 import logging
-import sys
 import sam_constants
 import align_stats
 import Utility
-import config.settings as settings  # set logging config from logging.conf
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -240,15 +238,16 @@ class SamRecord:
 
         # Mask stop codons
         # ASSUME:  that reference starts at beginning of a codon
-        if read_slice_xsect_start_wrt_ref % Utility.NUC_PER_CODON == 0:
-            codon_0based_offset_wrt_result_seq = 0
-        else:
-            codon_0based_offset_wrt_result_seq = Utility.NUC_PER_CODON - (read_slice_xsect_start_wrt_ref % Utility.NUC_PER_CODON)
+        if do_mask_stop_codon:
+            if read_slice_xsect_start_wrt_ref % Utility.NUC_PER_CODON == 1:
+                codon_0based_offset_wrt_result_seq = 0
+            else:
+                codon_0based_offset_wrt_result_seq = Utility.NUC_PER_CODON - ((read_slice_xsect_start_wrt_ref-1) % Utility.NUC_PER_CODON)
 
-        for nuc_pos_wrt_result_seq_0based in range(codon_0based_offset_wrt_result_seq, len(result_seq), Utility.NUC_PER_CODON):
-            codon = result_seq[nuc_pos_wrt_result_seq_0based:nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON]
-            if Utility.CODON2AA.get(codon, "") == Utility.STOP_AA:
-                result_seq = result_seq[0:nuc_pos_wrt_result_seq_0based] + "NNN" + result_seq[nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON:]
+            for nuc_pos_wrt_result_seq_0based in range(codon_0based_offset_wrt_result_seq, len(result_seq), Utility.NUC_PER_CODON):
+                codon = result_seq[nuc_pos_wrt_result_seq_0based:nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON]
+                if Utility.CODON2AA.get(codon, "") == Utility.STOP_AA:
+                    result_seq = result_seq[0:nuc_pos_wrt_result_seq_0based] + "NNN" + result_seq[nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON:]
 
 
         # Pad

@@ -1,28 +1,43 @@
 # Imports configurations from /SlidingWindow/config/slidingwindow.config file.
 from ConfigParser import SafeConfigParser
 import os
-import sys
 import logging
 import logging.config
+
 
 # Logging Configs
 ###########################################
 LOG_CONFIG_FILE = os.path.dirname(os.path.realpath(__file__)) + os.sep + "logging.conf"
 
-# if the logging.conf file doesn't exist, then output all logging to stdout, set level to DEBUG
-if not os.path.exists(LOG_CONFIG_FILE):
-    ROOT_LOGGER = logging.getLogger("")
-    ROOT_LOGGER.setLevel(logging.DEBUG)
-    console_handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter('%(asctime)s - [%(levelname)s] [%(name)s] [%(process)d] %(message)s')
-    console_handler.setFormatter(formatter)
-    ROOT_LOGGER.addHandler(console_handler)
+DEFAULT_LOG_CONFIG_DICT =  {
+    "disable_existing_loggers": False,
+    "loggers":{
+        "root":{
+            "handlers":["rotatingfile"],
+            "level":"DEBUG",
+        }
+    },
+    "handlers":{
+        "rotatingfile": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "formatter": "full",
+            "filename": "umberjack.log",
+            "maxBytes": 1000000000,  # 1 GB
+            "backupCount": 20,
+            "mode": "a",
+            "encoding": "utf8"
+        }
+    },
+    "formatters":{
+        "full":{
+            "format":"%(asctime)s - [%(levelname)s] [%(name)s] [%(process)d] %(message)s",
+            "datefmt": ""  # leave datefmt emtpy to use default ISO8601 format %Y-%m-%d %H:%M:%S,%s
+        }
+    }
+}
 
-    ROOT_LOGGER.warn("Unable to find logging.conf file.  Using DEBUG level logging to stdout")
-else:
-    logging.config.fileConfig(LOG_CONFIG_FILE, disable_existing_loggers=False)
 
-LOGGER = logging.getLogger(__name__)
+
 
 # Execution Configs
 ###########################################
@@ -100,3 +115,12 @@ else:
     MPI = parser.getboolean(SECTION, "mpi")
     DEBUG = parser.getboolean(SECTION, "debug")
 
+
+
+
+def setup_logging():
+    # if the logging.conf file doesn't exist, then use settings.DEFAULT_LOG_CONFIG_DICT configurations (DEBUG logging to RotatingFile)
+    if not os.path.exists(LOG_CONFIG_FILE):
+        logging.config.dictConfig(DEFAULT_LOG_CONFIG_DICT)
+    else:
+        logging.config.fileConfig(LOG_CONFIG_FILE, disable_existing_loggers=False)
