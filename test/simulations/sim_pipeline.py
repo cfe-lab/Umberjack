@@ -1,5 +1,7 @@
-# The full pipeline for generating simulated population reads for unit testing.
-# NB:   Needs picard v1.128 or later
+"""
+The full pipeline for generating simulated population reads for unit testing.
+Usage:  python sim_pipeline.py [config file]
+"""
 
 import subprocess
 import os
@@ -14,6 +16,20 @@ settings.setup_logging()
 LOGGER = logging.getLogger(__name__)
 
 
+def get_path_str(path, pardir):
+    """
+    If absolute path, then returns the path as is.
+    If relative path, then returns absolute path of concatenated pardir/path
+    :param str path:  absolute or relative file or directory path
+    :param str pardir: parent directory to concatenate to path if path is relative directory
+    :return str: absolute resolved path
+    """
+    if not os.path.isabs(path):
+        return os.path.join(pardir, path)
+    else:
+        return path
+
+
 
 SECTION = "sim"
 
@@ -24,16 +40,13 @@ config.read(config_file)
 OUTDIR = os.path.dirname(config_file)  # Output directory for simulated data
 
 
+
+# Generate Tree
 SEED = config.getint(SECTION, "SEED")
 FILENAME_PREFIX = config.get(SECTION, "FILENAME_PREFIX")
 NUM_CODON_SITES = config.getint(SECTION, "NUM_CODON_SITES")
 NUM_INDIV = config.getint(SECTION, "NUM_INDIV")
 
-
-INDELIBLE_BIN_DIR = config.get(SECTION, "INDELIBLE_BIN_DIR")
-INDELIBLE_SCALING_RATES = config.get(SECTION, "INDELIBLE_SCALING_RATES")
-
-# Generate Tree
 asg_driver_exe = os.path.abspath(os.path.dirname(__file__) + os.sep + "asg_driver.py")
 asg_driver_cmd = ["python", asg_driver_exe,
                   OUTDIR + os.sep + FILENAME_PREFIX,
@@ -55,7 +68,9 @@ renamed_treefile = OUTDIR + os.sep + FILENAME_PREFIX + ".rename.nwk"
 
 
 # Use Indelible to create population sequences at different scaling factors (ie mutation rates)
-os.environ["PATH"] += os.pathsep + INDELIBLE_BIN_DIR
+INDELIBLE_BIN_DIR = get_path_str(config.get(SECTION, "INDELIBLE_BIN_DIR"), OUTDIR)
+INDELIBLE_SCALING_RATES = config.get(SECTION, "INDELIBLE_SCALING_RATES")
+
 batch_indelible_exe = os.path.abspath(os.path.dirname(__file__) + "/indelible/batch_indelible.py")
 indelible_cmd = ["python", batch_indelible_exe,
                  renamed_treefile,  # full filepath to tree
@@ -63,7 +78,8 @@ indelible_cmd = ["python", batch_indelible_exe,
                  str(SEED),  # random seed
                  str(NUM_CODON_SITES), # number of codon sites in genome
                  OUTDIR,  # indelible output file directory
-                 FILENAME_PREFIX]  # Indelible output filename prefix
+                 FILENAME_PREFIX,  # Indelible output filename prefix
+                 INDELIBLE_BIN_DIR]  # indelible bin dir
 LOGGER.debug("About to execute " + " ".join(indelible_cmd))
 subprocess.check_call(indelible_cmd, env=os.environ)
 LOGGER.debug("Finished execute ")
@@ -85,15 +101,15 @@ LOGGER.debug("Finished execute ")
 
 
 # Simulate MiSeq reads from the population genomes.
-ART_BIN_DIR = config.get(SECTION, "ART_BIN_DIR")
-ART_QUAL_PROFILE_TSV1 = config.get(SECTION, "ART_QUAL_PROFILE_TSV1")
-ART_QUAL_PROFILE_TSV2 = config.get(SECTION, "ART_QUAL_PROFILE_TSV2")
+ART_BIN_DIR = get_path_str(config.get(SECTION, "ART_BIN_DIR"), OUTDIR)
+ART_QUAL_PROFILE_TSV1 = get_path_str(config.get(SECTION, "ART_QUAL_PROFILE_TSV1"), OUTDIR)
+ART_QUAL_PROFILE_TSV2 = get_path_str(config.get(SECTION, "ART_QUAL_PROFILE_TSV2"), OUTDIR)
 ART_FOLD_COVER = config.getint(SECTION, "ART_FOLD_COVER")
 ART_MEAN_INSERT = config.getint(SECTION, "ART_MEAN_INSERT")
 ART_STDEV_INSERT = config.getint(SECTION, "ART_STDEV_INSERT")
 
-PICARD_BIN_DIR = config.get(SECTION, "PICARD_BIN_DIR")
-BWA_BIN_DIR = config.get(SECTION, "BWA_BIN_DIR")
+PICARD_BIN_DIR = get_path_str(config.get(SECTION, "PICARD_BIN_DIR"), OUTDIR)
+BWA_BIN_DIR = get_path_str(config.get(SECTION, "BWA_BIN_DIR"), OUTDIR)
 
 PROCS = config.getint(SECTION, "PROCS")
 
@@ -125,14 +141,14 @@ LOGGER.debug("Finished execute ")
 
 # For the sample_genomes populations, we lose the true tree branch lengths when we concatenate multiple populations at different scalings together.
 # Get FastTree to approximate tree for concatenated population sequences.
-FASTTREE_EXE = config.get(SECTION, "FASTTREE_EXE")
+FASTTREE_EXE = get_path_str(config.get(SECTION, "FASTTREE_EXE"), OUTDIR)
 sample_genomes_tree_fname = fasttree_handler.make_tree_repro(fasta_fname=sample_genomes_fasta, intree_fname=renamed_treefile,
                                                              fastree_exe=FASTTREE_EXE)
 
 
 # Calculate HyPhy dN/dS for the full sample_genomes population fasta
-HYPHY_EXE = config.get(SECTION, "HYPHY_EXE")
-HYPHY_BASEPATH = config.get(SECTION, "HYPHY_BASEPATH")
+HYPHY_EXE = get_path_str(config.get(SECTION, "HYPHY_EXE"), OUTDIR)
+HYPHY_BASEPATH = get_path_str(config.get(SECTION, "HYPHY_BASEPATH"), OUTDIR)
 hyphy_handler.calc_dnds(codon_fasta_filename=sample_genomes_fasta, tree_filename=sample_genomes_tree_fname,
                         hyphy_exe=HYPHY_EXE, hyphy_basedir=HYPHY_BASEPATH, threads=PROCS)
 
