@@ -39,6 +39,7 @@ seed = sys.argv[3]
 num_codon_sites = int(sys.argv[4])
 output_dir = sys.argv[5]
 output_filename_prefix = sys.argv[6]
+indelible_bin_dir = sys.argv[7]
 
 
 handle = open(treefile, 'rU')
@@ -92,7 +93,7 @@ for scaling_rate in scaling_rates:
             handle.write('[EVOLVE] partitionname 1 {}.{}\n'.format(output_filename_prefix, scaling_rate))
 
 
-        subprocess.check_call(["indelible"], env=os.environ, cwd=scaling_out_dir)
+        subprocess.check_call([indelible_bin_dir + os.sep + "indelible"], env=os.environ, cwd=scaling_out_dir)
 
 
 
