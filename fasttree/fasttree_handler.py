@@ -7,14 +7,12 @@ import config.settings as settings
 LOGGER = logging.getLogger(__name__)
 
 
-FASTTREE_EXE = "FastTree"  # Single threaded.  Results reproducible if same seed is set
-FASTTREEMP_EXE = "FastTreeMP"  # Multithreaded.  Results not deterministic.
 ENV_OMP_NUM_THREADS = 'OMP_NUM_THREADS'
 GTRRATES_LINE_START = "GTRRates"
 
 
 
-def make_tree(fasta_fname, threads=1, fastree_exe=settings.FASTREE_EXE, debug=settings.DEBUG):
+def make_tree(fasta_fname, threads=1, fastree_exe=settings.DEFAULT_FASTTREEMP_EXE, debug=False):
     """
     Creates a phylogenetic tree from the fasta.
     Tree file written to same directory as fasta and has same name as fasta but with ".tree" suffix.
@@ -31,9 +29,6 @@ def make_tree(fasta_fname, threads=1, fastree_exe=settings.FASTREE_EXE, debug=se
     fastree_treefilename = fasta_fname_prefix + ".tree"
     fasttree_stdouterr_filename = fasta_fname_prefix + ".fasttree.stdouterr.txt"
     LOGGER.debug("Start Fasttree  " + fastree_treefilename)
-
-    if not fastree_exe:
-        fastree_exe = FASTTREEMP_EXE
 
     if not os.path.exists(fastree_treefilename) or os.path.getsize(fastree_treefilename) <= 0:
         os.environ[ENV_OMP_NUM_THREADS] = str(threads)
@@ -72,7 +67,7 @@ def make_tree(fasta_fname, threads=1, fastree_exe=settings.FASTREE_EXE, debug=se
     return fastree_treefilename
 
 
-def make_tree_repro(fasta_fname, intree_fname, fastree_exe=FASTTREE_EXE):
+def make_tree_repro(fasta_fname, intree_fname, fastree_exe=settings.DEFAULT_FASTREE_EXE):
     """
     Creates a phylogenetic tree from the fasta.  Resulting tree will maintain the same topology as input tree,
     but branch lengths will be optimized.

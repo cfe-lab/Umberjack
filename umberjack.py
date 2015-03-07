@@ -1,17 +1,20 @@
+#!/usr/bin/python
+"""
+Main entry point for Umberjack.
+"""
 import os
 import sys
 import logging
-import logging.config
 import argparse
 import traceback
+import math
 
 from sam import sam_handler
 import slice_miseq
-import Utility
 import pool_traceback
+from config_arg_parse import ConfigArgParser
 import hyphy.hyphy_handler as hyphy
 import fasttree.fasttree_handler as fasttree
-import math
 import config.settings as settings
 
 LOGGER = logging.getLogger(__name__)
@@ -28,20 +31,21 @@ MODE_GTR_RATE = "GTR_RATE"
 
 
 
-def create_full_msa_fasta(sam_filename, out_dir, ref, mapping_cutoff, read_qual_cutoff, max_prop_N):
+def create_full_msa_fasta(sam_filename, out_dir, ref, mapping_cutoff, read_qual_cutoff,
+                          is_insert, is_mask_stop_codon):
     """
     Creates a pseudo multiple-sequence aligned fasta file for all reads using pairwise alignment from a SAM file.
-
+    Does not filter based on breadth thresholds or N's.  But it does mask low quality bases and conflicts.
 
     :return: path to multiple sequence aligned fasta file of all reads
     :rtype : str
-    :param str sam_filename: filepath to sam file of read alignments to the reference.  Must have header.
+    :param str sam_filename: filepath to sam file of read alignments to the reference.  Must have header and must be queryname sorted.
     :param str out_dir: output directory
     :param str ref: reference name
-    :param int mapping_cutoff: mapping quality cutoff
+    :param int mapping_cutoff: minimum mapping quality cutoff.  Reads aligned with map quality below this are thrown out.
     :param int read_qual_cutoff: read quality cutoff.  Bases below this cutoff are converted to N's.
-    :param float max_prop_N:  maximum fraction of bases in a merged mate-pair read that is allowed to be N's.
-                                Reads that exceed this threshold are thrown out.
+    :param bool is_insert:  If True, then keeps insertions with respect to reference
+    :param bool is_mask_stop_codon:  If True, then masks stop codons
     """
 
     sam_filename_nopath = os.path.split(sam_filename)[1]
@@ -54,8 +58,9 @@ def create_full_msa_fasta(sam_filename, out_dir, ref, mapping_cutoff, read_qual_
     if not os.path.exists(msa_fasta_filename) or os.path.getsize(msa_fasta_filename) <= 0:
         sam_handler.create_msa_slice_from_sam(sam_filename=sam_filename, ref=ref, out_fasta_filename=msa_fasta_filename,
                                               mapping_cutoff=mapping_cutoff, read_qual_cutoff=read_qual_cutoff,
-                                              max_prop_N=max_prop_N, breadth_thresh=0.0,
-                                              start_pos=None, end_pos=None, is_insert=False, ref_len=None)
+                                              max_prop_N=1.0, breadth_thresh=0.0,
+                                              start_pos=0, end_pos=0, is_insert=is_insert, is_mask_stop_codon=is_mask_stop_codon,
+                                              ref_len=0)
         LOGGER.debug("Done Full MSA-Fasta from SAM for ref " + ref)
     else:
         LOGGER.warn("Found existing Full MSA-Fasta from SAM for ref " + ref + ".  Not regenerating")
@@ -64,32 +69,40 @@ def create_full_msa_fasta(sam_filename, out_dir, ref, mapping_cutoff, read_qual_
 
 
 
-def eval_window(window_depth_cutoff, window_breadth_cutoff, start_window_nucpos, end_window_nucpos, ref, out_dir,
-                sam_filename=None, map_qual_cutoff=None, read_qual_cutoff=None, max_prop_N=None, threads_per_window=1, mode="DNDS",
-                hyphy_exe=hyphy.HYPHY_EXE, hyphy_basedir=hyphy.HYPHY_BASEDIR, fastree_exe=fasttree.FASTTREEMP_EXE):
+def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_cutoff, start_window_nucpos,
+                end_window_nucpos, map_qual_cutoff, read_qual_cutoff, max_prop_N, insert, mask_stop_codon,
+                threads_per_window=settings.DEFAULT_THREADS_PER_WINDOW, mode=settings.DEFAULT_MODE,
+                hyphy_exe=settings.DEFAULT_HYPHY_EXE, hyphy_basedir=settings.DEFAULT_HYPHY_BASEDIR,
+                fastree_exe=settings.DEFAULT_FASTTREEMP_EXE):
     """
     Handles the processing for a single window along the genome.
     Creates the multiple sequence aligned fasta file for the window.
     Feeds the window multiple-sequence aligned fasta file to fasttree2 to create a tree.
     Feeds the tree into HyPhy to obtain dn/ds values.
 
-    :param sam_filename:
+    :param str sam_filename: full file path to sam file
+    :param str ref: reference name
+    :param str out_dir: full path to directory that will hold the results and intermediate files
     :param int window_depth_cutoff:  the minimum number of required reads that meet the breadth threshold below which the window is thrown out
     :param float window_breadth_cutoff: the minimum fraction of a window that merged paired-end read must cover to be included in the window.
     :param int start_window_nucpos:  1-based start nucleotide position of the window
     :param int end_window_nucpos:  1-based end nucleotide position of the window
+    :param int map_qual_cutoff:  mapping quality threshold below which read is thrown out
+    :param int read_qual_cutoff:  read base quality threshold below which base is masked with N
+    :param float max_prop_N:  maximum fraction of single-end read or merged paired read above which read is thrown out
+    :param bool insert:  if True, inserts with respect to reference kept
+    :param bool mask_stop_codon:  if True, stop codons masked
     :param int threads_per_window: number of threads allotted to processing this window  (only FastTree and HyPhy will be multithreaded)
+    :param str mode: one of [DNDS, GTR_RATE].  Calculate codon site dN/dS or window-specific nucleotide substitution rates.
     :param str hyphy_exe: full filepath to HYPHYMP executable
     :param str hyphy_basedir:  full filepath to HyPhy base directory containing the template batch files
-    :param str fastree_exe: full filepath to FastTreeMP executable
+    :param str fastree_exe: full filepath to FastTreeMP or FastTree executable
     """
 
     LOGGER.debug("sam_filename=" + str(sam_filename) + "\n" +
-                 "window_depth_thresh=" + str(window_depth_cutoff) + "\n" +
-                 "window_breadth_thresh=" + str(window_breadth_cutoff) + "\n" +
+                 "ref=" + ref +
                  "start_nucpos=" + str(start_window_nucpos) + "\n" +
-                 "end_nucpos=" + str(end_window_nucpos) + "\n" +
-                 "threads=" + str(threads_per_window) + "\n")
+                 "end_nucpos=" + str(end_window_nucpos) )
 
     sam_filename_nopath = os.path.split(sam_filename)[1]
     sam_filename_prefix = os.path.splitext(sam_filename_nopath)[0]
@@ -105,7 +118,8 @@ def eval_window(window_depth_cutoff, window_breadth_cutoff, start_window_nucpos,
                                                             breadth_thresh=window_breadth_cutoff,
                                                             start_pos=start_window_nucpos,
                                                             end_pos=end_window_nucpos,
-                                                            is_insert=False)
+                                                            is_insert=insert,
+                                                            is_mask_stop_codon=mask_stop_codon)
 
 
     # Check whether the msa sliced fasta has enough reads to make a good tree
@@ -127,31 +141,30 @@ def eval_window(window_depth_cutoff, window_breadth_cutoff, start_window_nucpos,
         raise  ValueError("Invalid mode " + mode)
 
 
-
-# TODO:  clean my parameters
-def tabulate_results(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
-                     end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, output_csv_filename, mode,
-                     window_slide, smooth_dist):
-
+def tabulate_results(ref, sam_filename, out_dir, output_csv_filename, mode, **kwargs):
+    """
+    Tabulates results into a single csv file
+    :param str ref:  reference name
+    :param str sam_filename:  full file path to sam file
+    :param str out_dir:  full file path to output directory in which results csv will be written.
+    :param str output_csv_filename:  name of results csv file
+    :param str mode:  one of [DNDS, GTR_RATE] for calculating per-codon site dN/dS  averaged over overlapping windows or
+                    calculating window specific general time reversible nucleotide substitution rates.
+    :param kwargs:  parameters used to generate the results.  Will be written as comments in the results csv file.
+    """
     ref_len = sam_handler.get_reflen(sam_filename, ref)
     comments = ("ref=" + ref + "," +
                 "ref_len=" + str(ref_len) + "," +
-                "sam=" + sam_filename + "," +
-                "map_qual_cutoff=" + str(map_qual_cutoff) + "," +
-                "read qual cutoff=" + str(read_qual_cutoff) + "," +
-                "max_prop_n=" + str(max_prop_n) + "," +
-                "start_nuc_pos=" + str(start_nucpos) + "," +
-                "end_nuc_pos=" + str(end_nucpos) + "," +
-                "windowsize=" + str(window_size) + "," +
-                "window_slide=" + str(window_slide) + "," +
-                "window_depth_cutoff=" + str(window_depth_cutoff) + "," +
-                "window_breadth_cutoff=" + str(window_breadth_cutoff) + "," +
-                "smooth_dist=" + str(smooth_dist))
+                "sam=" + sam_filename + ","
+                "out_dir=" + out_dir + ","
+                "mode=" + mode + ",")
+    for key, value in kwargs.iteritems():
+        comments +=  "{}={}, ".format(key, value)
+
     if mode == MODE_DNDS:
         LOGGER.debug("Start Ave Dn/DS for all windows for ref " + ref + " " + output_csv_filename)
         seq_dnds_info = slice_miseq.tabulate_dnds(dnds_tsv_dir=out_dir, ref=ref, ref_nuc_len=ref_len,
-                                                  output_csv_filename=output_csv_filename, comments=comments,
-                                                  smooth_dist=smooth_dist)
+                                                  output_csv_filename=output_csv_filename, comments=comments)
         LOGGER.debug("Done Ave Dn/DS for all windows  for ref " + ref + ".  Wrote to " + output_csv_filename)
         return seq_dnds_info
     elif mode == MODE_GTR_RATE:
@@ -163,40 +176,48 @@ def tabulate_results(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
 
 
 def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
-                       end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, threads_per_window,
-                       concurrent_windows, output_csv_filename=None, mode="DNDS", window_slide=3, smooth_dist=10,
-                       hyphy_exe=hyphy.HYPHY_EXE, hyphy_basedir=hyphy.HYPHY_BASEDIR, fastree_exe=fasttree.FASTTREEMP_EXE,
+                       end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, window_slide,
+                       insert, mask_stop_codon,
+                       output_csv_filename, mode=settings.DEFAULT_MODE,
+                       threads_per_window=1, concurrent_windows=1,
+                       hyphy_exe=settings.DEFAULT_HYPHY_EXE, hyphy_basedir=settings.DEFAULT_HYPHY_BASEDIR, fastree_exe=settings.DEFAULT_FASTTREEMP_EXE,
                        debug=False):
     """
     Launch a separate process to analyze each window.
     Each window can use up to <threads_per_window> threads.
 
     The maximum number of CPU cores required on a single node = threads_per_window x concurrent_windows.
-
     :param str ref:  reference name
     :param str sam_filename:  full filepath to sam file of read alignments against the reference
     :param str out_dir:  output directory
     :param int map_qual_cutoff:  mapping quality threshold below which alignments are thrown out
     :param int read_qual_cutoff:  read quality threshold below which bases are converted to N's
-    :param float max_prop_n:  maximum fraction of merged paired-end read that are N's.  Below this threshold the read pair is thrown out.
-    :param int start_nucpos:  1-based start nucleotide position of the window
-    :param int end_nucpos:  1-based end nucleotide position of the window
+    :param float max_prop_n:  maximum fraction of merged paired-end read that are N's within the slice.  Below this threshold the read pair is thrown out.
+    :param int start_nucpos:  1-based start nucleotide position with respect to the reference for the window
+    :param int end_nucpos:  1-based end nucleotide position with respect to the reference for the window
     :param int window_size:  size of each window in nucleotide bases
-    :param int window_slide:  Number of nucleotide bases to slide the window by.  Default=3.
-    :param int window_depth_cutoff:  the minimum number of required reads that meet the breadth threshold below which the window is thrown out
-    :param float window_breadth_cutoff:  the minimum fraction of a window that merged paired-end read must cover to be included in the window.
-    :param int threads_per_window:  number of threads allotted to processing a single window  (only FastTree and HyPhy will be multithreaded)
+    :param int window_depth_cutoff:  the minimum number of required single-end reads or merged paired reads that meet the breadth threshold below which the window is thrown out
+    :param float window_breadth_cutoff:  the minimum fraction of a window a single-end read or merged paired read must cover to be included in the window.
+    :param int window_slide:  Number of nucleotide bases to slide the window by.  Default=30.
+    :param bool insert:  if True, then keeps insertions with respect to the reference.
+    :param bool mask_stop_codon:  If True, then masks stop codons in the window multiple sequence alignment fasta
+    :param int threads_per_window:  number of threads allotted to processing a single window  (only FastTree and HyPhy will be multithreaded).  Default 1.
     :param int concurrent_windows:  the number of windows to process at the same time.
-    :param str output_csv_filename:  name of output dN/dS tab separated file generated by HyPhy.  Will be created under out_dir.
+    :param str output_csv_filename:  name of output comma separated file containing per-site results averaged across overlapping windows .  Will be created under out_dir.
+    :param str mode:  one of [DNDS, GTR_RATE] for calculating codon-site specific dN/dS, or window-specific general time reversible nucleotide substitution rates
     :param str hyphy_exe:  full filepath to HYPHYMP executable
     :param str hyphy_basedir:  full filepath to HyPhy base directory containing the template batch files
     :param str fastree_exe:  full filepath to FastTreeMP executable
-    :param bool debug:  Outputs full genome multiple sequence alignment fasta if True
+    :param bool debug:  if True, outputs full genome multiple sequence alignment
     """
+    fcn_args = locals()
+
+    if not start_nucpos:
+        start_nucpos = 1
+    if not end_nucpos:
+        end_nucpos = sam_handler.get_reflen(sam_filename, ref)
 
     pool = pool_traceback.LoggingPool(processes=concurrent_windows)
-
-    ref_len = sam_handler.get_reflen(sam_filename, ref)
 
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
@@ -205,7 +226,7 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
         # Create a pseudo multiple-sequence aligned fasta file
         create_full_msa_fasta(sam_filename=sam_filename, out_dir=out_dir, ref=ref,
                               mapping_cutoff=map_qual_cutoff, read_qual_cutoff=read_qual_cutoff,
-                              max_prop_N=max_prop_n)
+                              is_insert=insert, is_mask_stop_codon=mask_stop_codon)
 
 
     # All nucleotide positions are 1-based
@@ -226,6 +247,8 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
                        "map_qual_cutoff": map_qual_cutoff,
                        "read_qual_cutoff": read_qual_cutoff,
                        "max_prop_N": max_prop_n,
+                       "insert": insert,
+                       "mask_stop_codon": mask_stop_codon,
                        "threads_per_window": threads_per_window,
                        "mode": mode,
                        "hyphy_exe": hyphy_exe,
@@ -248,9 +271,8 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
 
     LOGGER.debug("Done waiting for window queue.  About to tabulate results.")
 
-    tabulate_results(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
-                     end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, output_csv_filename, mode, window_slide,
-                     smooth_dist)
+
+    tabulate_results(**fcn_args)
 
 
 
@@ -272,9 +294,11 @@ class WindowReplicaInfo:
 
 
 def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
-                     end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, threads_per_window,
-                     output_csv_filename=None, mode="DNDS", window_slide=3, smooth_dist=10, hyphy_exe=hyphy.HYPHY_EXE,
-                     hyphy_basedir=hyphy.HYPHY_BASEDIR, fastree_exe=fasttree.FASTTREEMP_EXE, debug=False):
+                     end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, window_slide,
+                     insert, mask_stop_codon,
+                     output_csv_filename, mode, threads_per_window,
+                     hyphy_exe, hyphy_basedir,
+                     fastree_exe, debug):
     """
     Launch a separate process to analyze each window via MPI.  Similar to eval_windows_async, but uses MPI.
 
@@ -283,20 +307,30 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
     :param str out_dir:  output directory
     :param int map_qual_cutoff:  mapping quality threshold below which alignments are thrown out
     :param int read_qual_cutoff:  read quality threshold below which bases are converted to N's
-    :param float max_prop_n:  maximum fraction of merged paired-end read that are N's.  Below this threshold the read pair is thrown out.
-    :param int start_nucpos:  1-based start nucleotide position of the window
-    :param int end_nucpos:  1-based end nucleotide position of the window
+    :param float max_prop_n:  maximum fraction of merged paired-end read that are N's within the slice.  Below this threshold the read pair is thrown out.
+    :param int start_nucpos:  1-based start nucleotide position with respect to the reference for the window
+    :param int end_nucpos:  1-based end nucleotide position with respect to the reference for the window
     :param int window_size:  size of each window in nucleotide bases
-    :param int window_slide:  Number of nucleotide bases to slide the window by.  Default=3.
-    :param int window_depth_cutoff:  the minimum number of required reads that meet the breadth threshold below which the window is thrown out
-    :param float window_breadth_cutoff:  the minimum fraction of a window that merged paired-end read must cover to be included in the window.
-    :param int threads_per_window:  number of threads allotted to processing a single window  (only FastTree and HyPhy will be multithreaded)
-    :param str output_csv_filename:  name of output dN/dS tab separated file generated by HyPhy.  Will be created under out_dir.
+    :param int window_depth_cutoff:  the minimum number of required single-end reads or merged paired reads that meet the breadth threshold below which the window is thrown out
+    :param float window_breadth_cutoff:  the minimum fraction of a window a single-end read or merged paired read must cover to be included in the window.
+    :param int window_slide:  Number of nucleotide bases to slide the window by.
+    :param bool insert:  if True, then keeps insertions with respect to the reference.
+    :param bool mask_stop_codon:  If True, then masks stop codons in the window multiple sequence alignment fasta.
+    :param int threads_per_window:  number of threads allotted to processing a single window  (only FastTree and HyPhy will be multithreaded).  Default 1.
+    :param str output_csv_filename:  name of output comma separated file containing per-site results averaged across overlapping windows .  Will be created under out_dir.
+    :param str mode:  one of [DNDS, GTR_RATE] for calculating codon-site specific dN/dS, or window-specific general time reversible nucleotide substitution rates.
     :param str hyphy_exe:  full filepath to HYPHYMP executable
     :param str hyphy_basedir:  full filepath to HyPhy base directory containing the template batch files
     :param str fastree_exe:  full filepath to FastTreeMP executable
     :param bool debug:  if True, outputs full genome multiple sequence alignment
     """
+    fcn_args = locals()
+
+    if not start_nucpos:
+        start_nucpos = 1
+    if not end_nucpos:
+        end_nucpos = sam_handler.get_reflen(sam_filename, ref)
+
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
@@ -316,7 +350,7 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
             if debug:
                 create_full_msa_fasta(sam_filename=sam_filename, out_dir=out_dir, ref=ref,
                                       mapping_cutoff=map_qual_cutoff, read_qual_cutoff=read_qual_cutoff,
-                                      max_prop_N=max_prop_n)
+                                      is_insert=insert, is_mask_stop_codon=mask_stop_codon)
 
             # All nucleotide positions are 1-based
             total_windows = int(math.ceil((end_nucpos - start_nucpos + 1)/window_slide))
@@ -345,6 +379,8 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
                                    "map_qual_cutoff": map_qual_cutoff,
                                    "read_qual_cutoff": read_qual_cutoff,
                                    "max_prop_N": max_prop_n,
+                                   "insert": insert,
+                                   "mask_stop_codon": mask_stop_codon,
                                    "threads_per_window": threads_per_window,
                                    "mode": mode,
                                    "hyphy_exe": hyphy_exe,
@@ -379,7 +415,7 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
                 if busy_replica_2_request:
                     requests = [window_replica_info.mpi_rcv_request for window_replica_info in busy_replica_2_request.values()]
                     mpi_status = MPI.Status()
-                    idx, err_msg = MPI.Request.waitany(requests=requests, status=mpi_status)
+                    idx, err_msg = MPI.Request.waitany(requests, mpi_status)
                     done_replica_rank = mpi_status.Get_source()
                     available_replicas.extend([done_replica_rank])
                     del busy_replica_2_request[done_replica_rank]
@@ -396,10 +432,7 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
             LOGGER.debug("Done terminating replicas.")
 
             LOGGER.debug("About to tabulate results")
-            tabulate_results(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n,
-                             start_nucpos, end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff,
-                             output_csv_filename, mode,window_slide, smooth_dist)
-
+            tabulate_results(**fcn_args)
             LOGGER.debug("Done tabulating results")
 
         else:  # replica process does the work
@@ -429,57 +462,72 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
 
 
 def main():
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("sam_filename", help="full filepath to sam alignment file")
-    parser.add_argument("ref", help="Name of reference contig.  Must be one of refnames in SAM file.")
-    #parser.add_argument("--ref_len", type=int, help="length of reference contig in nucleotide bases")
-    parser.add_argument("--out_dir", default='.',
-                        help="output directory in which the pipeline will write all its intermediate files")
-    parser.add_argument("--map_qual_cutoff", type=int, default=20,
-                        help="mapping quality threshold below which alignments are ignored")
-    parser.add_argument("--read_qual_cutoff", type=int, default=20,
-                        help="read quality threshold below which bases are converted to Ns")
-    parser.add_argument("--max_prop_n", type=float, default=0.1,
-                        help="maximum fraction of Ns allowed in the merged paired-end read below which the paired-end"
-                             " read is ignored")
-    parser.add_argument("--window_size", type=int, default=300, help="window size in nucleotides")
-    parser.add_argument("--window_slide", type=int, default=30, help="Number of bases to slide each window by")
-    parser.add_argument("--window_breadth_cutoff", type=float, default=0.8,
-                        help="fraction of window that merged paired-end read must cover with non-gap and non-N"
+    """
+    Parses commandline arguments and kicks off mpi or multiprocessing versions of window evaluations.
+    """
+    parser = ConfigArgParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                             description="Version " + str(settings.VERSION),
+                             fromfile_prefix_chars='@')
+    parser.add_argument("-f", help="Full filepath to config file.  If defined, then ignores all other commandline arguments.")
+    parser.add_argument("--sam_filename", help="Full filepath to SAM alignment file.  Must be queryname sorted and must have header.")
+    parser.add_argument("--ref", help="Name of reference contig.  Must be one of references in SAM file.")
+    parser.add_argument("--out_dir", default='./',
+                        help="Output directory in which the pipeline will write all its results and intermediate files")
+    parser.add_argument("--map_qual_cutoff", type=int, default=settings.DEFAULT_MAP_QUAL_CUTOFF,
+                        help="Mapping quality threshold below which alignments are ignored.")
+    parser.add_argument("--read_qual_cutoff", type=int, default=settings.DEFAULT_READ_QUAL_CUTOFF,
+                        help="Read quality threshold below which bases are converted to Ns.")
+    parser.add_argument("--max_prop_n", type=float, default=settings.DEFAULT_MAX_PROP_N,
+                        help="Maximum fraction of Ns allowed in single-end reads or merged paired reads below which the read is ignored.")
+    parser.add_argument("--window_size", type=int, default=settings.DEFAULT_WINDOW_SIZE,
+                        help="Window size in nucleotides.")
+    parser.add_argument("--window_slide", type=int, default=settings.DEFAULT_WINDOW_SLIDE,
+                        help="Number of bases to slide each window by.")
+    parser.add_argument("--window_breadth_cutoff", type=float, default=settings.DEFAULT_WINDOW_BREADTH_CUTOFF,
+                        help="fraction of window that a single-end or merged paired read must cover with non-gap and non-N"
                              " nucleotides.  Below this threshold, the read is omitted from the window.")
-    parser.add_argument("--window_depth_cutoff", type=int, default=50,
+    parser.add_argument("--window_depth_cutoff", type=int, default=settings.DEFAULT_WINDOW_DEPTH_CUTOFF,
                         help="Minimum number of reads within a valid window.")
     parser.add_argument("--start_nucpos", type=int, default=1,
                         help="1-based start nucleotide position in the reference contig.  The first window will start"
-                             " at this position.")
-    parser.add_argument("--end_nucpos", type=int, default=None,
+                             " at this position.  Default: 1")
+    parser.add_argument("--end_nucpos", type=int, default=0,
                         help="1-based end nucleotide position in the reference contig.  The last window will start at"
-                             " or before this position.")
-    parser.add_argument("--threads_per_window", type=int, default=1,
+                             " or before this position.  If 0, then automatically set to last position in the reference contig.")
+    parser.add_argument("--insert",  action='store_true',
+                        help="Whether to keep insertions with respect to the reference.")
+    parser.add_argument("--mask_stop_codon",  action='store_true',
+                        help="Whether to mask stop codons with NNN.  Automatically set to True when mode is DNDS")
+    parser.add_argument("--threads_per_window", type=int, default=settings.DEFAULT_THREADS_PER_WINDOW,
                         help="threads allotted per window.")
-    parser.add_argument("--concurrent_windows", type=int, default=1,
+    parser.add_argument("--concurrent_windows", type=int, default=settings.DEFAULT_CONCURRENT_WINDOWS,
                         help="Max number of windows to process concurrently. Ignored when --mpi is defined.")
-    parser.add_argument("--output_csv_filename", default='umberjack.out.csv',
-                        help="In DNDS mode, the full filepath of final tab-separated values file containing selection information for"
-                             " each codon site in the reference from averaged over multiple windows.")
-    parser.add_argument("--hyphy_exe", help="full filepath of HYPHYMP executable.  Default: taken from PATH")
-    parser.add_argument("--hyphy_basedir",
-                        help="full filepath of HyPhy base directory containing template batch files.  Default:"
-                             " /usr/local/lib/hyphy/TemplateBatchFiles/")
-    parser.add_argument("--fastree_exe", help="full filepath of FastTreeMP or FastTree executable.  Default: taken from PATH")
-    parser.add_argument("--mode", default='DNDS', help="DNDS: Execute dN/dS analysis for positive (diversifying "
-                                                       "selection in codon alignment.  GTR_RATE: Profile "
-                                                       "nucleotide substitution rate biases under generalized "
-                                                       "non-reversible (6-paramter) model.")
+    parser.add_argument("--output_csv_filename", default=settings.DEFAULT_OUTPUT_CSV_FILENAME,
+                        help="In DNDS mode, the full filepath of final comma-separated values file containing selection information for"
+                             " each codon site in the reference from averaged over overlapping windows.  " +
+                             "In GTR_RATE mode, the full filepath of final comma-separated values file containing " +
+                             "window-specific general time reversible nucleotide substitution rates.")
+    parser.add_argument("--hyphy_exe", default=settings.DEFAULT_HYPHY_EXE,
+                        help="full filepath of HYPHYMP executable.  Default: taken from PATH")
+    parser.add_argument("--hyphy_basedir", default=settings.DEFAULT_HYPHY_BASEDIR,
+                        help="full filepath of HyPhy base directory containing template batch files.")
+    parser.add_argument("--fastree_exe", default=settings.DEFAULT_FASTREE_EXE,
+                        help="full filepath of FastTreeMP or FastTree executable.  Default: taken from PATH")
+    parser.add_argument("--mode", default=settings.DEFAULT_MODE, choices=[MODE_DNDS, MODE_GTR_RATE],
+                        help="DNDS: Execute dN/dS analysis for positive (diversifying "
+                             "selection in codon alignment.  GTR_RATE: Profile "
+                             "nucleotide substitution rate biases under generalized "
+                             "non-reversible (6-parameter) model.")
 
     parser.add_argument("--mpi", action='store_true',
                         help="Runs in MPI mode with multiple processes on multiple nodes. "
                              "If python module mpi4py is not installed, then runs multiple processes on single "
-                             "node. Default: false")
+                             "node.")
 
-    parser.add_argument("--output_debug_files", action='store_true',
-                        help="Whether to output all intermediate files, full genome multiple sequence alignment, FastTree stdout/stderr, HyPhy logging, etc"
-                             "Default: false")
+    parser.add_argument("--debug", action='store_true',
+                        help="Whether to keep all intermediate files, generate full genome multiple sequence alignment, set debug logging."
+                             "Overrides the logging level configured in logging.conf.")
+
 
     args = parser.parse_args()
 
@@ -487,11 +535,25 @@ def main():
         parser.print_help()
         sys.exit()
 
+    if args.f:
+        if len(sys.argv) > 2:
+            LOGGER.warn("Using config file " + args.f + ".  Ignoring all other commandline arguments.")
+        args = parser.parse_args([parser.fromfile_prefix_chars +  args.f])
+
+
+    # Automatically set mask_stop_codon to True for dN/dS analysis.
+    if args.mode == MODE_DNDS:
+        args.mask_stop_codon = True
+
     # deep copy of arguments excluding empty values
+    args_msg = ""
     eval_windows_args = {}
     for key, val in vars(args).iteritems():
-        if val:
+        args_msg += "{}={} ".format(key, val)
+        if val is not None:
             eval_windows_args[key] = val
+    LOGGER.info("Launched umberjack.py with settings: " + args_msg)
+
 
     # if the user has mpi4py installed, then runs the MPI version
     # otherwise runs the multiprocessing version on current node
@@ -506,8 +568,12 @@ def main():
         except ImportError:
             LOGGER.warn("You must install mpi4py module in order to leverage multiple nodes.  Running on single node.")
 
+
+
     # Clean out the commandline arguments not used in the eval_windows* methods.
     eval_windows_args.pop("mpi", None)
+    eval_windows_args.pop("f", None)
+
     if do_mpi:
         eval_windows_mpi(**eval_windows_args)
     else:

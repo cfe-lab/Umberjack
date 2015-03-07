@@ -103,7 +103,7 @@ class TestSamHandler(unittest.TestCase):
     #     Generate simulated data for unit tests
     #     """
     #     # Specify sim_pipeline.py configurations into separate config file
-    #     config_filename = SIM_DATA_DIR + os.sep + "umberjack_unittest.config"
+    #     config_filename = SIM_DATA_DIR + os.sep + "umberjack_unittest.conf"
     #     subprocess.check_call(["python", SIM_PIPELINE_PY, config_filename])
     #
     #     if not os.path.exists(OUT_DIR):

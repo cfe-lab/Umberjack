@@ -1,3 +1,6 @@
+"""
+Handles sam parsing.
+"""
 import re
 import os
 import logging
@@ -40,8 +43,8 @@ def __write_seq(fh_out, name, seq, max_prop_N=1.0, breadth_thresh=0.0):
 
 
 def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cutoff, read_qual_cutoff, max_prop_N,
-                              breadth_thresh, start_pos=None, end_pos=None, is_insert=False, is_mask_stop_codon=False,
-                              ref_len=None):
+                              breadth_thresh, start_pos=0, end_pos=0, is_insert=False, is_mask_stop_codon=False,
+                              ref_len=0):
     """
     Parse SAM file contents for sequences aligned to a reference.
     Extracts the portion of the read that fits into the desired slice of the genome.
@@ -67,14 +70,14 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
                                 This only makes a difference if the slice is expected to be much wider than the (merged) read length.
     :param float breadth_thresh:  Fraction of the slice that the read must cover with actual bases A, C, G, T.
                                 Reads below this threshold are excluded from output.
-    :param int start_pos: 1-based start nucleotide start position of slice.  If None, then uses beginning of ref.
-    :param int end_pos: 1-based end nucleotide start position of slice.  If None, then uses end of ref.
+    :param int start_pos: 1-based start nucleotide start position of slice.  If 0, then uses beginning of ref.
+    :param int end_pos: 1-based end nucleotide start position of slice.  If 0, then uses end of ref.
     :param bool is_insert: whether to exclude insertions to the reference.
                 If include insertions, then the insertions will be multiple sequence aligned further by MAFFT.
     :param bool is_mask_stop_codon: whether to mask stop codons with "NNN".
                 Most useful when you want to do codon analysis aftwards, as many codon models do not allow stop codons.
                 Assumes that the reference starts at the beginning of a codon.
-    :param int ref_len: length of reference.  If None, then takes length from sam headers.
+    :param int ref_len: length of reference.  If 0, then takes length from sam headers.
     :returns int:  total sequences written to multiple sequence aligned fasta
     :raises : :py:class:`exceptions.ValueError` if sam file is not queryname sorted according to the sam header
     """

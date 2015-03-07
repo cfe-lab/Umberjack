@@ -517,7 +517,7 @@ def get_seq_dnds_info(dnds_tsv_dir, ref, ref_codon_len):
 
 
 
-def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, output_csv_filename, comments, smooth_dist=50):
+def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, output_csv_filename, comments):
     """
     Aggregate selection information from multiple windows for each codon site.
     Output selection information into a tab separated file with the following columns:
@@ -563,11 +563,6 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, output_csv_filename, comments,
             outrow["Syn"] = seq_dnds_info.get_site_ave_syn_subs(site_1based=site)
             outrow["Subst"] = seq_dnds_info.get_site_ave_subs(site_1based=site)
             outrow["dNdSWeightByReads"] = seq_dnds_info.get_weighted_byreads_ave_dnds(site_1based=site)
-
-            smooth_dist_start = max(site-smooth_dist, 1)
-            smooth_dist_end = min(site+smooth_dist, seq_dnds_info.get_seq_len())
-            outrow["multisiteAvedNdS"] = seq_dnds_info.get_multisite_ave_dnds(site_start_1based=smooth_dist_start, site_end_1based=smooth_dist_end)
-            outrow["multisitedNdSWeightBySubst"] = seq_dnds_info.get_multisite_weighted_bysubst_ave_dnds(site_start_1based=smooth_dist_start, site_end_1based=smooth_dist_end)
             outrow["dNdSWeightByReadsNoLowSyn"] = seq_dnds_info.get_weighted_byreads_ave_dnds_nolowsyn(site_1based=site)
             writer.writerow(outrow)
 

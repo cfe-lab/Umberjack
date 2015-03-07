@@ -7,8 +7,6 @@ LOGGER = logging.getLogger(__name__)
 
 SELECTION_BF = "QuickSelectionDetection.bf"
 NUC_MODEL_CMP_BS = "GTRrate.bf"
-HYPHY_EXE = "HYPHYMP"
-HYPHY_BASEDIR = "/usr/local/lib/hyphy/TemplateBatchFiles/"
 
 
 # Columns in the HyPhy dN/dS tab-separates values file
@@ -23,7 +21,8 @@ HYPHY_TSV_EXP_S_COL = 'E[S Sites]'
 HYPHY_TSV_EXP_N_COL = 'E[NS Sites]'
 
 
-def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=settings.HYPHY_EXE, hyphy_basedir=settings.HYPHY_BASEDIR, threads=1):
+def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=settings.DEFAULT_HYPHY_EXE, hyphy_basedir=settings.DEFAULT_HYPHY_BASEDIR,
+              threads=1, debug=False):
     """
     Calculates sitewise dN/dS using Single-most Likely Ancestor Counting with branch corrections.
     Averages substitutions across all possible codons for ambiguous codons.
@@ -41,19 +40,18 @@ def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=settings.HYPHY_EXE,
     :param str hyphy_basedir:  path to HyPhy TemplateBatchFiles directory.  If empty, uses /usr/local/lib/hyphy/TemplateBatchFiles
     :param int threads:  HyPhy threads.  Note that HyPhy won't use more than 4 CPU for nucleotide model fitting and dN/dS calculations even if you give it more.
             Default 1.
+    :param bool debug:  If True, then outputs hyphy stdout to log.
     :return:  path to HyPhy tab-separated output for sitewise dN/dS values.
         Each row in the tab-separate output represents a codon site in the alignment.
     :rtype: str
     """
-    if not hyphy_exe:
-        hyphy_exe = HYPHY_EXE
-    if not hyphy_basedir:
-        hyphy_basedir = HYPHY_BASEDIR
-
     hyphy_filename_prefix = os.path.splitext(codon_fasta_filename)[0]  # Remove .fasta suffix
     hyphy_modelfit_filename = hyphy_filename_prefix + ".nucmodelfit"
     hyphy_dnds_tsv_filename = hyphy_filename_prefix + ".dnds.tsv"
-    hyphy_log = hyphy_filename_prefix + ".hyphy.log"
+    if debug:
+        hyphy_log = hyphy_filename_prefix + ".hyphy.log"
+    else:
+        hyphy_log = os.devnull
     LOGGER.debug("Start HyPhy dN/dS " + hyphy_dnds_tsv_filename)
     if not os.path.exists(hyphy_dnds_tsv_filename) or os.path.getsize(hyphy_dnds_tsv_filename) <= 0:
         hyphy_input_str = "\n".join(["1",  # Universal
@@ -83,6 +81,7 @@ def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=settings.HYPHY_EXE,
 
             if hyphy_proc.returncode:
                 raise subprocess.CalledProcessError(cmd=hyphy_cmd, returncode=hyphy_proc.returncode)
+
         LOGGER.debug("Done HyPhy dN/dS " + hyphy_dnds_tsv_filename)
     else:
         LOGGER.debug("Found existing HyPhy for window " + hyphy_dnds_tsv_filename + ". Not regenerating")
@@ -90,7 +89,7 @@ def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=settings.HYPHY_EXE,
     return hyphy_dnds_tsv_filename
 
 
-def calc_nuc_subst(codon_fasta_filename, tree_filename, hyphy_exe=HYPHY_EXE, hyphy_basedir=HYPHY_BASEDIR, threads=1):
+def calc_nuc_subst(codon_fasta_filename, tree_filename, hyphy_exe=settings.DEFAULT_HYPHY_EXE, hyphy_basedir=settings.DEFAULT_HYPHY_BASEDIR, threads=1):
     """
     Fits a general time reversible (4 discrete gamma rates) nucleotide model and saves it in same directory as fasta with suffix ".nucmodelfit".
     :param str codon_fasta_filename:  path to multiple sequence aligned fasta file that starts at the beginning of a codon.
