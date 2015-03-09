@@ -43,9 +43,30 @@ For each reference, a separate plot is generated displaying evolutionary stats a
 
 Parallelization
 =======================================
-If you want to run the code on multiple nodes concurrently, ensure the "--mpi" flag is present in the Umberjack commandline or "mpi=True" in the Umberjack config file.
+If you want to run the code on multiple processors on one node concurrently, ensure the "--mpi" flag is not present in the Umberjack arguments.
+Ensure that Umberjack arguments "--threads_per_window" and "--concurrent_windows" are both set to values larger than 1.  
+Umberjack will launch up to "--concurrent_windows" separate python processes, each handling a separate window.  
+For each window, Umberjack will give up to "--threads_per_window" threads to FastTreeMP or HYPHYMP.  
+The maximum number CPUs used at any one time will be "--threads_per_window" x "--concurrent_windows". 
 
-If you want to run the code on multiple processors on the same node concurrently, ensure the "--mpi" flag is not present in the Umberjack commandline and "mpi=False" in the Umberjack config file.
+If you want to run Umberjack on multiple nodes concurrently, you will need to launch Umberjack using [mpirun](https://www.open-mpi.org/doc/v1.8/man1/mpirun.1.php).  
+Ensure the "--mpi" flag is present in the Umberjack arguments.  
+
+Sample MPI command:
+
+```
+mpirun -machinefile my_nodes_config_file python Umberjack.py --sam_filename SAM_FILENAME --ref REF --mpi
+```
+
+If you do not have [mpi4py](http://mpi4py.scipy.org/docs/usrman/index.html) installed, then Umberjack will fall back to running multiple processors on one node.  
+mpirun will handle launching Umberjack processes concurrently on your desired nodes.  
+Each Umberjack process will give up to "--threads_per_window" threads to FastTreeMP or HYPHYMP to handle a window.  
+Note that each FastTreeMP and HYPHYMP will only run on one node.    
+The maximum number of CPUs used at any one time will be (number of CPUs given to mpirun) * "--threads_per_window".  
+If you specify "--concurrent_windows" in the Umberjack arguments with "--mpi", the "--concurrent_windows" argument will be ignored.
+
+
+
 
 
 Usage
