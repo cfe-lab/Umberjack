@@ -16,6 +16,7 @@ from config_arg_parse import ConfigArgParser
 import hyphy.hyphy_handler as hyphy
 import fasttree.fasttree_handler as fasttree
 import config.settings as settings
+import plot.plotter as plotter
 
 LOGGER = logging.getLogger(__name__)
 
@@ -175,6 +176,20 @@ def tabulate_results(ref, sam_filename, out_dir, output_csv_filename, mode, **kw
         LOGGER.debug("Done all windows  for ref " + ref)
 
 
+def plot_results(output_csv, mode=MODE_DNDS):
+    """
+    Plot average of site-wise results along genome.
+    :param str output_csv:  path to output csv file
+    :param str mode:  Only handles DNDS right now
+    :return:
+    """
+    if mode == MODE_DNDS:
+        LOGGER.debug("Plotting Ave dN/dS results for " + output_csv)
+        plotter.plot_dnds(output_csv)
+    else:
+        LOGGER.warn("No plots available for mode " + mode)
+
+
 def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
                        end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, window_slide,
                        insert, mask_stop_codon,
@@ -272,7 +287,13 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
     LOGGER.debug("Done waiting for window queue.  About to tabulate results.")
 
 
+    LOGGER.debug("About to tabulate results")
     tabulate_results(**fcn_args)
+    LOGGER.debug("Done tabulating results")
+
+    LOGGER.debug("About to plot results")
+    plot_results(output_csv=output_csv_filename)
+    LOGGER.debug("Done plot results")
 
 
 
@@ -434,6 +455,10 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
             LOGGER.debug("About to tabulate results")
             tabulate_results(**fcn_args)
             LOGGER.debug("Done tabulating results")
+
+            LOGGER.debug("About to plot results")
+            plot_results(output_csv=output_csv_filename)
+            LOGGER.debug("Done plot results")
 
         else:  # replica process does the work
             is_terminated = False

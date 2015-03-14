@@ -94,8 +94,8 @@ class _SiteDnDsInfo:
     def get_weighted_byreads_ave_dnds_nolowsyn(self):
         """
         Returns weighted average dN/dS from all windows for the codon site.
-        Excludes any windows in which the number of synonymous substitutions < 1 or number of total substutitions < 1.
-        :return:
+        Excludes any windows in which the number of synonymous substitutions < 1.
+        :return float:
         """
         if not self.window_dnds_subs:
             return None
@@ -108,7 +108,7 @@ class _SiteDnDsInfo:
             for (site_dnds, site_syn_subst, site_nonsyn_subst, reads_in_window, exp_syn_subs, exp_nonsyn_subs) in self.window_dnds_subs:
                 # sometimes there are less than one observed synonymous substitutions.  Don't include those in average dn/ds
                 # These are pretty iffy
-                if site_syn_subst >= 1.0 and (site_nonsyn_subst + site_syn_subst) >=1.0:
+                if site_syn_subst >= 1.0:
                     total_nonsyn_subs_at_site += (site_nonsyn_subst * reads_in_window)
                     total_exp_nonsyn_subs_at_site += (exp_nonsyn_subs * reads_in_window)
                     total_syn_subs_at_site += (site_syn_subst * reads_in_window)
@@ -150,6 +150,37 @@ class _SiteDnDsInfo:
             return None
         else:
             return self.accum_win_dn_minus_ds / self.total_win_cover_site
+
+    def get_ave_dn_minus_ds_weightby_reads(self):
+        """
+        Return average scaled dN-dS across all windows for the codon site, weighted by reads per window
+        :return float:
+        """
+        if not self.window_dnds_subs:
+            return None
+        else:
+            total_reads_at_site_over_all_windows = 0.0
+            total_nonsyn_subs_at_site = 0.0
+            total_exp_nonsyn_subs_at_site = 0.0
+            total_syn_subs_at_site = 0.0
+            total_exp_syn_subs_at_site = 0.0
+            for (site_dnds, site_syn_subst, site_nonsyn_subst, reads_in_window, exp_syn_subs, exp_nonsyn_subs) in self.window_dnds_subs:
+                # sometimes there are less than one observed synonymous substitutions.  Don't include those in average dn/ds
+                # These are pretty iffy
+                if site_syn_subst >= 1.0:
+                    total_nonsyn_subs_at_site += (site_nonsyn_subst * reads_in_window)
+                    total_exp_nonsyn_subs_at_site += (exp_nonsyn_subs * reads_in_window)
+                    total_syn_subs_at_site += (site_syn_subst * reads_in_window)
+                    total_exp_syn_subs_at_site += (exp_syn_subs * reads_in_window)
+                    total_reads_at_site_over_all_windows += reads_in_window
+
+            # Don't use self.total_reads because that counts the reads for every window
+            if not total_reads_at_site_over_all_windows:
+                return None
+            # dN/dS = (total non synon subst / total exp non syn subst ) / (total syn subst / total exp syn subst)
+            # = (total non synon subst * total exp syn subst ) / (total exp non syn subst * total syn subst)
+            return (total_nonsyn_subs_at_site * total_exp_syn_subs_at_site)/(total_exp_nonsyn_subs_at_site * total_syn_subs_at_site )
+
 
     def get_window_coverage(self):
         """

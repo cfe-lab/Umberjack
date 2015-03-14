@@ -7,8 +7,8 @@ library(plyr)
 NUC_PER_CODON <- 3
 
 
-# Read locations of input files from local sliding_window_tree_unit_test.config file
-CONFIG_FILENAME <- "./sliding_window_tree_unit_test.config"
+# Read locations of input files from local umberjack_unit_test.config file
+CONFIG_FILENAME <- "./umberjack_unit_test.config"
 config<-read.table(CONFIG_FILENAME, sep="=", col.names=c("key","value"), as.is=c(1,2))
 
 actual_dnds_filename <- config[config$key=="ACTUAL_DNDS_FILENAME",]$val
