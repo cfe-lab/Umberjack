@@ -13,6 +13,7 @@ VERSION = "1.0.0"
 DEFAULT_LOG_CONFIG_FILE = os.path.dirname(os.path.realpath(__file__)) + os.sep + "logging.conf"
 
 DEFAULT_LOG_CONFIG_DICT =  {
+    "version": 1,
     "disable_existing_loggers": False,
     "loggers":{
         "root":{
