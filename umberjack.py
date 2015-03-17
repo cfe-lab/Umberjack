@@ -536,7 +536,7 @@ def main():
                         help="full filepath of HYPHYMP executable.  Default: taken from PATH")
     parser.add_argument("--hyphy_basedir", default=settings.DEFAULT_HYPHY_BASEDIR,
                         help="full filepath of HyPhy base directory containing template batch files.")
-    parser.add_argument("--fastree_exe", default=settings.DEFAULT_FASTREE_EXE,
+    parser.add_argument("--fastree_exe", default=settings.DEFAULT_FASTTREEMP_EXE,
                         help="full filepath of FastTreeMP or FastTree executable.  Default: taken from PATH")
     parser.add_argument("--mode", default=settings.DEFAULT_MODE, choices=[MODE_DNDS, MODE_GTR_RATE],
                         help="DNDS: Execute dN/dS analysis for positive (diversifying "
@@ -569,6 +569,7 @@ def main():
     # Automatically set mask_stop_codon to True for dN/dS analysis.
     if args.mode == MODE_DNDS:
         args.mask_stop_codon = True
+        LOGGER.warn("Auto-setting --mask_stop_codon to True since Umberjack is in " + MODE_DNDS + " mode")
 
     # deep copy of arguments excluding empty values
     args_msg = ""
