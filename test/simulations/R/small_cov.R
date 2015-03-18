@@ -141,7 +141,67 @@ plot_act_diversity_by_indelible_mut <- function(full_popn_conserve, orig_conserv
     ggtitle("Boxplot Actual Metric Entropy by Indelible Mutation Scaling Factor")
   print(fig)
 }
+
+# Boxplot the coverage at each Indelible mutation scaling rate
+plot_coverage_by_indelible_mut <- function(orig_read_cov_tsv=ORIG_COV_TSV, 
+                                           aln_read_cov_tsv=ALN_COV_TSV, 
+                                           orig_read_errfree_cov_tsv=ORIG_ERR_FREE_COV_TSV, 
+                                           aln_read_err_free_cov_tsv=ALN_ERR_FREE_COV_TSV,
+                                           indelible) {
   
+  orig_cov <- read.table(orig_read_cov_tsv, header=FALSE, col.names=c("Ref", "NucSite", "Cov"))
+  summary(orig_cov)
+  
+  # Overall sum of reads covering each Pos across all individuals
+  orig_cov_full <- aggregate(formula=Cov~NucSite, data=orig_cov, FUN=sum)
+  orig_cov_full <- merge(orig_cov_full, data.frame(NucSite=c(1:NUM_NUC_SITES)), by="NucSite", all=TRUE)
+  orig_cov_full$Cov[is.na(orig_cov_full$Cov)] <- 0
+  print(summary(orig_cov_full))
+  dim(orig_cov_full)
+  
+  orig_cov_errfree <- read.table(orig_read_errfree_cov_tsv, header=FALSE, col.names=c("Ref", "NucSite", "Cov"))
+  orig_cov_errfree_full <- aggregate(formula=Cov~NucSite, data=orig_cov_errfree, FUN=sum)
+  orig_cov_errfree_full <- merge(orig_cov_full, data.frame(NucSite=c(1:NUM_NUC_SITES)), by="NucSite", all=TRUE)
+  orig_cov_errfree_full$Cov[is.na(orig_cov_errfree_full$Cov)] <- 0
+  print(summary(orig_cov_errfree_full))
+  dim(orig_cov_errfree_full)
+  
+  aln_cov <- read.table(aln_read_cov_tsv, header=FALSE, col.names=c("Ref", "NucSite", "Cov"))
+  summary(aln_cov)
+  # samtools depth files do not report positions with zero coverage.  Add the missing ref/positions
+  aln_cov_full <- merge(aln_cov, data.frame(NucSite=c(1:NUM_NUC_SITES)), by="NucSite", all=TRUE)
+  summary(aln_cov_full)
+  head(aln_cov_full)
+  aln_cov_full$Cov[is.na(aln_cov_full$Cov)] <- 0
+  print(summary(aln_cov_full))
+  dim(aln_cov_full)
+  
+  aln_cov_errfree <- read.table(aln_read_err_free_cov_tsv, header=FALSE, col.names=c("Ref", "NucSite", "Cov"))
+  summary(aln_cov_errfree)
+  # samtools depth files do not report positions with zero coverage.  Add the missing ref/positions
+  aln_cov_errfree_full <- merge(aln_cov_errfree, data.frame(NucSite=c(1:NUM_NUC_SITES)), by="NucSite", all=TRUE)
+  summary(aln_cov_errfree_full)
+  head(aln_cov_errfree_full)
+  aln_cov_errfree_full$Cov[is.na(aln_cov_errfree_full$Cov)] <- 0
+  print(summary(aln_cov_errfree_full))
+  dim(aln_cov_errfree_full)
+  
+  all <- rbind(data.frame(Source="Orig", subset(orig_cov_full, select=c("NucSite", "Cov"))),
+               data.frame(Source="Aln", subset(orig_cov_errfree_full, select=c("NucSite", "Cov"))),
+               data.frame(Source="OrigErrFree", subset(aln_cov_full, select=c("NucSite", "Cov"))),
+               data.frame(Source="AlnErrFree", subset(aln_cov_errfree_full, select=c("NucSite", "Cov"))))
+  all$CodonSite <- ceiling(all$NucSite / 3)
+  all <- merge(x=all, y=indelible, by.x="CodonSite", by.y="Site", all.x=TRUE, all.y=FALSE)
+  print(summary(all))
+  print(dim(all))
+  fig <- ggplot(all, aes(x=as.factor(Scaling_factor), y=Cov, color=Source)) +
+    geom_boxplot() + 
+    xlab("\n Indelible Mutation Scaling Factor") + 
+    ylab("Read Coverage\n") + 
+    ggtitle("Boxplot Read Coverage Indelible Mutation Scaling Factor")
+  print(fig)
+}
+
 # Plots divergence, entropy at each nucleotide position, codon position
 plot_conserve <- function(conserve_csv, title) {
   # Col: "NucSite", "Conserve", "Entropy", "NucDepth", "CodonDepth"
@@ -409,6 +469,18 @@ plot_cmp_cov <- function(orig_read_cov_tsv, aln_read_cov_tsv, orig_read_errfree_
 #'  
 plot_act_diversity_by_indelible_mut(full_popn_conserve, orig_conserve, orig_errfree_conserve,
                                     aln_conserve, aln_errfree_conserve, indelible)
+
+
+#'
+#' Does Indelible Mutation Scaling Factors Affect Read Coverage?
+#' =====================================================================
+#'  
+#'  
+plot_coverage_by_indelible_mut(orig_read_cov_tsv=ORIG_COV_TSV, 
+                               aln_read_cov_tsv=ALN_COV_TSV, 
+                               orig_read_errfree_cov_tsv=ORIG_ERR_FREE_COV_TSV, 
+                               aln_read_err_free_cov_tsv=ALN_ERR_FREE_COV_TSV,
+                               indelible)
 
 
 #' Compare Full Population, Original Reads (Typical, Error Free), Aligned Reads (Typical, Error Free)

@@ -37,7 +37,6 @@ smooth_dist <- as.numeric(unlist(strsplit(args[grep("smooth_dist", args)], "="))
 #' -----------------------------
 #' 
 #' 
-# Cols:  Ref  Site  aveDnDs  dNdSWeightBySubst	dN_minus_dS	Windows	Codons	NonSyn	Syn	Subst	dNdSWeightByReads	multisiteAvedNdS	multisitedNdSWeightBySubst  dNdSWeightByReadsNoLowSyn
 actual_dnds <- read.table(actual_dnds_filename, header=TRUE, na.strings="None", comment.char = "#", sep=",")
 dim(actual_dnds)
 head(actual_dnds)
@@ -51,6 +50,7 @@ expected_dnds <- read.table(expected_dnds_filename, header=TRUE, sep="\t")  # Si
 expected_dnds$Site <- as.numeric(rownames(expected_dnds))
 expected_dnds$Omega <- expected_dnds$dN/expected_dnds$dS
 expected_dnds$Omega[expected_dnds$dS == 0] <- NA
+expected_dnds$Subst <- expected_dnds$Observed.S.Changes + expected_dnds$Observed.NS.Changes
 dim(expected_dnds)
 head(expected_dnds)
 str(expected_dnds)
@@ -82,23 +82,22 @@ expected_dnds$MultisiteAveDnDs <- apply(expected_dnds, 1, function(row) {
 #' ============================================================================
 
 # Read in Indelible's intended dN/dS
-# Cols: Site,Interval,Scaling_factor,Rate_class,Omega
+# Cols: Site,Interval,Scaling_factor,Rate_class,Omega.  These columns are not ordered by site.
 indelible_dnds <- read.table(indelible_dnds_filename, header=TRUE, sep=",")
+indelible_dnds$Scaling_factor <- as.factor(indelible_dnds$Scaling_factor)
 summary(indelible_dnds)
 head(indelible_dnds)
 
 #' **Plot indelible's intended dN/dS vs the actual dN/dS as determined by HyPhy**
 #' 
-indelhyphy <- data.frame(Site=indelible_dnds$Site, 
-                    Scaling_factor=indelible_dnds$Scaling_factor, 
-                    Rate_class=indelible_dnds$Rate_class,
-                    Indelible_Omega=indelible_dnds$Omega,
-                    Hyphy_Omega=expected_dnds$Omega)
+indelhyphy <- merge(x=indelible_dnds, y=expected_dnds[, c("Site", "Subst", "Omega")], 
+                    by.x="Site", by.y="Site", suffixes=c(".indelible", ".hyphy"), all=FALSE)
+colnames(indelhyphy)[grep("Subst", colnames(indelhyphy))] <- "Subst.hyphy"
 summary(indelhyphy)
 indelhyphy <- na.omit(indelhyphy)
 
 #' **Scatterplot Full Population HyPhy Actual dN/dS vs Indelible Expected dN/dS**
-ggplot(indelhyphy, aes(x=Indelible_Omega, y=Hyphy_Omega)) + 
+ggplot(indelhyphy, aes(x=Omega.indelible, y=Omega.hyphy)) + 
   geom_point(shape=1, alpha=0.5, na.rm=TRUE) +
   geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC", na.rm=TRUE) +
   geom_abline(slope=1) + 
@@ -109,29 +108,43 @@ ggplot(indelhyphy, aes(x=Indelible_Omega, y=Hyphy_Omega)) +
   ggtitle("HyPhy dN/dS Vs Indelible dN/dS on Full Population")
 
 #' **Boxplot Full Population HyPhy Actual dN/dS vs Indelible Expected dN/dS**
-ggplot(indelhyphy, aes(x=as.factor(Indelible_Omega), y=Hyphy_Omega)) + 
+ggplot(indelhyphy, aes(x=as.factor(Omega.indelible), y=Omega.hyphy)) + 
   geom_boxplot() +
   geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC", na.rm=TRUE) +
   ylab("HyPhy dN/dS\n") + 
   xlab("\nIndelible dN/dS") + 
-  scale_y_continuous(breaks=seq(0, max(indelhyphy$Hyphy_Omega), 0.5)) + 
+  scale_y_continuous(breaks=seq(0, max(indelhyphy$Omega.hyphy), 0.5)) + 
   theme(axis.title=element_text(size=32), axis.text=element_text(size=14) ,
         axis.text.x = element_text(angle = 90, hjust = 1)) + 
   ggtitle("HyPhy dN/dS Vs Indelible dN/dS on Full Population")
 
+
+#' **Boxplot Full Population HyPhy Actual Subst vs Indelible Mutation Scaling Rate**
+ggplot(indelhyphy, aes(x=Scaling_factor, y=Subst.hyphy)) + 
+  geom_boxplot() +
+  geom_smooth(method=lm, size=4, color="#A30052", fill="#FF99CC", na.rm=TRUE) +
+  ylab("HyPhy Substitutions\n") + 
+  xlab("\nIndelible Mutation Scaling Rate") + 
+  ggtitle("HyPhy Subst Vs Indelible Subst on Full Population")
 
 
 #' Compare Codon Site dN/dS Averaged Over Windows With Full Population HyPhy dN/dS
 #' ============================================================================
 #' 
 #' **Scatterplot actual vs expected dn ds together**
-fullDat <- cbind(actual_dnds, 
-                 Expected=expected_dnds$Omega, 
-                 ExpectedMultisite=expected_dnds$MultisiteAveDnDs, 
-                 ExpectedMinus=expected_dnds$Scaled.dN.dS,
-                 ExpectedSyn=expected_dnds$Observed.S.Changes,
-                 ExpectedNonSyn=expected_dnds$Observed.NS.Changes,
-                 Scaling_factor=indelible_dnds$Scaling_factor)
+
+fullDat <- merge(x=actual_dnds, 
+                 y=expected_dnds[, c("Site", "Omega", "MultisiteAveDnDs", "Scaled.dN.dS", "Observed.S.Changes", "Observed.NS.Changes")], 
+                 by="Site", all=FALSE, sort=TRUE)
+fullDat <- merge(x=fullDat, 
+                 y=indelible_dnds[, c("Site", "Scaling_factor")], 
+                 by="Site", all.x=TRUE, all.y=FALSE, sort=TRUE)
+colnames(fullDat)[grep("Omega", colnames(fullDat))] <- "Expected"
+colnames(fullDat)[grep("MultisiteAveDnDs", colnames(fullDat))] <- "ExpectedMultisite"
+colnames(fullDat)[grep("Scaled.dN.dS", colnames(fullDat))] <- "ExpectedMinus"
+colnames(fullDat)[grep("Observed.S.Changes", colnames(fullDat))] <- "ExpectedSyn"
+colnames(fullDat)[grep("Observed.NS.Changes", colnames(fullDat))] <- "ExpectedNonSyn"
+colnames(fullDat)[grep("Observed.NS.Changes", colnames(fullDat))] <- "ExpectedNonSyn"
 summary(fullDat)
 
 
@@ -169,17 +182,16 @@ scatterplot_actual_v_expected <- function(expected_colname, expected_title, actu
 scatterplot_actual_v_expected("Expected", "dN/dS", "aveDnDs", "Site Ave dN/dS")
 scatterplot_actual_v_expected("Expected", "dN/dS", "dNdSWeightByReads", "Site Ave dN/dS Weighted by Reads")
 scatterplot_actual_v_expected("Expected", "dN/dS", "dNdSWeightByReadsNoLowSyn", "Site Ave dN/dS Weighted by Reads (Exclude Low Syn Subst)")
+scatterplot_actual_v_expected("Expected", "dN/dS", "dNdSWeightByReadsNoLowSynAveAll", "Site Ave dN/dS Weighted by Reads (Exclude Low Syn Subst), AveAll")
 scatterplot_actual_v_expected("Expected", "dN/dS", "dNdSWeightBySubst", "Site Ave dN/dS Weighted by Substitutions")
 scatterplot_actual_v_expected("ExpectedMinus", "dN-dS", "dN_minus_dS", "Site Ave dN-dS")
-scatterplot_actual_v_expected("ExpectedMultisite", "Multisite Ave dN/dS", "multisiteAvedNdS", "Multisite Ave dN/dS")
-scatterplot_actual_v_expected("ExpectedMultisite", "Multisite Ave dN/dS", "multisitedNdSWeightBySubst", "Multisite Ave dN/dS Weighted by Substitutions")
+scatterplot_actual_v_expected("ExpectedMinus", "dN-dS", "dnMinusDsWeightByReadsNoLowSyn", "Site Ave dN-dS Weighted by Reads (Exclude Low Syn Subst)")
 
 
 #' **Smoothed Scatterplot of Site dn/ds across the genome**
 #+ fig.width=28
 fullDatBydatsource <- reshape2:::melt.data.frame(data=fullDat, na.rm = FALSE, id.vars=c("Ref", "Site"),
                                               measure.vars=c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", "dN_minus_dS",
-                                                             "multisiteAvedNdS", "multisitedNdSWeightBySubst", 
                                                              "Expected", "ExpectedMultisite", "ExpectedMinus", 
                                                              "dNdSWeightByReadsNoLowSyn"),
                                               variable.name="datsource", value.name="dnds")
@@ -268,31 +280,6 @@ ggplot(fullDatBydatsource[fullDatBydatsource$datsource %in% c("dN_minus_dS", "Ex
         legend.text=element_text(size=24), legend.title=element_blank())
 
 
-#' **Smoothed Scatterplot of MultiSite dn/ds across the genome**
-#' 
-#+ fig.width=20
-ggplot(fullDatBydatsource[fullDatBydatsource$datsource %in% c("multisiteAvedNdS", "multisitedNdSWeightBySubst", "ExpectedMultisite"),], 
-       aes(x=Site, y=dnds, color=datsource) ) + 
-  geom_smooth(na.rm=TRUE) + 
-  xlab("Codon Site") + 
-  ylab("dN/dS") + 
-  ggtitle("Multisite dn/ds") + 
-  theme(plot.title=element_text(size=36), axis.title=element_text(size=32), axis.text=element_text(size=24), 
-        legend.text=element_text(size=24), legend.title=element_blank())
-
-#' **Line Plot of MultiSite dn/ds across the genome**
-#' 
-#+ fig.width=20
-ggplot(fullDatBydatsource[fullDatBydatsource$datsource %in% c("multisiteAvedNdS", "multisitedNdSWeightBySubst", "ExpectedMultisite"),], 
-       aes(x=Site, y=dnds, color=datsource) ) + 
-  geom_line() + 
-  xlab("Codon Site Along Genome") + 
-  ylab("dN/dS") + 
-  ggtitle("Multisite dn/ds") + 
-  theme(plot.title=element_text(size=36), axis.title=element_text(size=32), axis.text=element_text(size=24), 
-        legend.text=element_text(size=24), legend.title=element_blank())
-
-
 
 #' **Plot the Actual Codon Coverage across genome**
 #' 
@@ -371,24 +358,21 @@ ggplot(expected_dnds, aes(x=Site, y=Omega) ) + geom_line() +
 
 # Returns a table of Lin's concordance correlation values
 print_table_corr <- function() {
-  site_dnds_corr <- sapply(c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", "dNdSWeightByReadsNoLowSyn"),
+  site_dnds_corr <- sapply(c("aveDnDs", "dNdSWeightBySubst", "dNdSWeightByReads", "dNdSWeightByReadsNoLowSyn",
+                             "dNdSWeightByReadsNoLowSynAveAll"),
                            function(col) {
                              dnds_ccc <- epi.ccc(fullDat[, col], fullDat$Expected)
                              return (dnds_ccc$rho.c$est)
                            })
+
   
-  multisite_dnds_corr <- sapply(c("multisiteAvedNdS", "multisitedNdSWeightBySubst"),
-                                function(col) {
-                                  dnds_ccc <- epi.ccc(fullDat[, col], fullDat$ExpectedMultisite)
-                                  return (dnds_ccc$rho.c$est)
-                                })
-  
-  site_dn_minus_ds_corr <- sapply(c("dN_minus_dS"),
+  site_dn_minus_ds_corr <- sapply(c("dN_minus_dS", "dnMinusDsWeightByReadsNoLowSyn"),
                                   function(col) {
                                     dnds_ccc <- epi.ccc(fullDat[, col], fullDat$ExpectedMinus)
                                     return (dnds_ccc$rho.c$est)
                                   })
-  corr_vals <- data.frame(Concordance=c(site_dnds_corr, multisite_dnds_corr, site_dn_minus_ds_corr))
+  
+  corr_vals <- data.frame(Concordance=c(site_dnds_corr,  site_dn_minus_ds_corr))
 }
 
 table_corr <- print_table_corr()
@@ -401,9 +385,20 @@ get_mut_concord <- function(scaling_factor) {
                        fullDat[fullDat$Scaling_factor==scaling_factor, ]$Expected)
   ccc_dNdSWeightByReads <-  epi.ccc(fullDat[fullDat$Scaling_factor==scaling_factor, ]$dNdSWeightByReads, 
                                             fullDat[fullDat$Scaling_factor==scaling_factor, ]$Expected)
-  return (data.frame(Scaling_factor=scaling_factor, ccc_dNdSWeightByReadsNoLowSyn$rho.c$est, ccc_dNdSWeightByReads$rho.c$est))
+  ccc_dNdSWeightByReadsNoLowSynAveAll <-  epi.ccc(fullDat[fullDat$Scaling_factor==scaling_factor, ]$dNdSWeightByReadsNoLowSynAveAll, 
+                                    fullDat[fullDat$Scaling_factor==scaling_factor, ]$Expected)
+  ccc_dN_minus_dS <-  epi.ccc(fullDat[fullDat$Scaling_factor==scaling_factor, ]$dN_minus_dS, 
+                                                  fullDat[fullDat$Scaling_factor==scaling_factor, ]$ExpectedMinus)
+  ccc_dnMinusDsWeightByReadsNoLowSyn <-  epi.ccc(fullDat[fullDat$Scaling_factor==scaling_factor, ]$dnMinusDsWeightByReadsNoLowSyn, 
+                              fullDat[fullDat$Scaling_factor==scaling_factor, ]$ExpectedMinus)
+  return (data.frame(Scaling_factor=scaling_factor, 
+                     ccc_dNdSWeightByReadsNoLowSyn$rho.c$est, 
+                     ccc_dNdSWeightByReads$rho.c$est,
+                     ccc_dNdSWeightByReadsNoLowSynAveAll$rho.c$est,
+                     ccc_dN_minus_dS$rho.c$est,
+                     ccc_dnMinusDsWeightByReadsNoLowSyn$rho.c$est))
 }
-dnds_ccc <- adply(.data=unique(fullDat$Scaling_factor), .margins=1, .fun=get_mut_concord)
+dnds_ccc <- adply(.data=levels(fullDat$Scaling_factor), .margins=1, .fun=get_mut_concord)
 dnds_ccc <- dnds_ccc[, -1]  # remove extraneous column with rownames
 
 #+ results='asis'
@@ -441,7 +436,7 @@ plot_mut_corr<- function(scaling_factor) {
 sapply(unique(fullDat$Scaling_factor), plot_mut_corr)
 
 
-# **Find substitutions at each mutation rate**
+#' **Find substitutions at each mutation rate**
 
 get_mut_subst <- function(scaling_factor) {
   return (data.frame(Scaling_factor=scaling_factor, 
@@ -456,8 +451,25 @@ get_mut_subst <- function(scaling_factor) {
                      
           ))
 }
-mut_subst <- adply(.data=unique(fullDat$Scaling_factor), .margins=1, .fun=get_mut_subst)
+mut_subst <- adply(.data=levels(fullDat$Scaling_factor), .margins=1, .fun=get_mut_subst)
 mut_subst <- mut_subst[, -1]  # remove extraneous column with rownames
 
 #+ results='asis'
 kable(mut_subst, format="html", row.names=FALSE, caption="Substitutions At Each Mutation Rate")
+
+#' **Boxplot Substitutions at each Indelible Mutation Scaling Rate**
+#' 
+fullDatIndelibleCmpBySource <- reshape2:::melt.data.frame(data=fullDat, na.rm = FALSE, id.vars=c("Ref", "Site", "Scaling_factor"),
+                                                 measure.vars=c("Codons", "Windows", "NonSyn", "Syn",
+                                                                "Subst", "ExpectedSubst", 
+                                                                "ExpectedSyn", "ExpectedNonSyn"),
+                                                 variable.name="datsource", value.name="val")
+head(fullDatIndelibleCmpBySource)
+summary(fullDatIndelibleCmpBySource)
+#+ fig.width=12
+fig <- ggplot(fullDatIndelibleCmpBySource, aes(x=Scaling_factor, y=val, color=datsource)) +
+  geom_boxplot() + 
+  xlab("\n Indelible Mutation Scaling Factor") + 
+  ylab("Substitutions and Coverage Related Counts\n") + 
+  ggtitle("Boxplot Substitutions and Counts By Indelible Mutation Scaling Factor")
+print(fig)

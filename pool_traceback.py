@@ -8,23 +8,18 @@ import traceback
 from multiprocessing.pool import Pool
 import multiprocessing
 import logging
-import sys
 
-
-LOGGER = multiprocessing.get_logger()
-LOGGER.setLevel(logging.WARN)
-console_handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter('%(asctime)s - [%(levelname)s] [%(name)s] [%(process)d] %(message)s')
-console_handler.setFormatter(formatter)
-LOGGER.addHandler(console_handler)
-
+LOGGER = logging.getLogger(__name__) #multiprocessing.get_logger()
+#LOGGER.setLevel(logging.WARN)
+#LOGGER.propagate = True
 
 # Shortcut to multiprocessing's logger
 def error(msg, *args):
     """
     use multiprocessing's logger to log an ERROR
     """
-    return multiprocessing.get_logger().error(msg, *args)
+    print "here"
+    return LOGGER.error(msg, *args)
 
 
 class LogExceptions(object):
@@ -62,3 +57,9 @@ class LoggingPool(Pool):
         Override multiprocessing.Pool.apply_async() method such that it logs full exception stack trace from child process.
         """
         return Pool.apply_async(self, LogExceptions(func), args, kwds, callback)
+
+    def imap_unordered(self, func, iterable, chunksize=1):
+        """
+        Override multiprocessing.Pool.imap_unordered() method such that it logs full exception stack trace from child process.
+        """
+        return Pool.imap_unordered(self, LogExceptions(func), iterable, chunksize)

@@ -134,7 +134,7 @@ generate_reads_cmd = ["python", generate_reads_exe,
                       OUTDIR + os.sep + "mixed" + os.sep + "aln",  # BWA output dir
                       str(PROCS),
                       str(SEED),
-                      OUTDIR + os.sep + "mixed" + os.sep + FILENAME_PREFIX + ".rates.csv"]  # Indelible mixed mutation rates csv
+                      OUTDIR + os.sep + "mixed" + os.sep + FILENAME_PREFIX + ".mixed.rates.csv"]  # Indelible mixed mutation rates csv
 LOGGER.debug("About to execute " + " ".join(generate_reads_cmd))
 subprocess.check_call(generate_reads_cmd, env=os.environ)
 LOGGER.debug("Finished execute ")
