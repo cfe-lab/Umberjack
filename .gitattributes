@@ -1,0 +1,2 @@
+*.bf llinguist-language=HyPhyBatchFile
+test/simulations/bin/* linguist-vendored
