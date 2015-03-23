@@ -82,7 +82,7 @@ def setup_logging(config_file=DEFAULT_LOG_CONFIG_FILE):
     if not os.path.exists(config_file):
         logging.config.dictConfig(DEFAULT_LOG_CONFIG_DICT)
     else:
-        logging.config.fileConfig(DEFAULT_LOG_CONFIG_FILE, disable_existing_loggers=False)
+        logging.config.fileConfig(config_file, disable_existing_loggers=False)
 
 def setup_umberjack_config(config_file=DEFAULT_UMBERJACK_CONFIG_FILE, argname_prefix=""):
     """
