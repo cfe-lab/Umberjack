@@ -250,7 +250,7 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
 
 
     process_results = []
-    for start_window_nucpos in range(start_nucpos, end_nucpos, window_slide):
+    for start_window_nucpos in range(start_nucpos, end_nucpos-window_slide, window_slide):
         end_window_nucpos = min(start_window_nucpos + window_size - 1, end_nucpos)
         window_args = {"window_depth_cutoff": window_depth_cutoff,
                        "window_breadth_cutoff": window_breadth_cutoff,
@@ -387,7 +387,7 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
             while start_window_nucpos < end_nucpos or busy_replica_2_request:
 
                 # Assign work to replicas
-                while start_window_nucpos < end_nucpos and available_replicas:
+                while start_window_nucpos < end_nucpos-window_slide and available_replicas:
                     end_window_nucpos = min(start_window_nucpos + window_size - 1, end_nucpos)
 
                     window_args = {"window_depth_cutoff": window_depth_cutoff,

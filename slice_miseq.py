@@ -25,11 +25,13 @@ class _SiteDnDsInfo:
         self.total_exp_syn_subs = 0
         self.total_exp_nonsyn_subs = 0
         self.window_dnds_subs = [] # list of number of substitutions
-        self.total_reads_nolowsyn = 0.0
+
         self.total_dn_minus_ds_nolowsyn = 0.0
         self.total_dn_minus_ds_weightby_reads_nolowsyn = 0.0
         self.total_dnds_nolowsyn = 0.0
         self.accum_win_dnds_weightby_reads_nolowsyn = 0.0
+        self.total_reads_nolowsyn_for_dnminusds = 0.0
+        self.total_reads_nolowsyn_for_dnds = 0.0
 
     def add_dnds(self, dnds, dn_minus_ds, reads, syn_subs, nonsyn_subs, exp_syn_subs, exp_nonsyn_subs):
         """
@@ -52,10 +54,13 @@ class _SiteDnDsInfo:
         self.total_exp_syn_subs += exp_syn_subs
         self.total_exp_nonsyn_subs += exp_nonsyn_subs
         if syn_subs >= 1.0:
-            self.total_reads_nolowsyn += reads
-            self.total_dn_minus_ds_nolowsyn += dn_minus_ds
-            self.total_dn_minus_ds_weightby_reads_nolowsyn += (reads*dn_minus_ds)
-            self.accum_win_dnds_weightby_reads_nolowsyn += (reads*dnds)
+            if dn_minus_ds is not None:
+                self.total_reads_nolowsyn_for_dnminusds += reads
+                self.total_dn_minus_ds_nolowsyn += dn_minus_ds
+                self.total_dn_minus_ds_weightby_reads_nolowsyn += (reads*dn_minus_ds)
+            if dnds is not None:
+                self.total_reads_nolowsyn_for_dnds += reads
+                self.accum_win_dnds_weightby_reads_nolowsyn += (reads*dnds)
 
         self.window_dnds_subs.append([dnds, syn_subs, nonsyn_subs, reads, exp_syn_subs, exp_nonsyn_subs])
 
@@ -141,9 +146,9 @@ class _SiteDnDsInfo:
         Excludes any windows in which the number of synonymous substitutions < 1.
         :return float:
         """
-        if not self.total_reads_nolowsyn:
+        if not self.total_reads_nolowsyn_for_dnds:
             return None
-        return self.accum_win_dnds_weightby_reads_nolowsyn/self.total_reads_nolowsyn
+        return self.accum_win_dnds_weightby_reads_nolowsyn/self.total_reads_nolowsyn_for_dnds
 
 
 
@@ -181,10 +186,10 @@ class _SiteDnDsInfo:
         Ignore windows in which there are less than 1 synonymous substitution at the site
         :return float:
         """
-        if not self.total_reads_nolowsyn:
+        if not self.total_reads_nolowsyn_for_dnminusds:
             return None
 
-        return self.total_dn_minus_ds_weightby_reads_nolowsyn/self.total_reads_nolowsyn
+        return self.total_dn_minus_ds_weightby_reads_nolowsyn/self.total_reads_nolowsyn_for_dnminusds
 
 
     def get_window_coverage(self):
@@ -535,6 +540,7 @@ def get_seq_dnds_info(dnds_tsv_dir, ref, ref_codon_len):
             codons_by_window_pos = Utility.get_total_codons_by_pos(msa_fasta_filename=msa_slice_fasta_filename)
 
             reader = csv.DictReader(dnds_fh, delimiter='\t',)
+            offset = 0
             for offset, codon_row in enumerate(reader):    # Every codon site is a row in the *.dnds.tsv file
                 dN = float(codon_row[hyphy_handler.HYPHY_TSV_DN_COL])
                 dS = float(codon_row[hyphy_handler.HYPHY_TSV_DS_COL])
@@ -553,6 +559,11 @@ def get_seq_dnds_info(dnds_tsv_dir, ref, ref_codon_len):
                 seq_dnds_info.add_site_dnds(site_1based=ref_codon_1based, dnds=dnds, dn_minus_ds=dn_minus_ds,
                                             reads=codons, syn_subs=syn_subs, nonsyn_subs=nonsyn_subs,
                                             exp_syn_subs=exp_syn_subs, exp_nonsyn_subs=exp_nonsyn_subs)
+
+            if offset+1 != len(codons_by_window_pos):
+                raise ValueError("The hyphy output dnds file " + dnds_tsv_filename +
+                                 " should have " + str(len(codons_by_window_pos)) + " codon sites but it only  has" +
+                                 str(offset+1))
 
     return seq_dnds_info
 

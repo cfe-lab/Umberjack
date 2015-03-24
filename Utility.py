@@ -237,7 +237,7 @@ def get_total_codons_by_pos(msa_fasta_filename):
     :param str msa_fasta_filename:  full filepath to nucleotide fasta
     """
     longest_seq = get_longest_seq_size_from_fasta(msa_fasta_filename)
-    total_unambig_codon_by_pos = [0] * int(math.ceil(float(longest_seq)/NUC_PER_CODON))
+    total_unambig_codon_by_pos = [0] * int(math.floor(float(longest_seq)/NUC_PER_CODON)) # if the last codon doesn't have enuf chars, then hyphy ignores it
     with open(msa_fasta_filename, 'rU') as fh:
         seq = ""
         for line in fh:
@@ -246,8 +246,8 @@ def get_total_codons_by_pos(msa_fasta_filename):
                 seq = seq.upper().replace("-", "N")
                 for nuc_pos in range(0, len(seq), 3):
                     codon = seq[nuc_pos:nuc_pos + NUC_PER_CODON]
-                    codon += ("N" * (NUC_PER_CODON - len(codon)))  # right pad with N's
-                    if CODON2AA.get(codon):
+                    #codon += ("N" * (NUC_PER_CODON - len(codon)))  # right pad with N's
+                    if len(codon) == NUC_PER_CODON and CODON2AA.get(codon):
                         codon_pos = nuc_pos/NUC_PER_CODON
                         total_unambig_codon_by_pos[codon_pos] += 1
                 seq = ""
@@ -257,8 +257,8 @@ def get_total_codons_by_pos(msa_fasta_filename):
         seq = seq.upper().replace("-", "N")
         for nuc_pos in range(0, len(seq), 3):
             codon = seq[nuc_pos:nuc_pos + NUC_PER_CODON]
-            codon += ("N" * (NUC_PER_CODON - len(codon)))  # right pad with N's
-            if CODON2AA.get(codon):
+            #codon += ("N" * (NUC_PER_CODON - len(codon)))  # right pad with N's
+            if len(codon) == NUC_PER_CODON and CODON2AA.get(codon):
                 codon_pos = nuc_pos/NUC_PER_CODON
                 total_unambig_codon_by_pos[codon_pos] += 1
 
