@@ -78,8 +78,8 @@ else:
 
     logfile = art_output_prefix + ".art.log"
     with open(logfile, 'w') as fh_log:
-        print "Logging to " + logfile
-        print "About to execute " + " ".join(ART_CMD)
+        LOGGER.debug( "Logging to " + logfile)
+        LOGGER.debug( "About to execute " + " ".join(ART_CMD))
         subprocess.check_call(ART_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
 
     # ART creates fastq files with suffix 1.fq.  We want .1.fq suffix.  Rename files.
@@ -96,8 +96,8 @@ else:
                   "SECOND_END_FASTQ=" + art_output_prefix + ".errFree.2.fq"]
     picard_logfile = art_output_prefix + ".picard.sam2fastq.log"
     with open(picard_logfile, 'w') as fh_log:
-        print "Logging to " + picard_logfile
-        print "About to execute " + " ".join(PICARD_CMD)
+        LOGGER.debug( "Logging to " + picard_logfile)
+        LOGGER.debug( "About to execute " + " ".join(PICARD_CMD))
         subprocess.check_call(PICARD_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
 
 
@@ -121,8 +121,8 @@ else:
 
     # bwa seems to perform better than bowtie for aligning the very divergent sequences
     with open(bwa_log, 'w') as fh_log:
-        print "Logging to " + bwa_log
-        print "About to execute " + " ".join(BWA_BUILD_CMD)
+        LOGGER.debug( "Logging to " + bwa_log)
+        LOGGER.debug( "About to execute " + " ".join(BWA_BUILD_CMD))
         subprocess.check_call(BWA_BUILD_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
 
         for fq_prefix, output_sam in [(art_output_prefix, bwa_output_prefix + ".consensus.bwa.sam"),
@@ -139,7 +139,7 @@ else:
                   fq_prefix + ".1.fq",
                   fq_prefix + ".2.fq"]
             with open(output_sam, 'w') as fh_out_sam:
-                print "About to execute " + " ".join(BWA_CMD) + " output to " + output_sam
+                LOGGER.debug( "About to execute " + " ".join(BWA_CMD) + " output to " + output_sam)
                 subprocess.check_call(BWA_CMD, env=os.environ, stdout=fh_out_sam, stderr=fh_log)
 
 
@@ -154,7 +154,7 @@ else:
     # Get the coverage stats and histo
     # Get alignment stats
     picard_logfile = bwa_output_prefix + ".picard.metrics.log"
-    print "Logging to " + picard_logfile
+    LOGGER.debug( "Logging to " + picard_logfile)
     if os.path.exists(picard_logfile):
         os.remove(picard_logfile)
     for input_sam, aln_ref_fasta in [(art_output_prefix + ".sam", reference_fasta),
@@ -198,16 +198,16 @@ else:
                       "METRIC_ACCUMULATION_LEVEL=ALL_READS" # get metrics for all reads
                       ]
         with open(picard_logfile, 'a') as fh_log:
-            print "About to execute " + " ".join(PICARD_SORT_SAM_CMD)
+            LOGGER.debug( "About to execute " + " ".join(PICARD_SORT_SAM_CMD))
             subprocess.check_call(PICARD_SORT_SAM_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
 
-            print "About to execute " + " ".join(PICARD_WGS_METRICS_CMD)
+            LOGGER.debug(  "About to execute " + " ".join(PICARD_WGS_METRICS_CMD))
             subprocess.check_call(PICARD_WGS_METRICS_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
 
-            print "About to execute " + " ".join(PICARD_SORT_QUERYNAME_SAM_CMD)
+            LOGGER.debug(  "About to execute " + " ".join(PICARD_SORT_QUERYNAME_SAM_CMD))
             subprocess.check_call(PICARD_SORT_QUERYNAME_SAM_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
 
-            print "About to execute " + " ".join(PICARD_ALN_METRICS_CMD)
+            LOGGER.debug(  "About to execute " + " ".join(PICARD_ALN_METRICS_CMD))
             subprocess.check_call(PICARD_ALN_METRICS_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
 
 
@@ -215,7 +215,7 @@ else:
 
     # Get per-bp coverage along reference consensus.  This table is passed to R for plotting.
     samtools_logfile = bwa_output_prefix + ".samtools.log"
-    print "Logging to " + samtools_logfile
+    LOGGER.debug(  "Logging to " + samtools_logfile)
     if os.path.exists(samtools_logfile):
         os.remove(samtools_logfile)
     for input_sam in [art_output_prefix + ".sort.sam",
@@ -235,9 +235,9 @@ else:
                               "-Q", str(MIN_MAP_Q),  # min mapping quality 20
                               output_bam ]
         with open(samtools_logfile, 'a') as fh_log,  open(output_depth_tsv, 'w') as fh_out_cov:
-            print "About to execute " + " ".join(SAMTOOLS_BAM_CMD)
+            LOGGER.debug( "About to execute " + " ".join(SAMTOOLS_BAM_CMD))
             subprocess.check_call(SAMTOOLS_BAM_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
-            print "About to execute " + " ".join(SAMTOOLS_DEPTH_CMD) + " to " + output_depth_tsv
+            LOGGER.debug( "About to execute " + " ".join(SAMTOOLS_DEPTH_CMD) + " to " + output_depth_tsv)
             subprocess.check_call(SAMTOOLS_DEPTH_CMD, env=os.environ, stdout=fh_out_cov, stderr=fh_log)
 
 # Get Conservation And Entropy Stats for Multiple Sequence Alignment
@@ -261,7 +261,7 @@ else:
                                               read_qual_cutoff=MIN_BASE_Q,
                                               max_prop_N=MAX_PROP_N,
                                               breadth_thresh=0.0,
-                                              start_pos=None, end_pos=None,  # slice is the entire length of the genome
+                                              start_pos=0, end_pos=0,  # slice is the entire length of the genome
                                               is_insert=False, ref_len=consensus_len)
 
 
@@ -293,152 +293,157 @@ else:
                 outrow["CodonDepth"] = codon_depths[codon_pos_0based]
                 writer.writerow(outrow)
 
-
-# Get stats on merged read error, length, N's
-for msa_fasta in [reference_fasta,      # full population, no sequencing
-                      art_output_prefix + ".msa.fasta",
-                      art_output_prefix + ".errFree.msa.fasta",
-                      bwa_output_prefix + ".consensus.bwa.msa.fasta",
-                      bwa_output_prefix + ".errFree.consensus.bwa.msa.fasta"]:
-        nuc_conserve_csv = msa_fasta.replace(".fasta", ".conserve.csv").replace(".msa", "")
-
-
-import Bio.SeqIO as SeqIO
-import re
-full_popn_recdict = SeqIO.to_dict(SeqIO.parse(reference_fasta, "fasta"))
-consec_rec = SeqIO.read(consensus_fasta, "fasta")
-
 output_cmp_msa_csv  = art_output_prefix + ".cmp.msa.csv"
 output_err_msa_csv  = art_output_prefix + ".err.msa.csv"
-with open(output_cmp_msa_csv, 'w') as fh_out_cmp_msa_csv, open(output_err_msa_csv, 'w') as fh_out_err_msa_csv:
-    writer_cmp = csv.DictWriter(fh_out_cmp_msa_csv,
-                            fieldnames=["Read",     # Read name
-                                        "Template",  # Read Template from Full Population
-                                        "Source",  # Source of read  [Orig, OrigErrFree, Aln, AlnErrFree]
-                                        "Start",  # 1-based start bp wrt ref
-                                        "End",  # 1-basee end bp wrt ref
-                                        "Ns",   # total N's
-                                        "Consensus_Mismatch",  # Total read bases that don't match the consensus.  Tells us actual diversity.
-                                        "Template_Consensus_Mismatch",  # Total bases in the template that don't match the full population consensus.  Tells us expected diversity.
-                                        "SeqErr",   # Total read bases that don't match template.  Does not include N's
-                                        "Conserve2Nonconserve", # Total template bases matching consensus converted to nonconsensus base in read.  Tells us if expected diversity is lower than actual
-                                        "Nonconserve2Conserve",  # Total template bases that didn't match consensus convered to consensus base in read.  tells us if expected diversity is higher than actual.
+if os.path.exists(output_cmp_msa_csv) and os.path.getsize(output_cmp_msa_csv) and os.path.exists(output_err_msa_csv) and os.path.getsize(output_err_msa_csv):
+    LOGGER.warn("Not regenerating error csvs {} and {}".format(output_cmp_msa_csv, output_err_msa_csv))
+else:
+    # Get stats on merged read error, length, N's
+    for msa_fasta in [reference_fasta,      # full population, no sequencing
+                          art_output_prefix + ".msa.fasta",
+                          art_output_prefix + ".errFree.msa.fasta",
+                          bwa_output_prefix + ".consensus.bwa.msa.fasta",
+                          bwa_output_prefix + ".errFree.consensus.bwa.msa.fasta"]:
+            nuc_conserve_csv = msa_fasta.replace(".fasta", ".conserve.csv").replace(".msa", "")
 
-                            ])
-    writer_cmp.writeheader()
 
-    writer_err = csv.DictWriter(fh_out_err_msa_csv,
-                            fieldnames=["Read",     # Read name
-                                        "Template",  # Read Template from Full Population
-                                        "Source",  # Source of read  [Orig, OrigErrFree, Aln, AlnErrFree]
-                                        "Start",  # 1-based start bp wrt ref
-                                        "End",  # 1-basee end bp wrt ref
-                                        "NucSite",
-                                        "MutationType"  # N, Conserve2Nonconserve or Nonconserve2Conserve
+    import Bio.SeqIO as SeqIO
+    import re
+    full_popn_recdict = SeqIO.to_dict(SeqIO.parse(reference_fasta, "fasta"))
+    consec_rec = SeqIO.read(consensus_fasta, "fasta")
 
-                            ])
-    writer_err.writeheader()
 
-    for source, msa_fasta in [("Orig", art_output_prefix + ".msa.fasta"),
-                              ("OrigErrFree", art_output_prefix + ".errFree.msa.fasta"),
-                              ("Aln", bwa_output_prefix + ".consensus.bwa.msa.fasta"),
-                              ("AlnErrFree", bwa_output_prefix + ".errFree.consensus.bwa.msa.fasta")]:
+    with open(output_cmp_msa_csv, 'w') as fh_out_cmp_msa_csv, open(output_err_msa_csv, 'w') as fh_out_err_msa_csv:
+        writer_cmp = csv.DictWriter(fh_out_cmp_msa_csv,
+                                fieldnames=["Read",     # Read name
+                                            "Template",  # Read Template from Full Population
+                                            "Source",  # Source of read  [Orig, OrigErrFree, Aln, AlnErrFree]
+                                            "Start",  # 1-based start bp wrt ref
+                                            "End",  # 1-basee end bp wrt ref
+                                            "Ns",   # total N's
+                                            "Consensus_Mismatch",  # Total read bases that don't match the consensus.  Tells us actual diversity.
+                                            "Template_Consensus_Mismatch",  # Total bases in the template that don't match the full population consensus.  Tells us expected diversity.
+                                            "SeqErr",   # Total read bases that don't match template.  Does not include N's
+                                            "Conserve2Nonconserve", # Total template bases matching consensus converted to nonconsensus base in read.  Tells us if expected diversity is lower than actual
+                                            "Nonconserve2Conserve",  # Total template bases that didn't match consensus convered to consensus base in read.  tells us if expected diversity is higher than actual.
 
-        # Count the number of mismatches.
-        # Count number of N's
-        cmp_outrow = dict()
-        cmp_outrow["Source"] = source
+                                ])
+        writer_cmp.writeheader()
 
-        for record in SeqIO.parse(msa_fasta, "fasta"):
-            template, read = record.id.split("_")
-            cmp_outrow["Template"] = template
-            cmp_outrow["Read"] = read
-            start = re.search(r"[^\-]", str(record.seq)).start() + 1  # 1-based
-            end = re.search(r"[^\-][\-]*$", str(record.seq)).start() + 1  # 1-based
-            cmp_outrow["Start"] = start
-            cmp_outrow["End"] = end
-            cmp_outrow["Ns"] = str(record.seq).count("N")
+        writer_err = csv.DictWriter(fh_out_err_msa_csv,
+                                fieldnames=["Read",     # Read name
+                                            "Template",  # Read Template from Full Population
+                                            "Source",  # Source of read  [Orig, OrigErrFree, Aln, AlnErrFree]
+                                            "Start",  # 1-based start bp wrt ref
+                                            "End",  # 1-basee end bp wrt ref
+                                            "NucSite",
+                                            "MutationType"  # N, Conserve2Nonconserve or Nonconserve2Conserve
 
-            # Only look non-left/right padded slice
-            read_seq = str(record.seq[start-1:end])
-            template_seq = str(full_popn_recdict[template].seq[start-1:end])
-            consensus_seq = str(consec_rec.seq[start-1:end])
+                                ])
+        writer_err.writeheader()
 
-            ns = 0
-            seq_err = 0
-            consensus_mismatch = 0
-            template_consensus_mismatch = 0
-            conserve2Nonconserve = 0
-            nonconserve2Conserve = 0
-            err_outrow = dict()
-            err_outrow["Source"] = source
-            err_outrow["Template"] = template
-            err_outrow["Read"] = read
-            err_outrow["Start"] = start
-            err_outrow["End"] = end
-            for i in range(0, len(read_seq)):
-                if read_seq[i] != consensus_seq[i]:
-                    consensus_mismatch += 1
-                if template_seq[i] != consensus_seq[i]:
-                    template_consensus_mismatch += 1
+        for source, msa_fasta in [("Orig", art_output_prefix + ".msa.fasta"),
+                                  ("OrigErrFree", art_output_prefix + ".errFree.msa.fasta"),
+                                  ("Aln", bwa_output_prefix + ".consensus.bwa.msa.fasta"),
+                                  ("AlnErrFree", bwa_output_prefix + ".errFree.consensus.bwa.msa.fasta")]:
 
-                if read_seq[i] != template_seq[i]:
-                    err_outrow["NucSite"] = start + i
-                    if read_seq[i] == "N":
-                        ns += 1
-                        err_outrow["MutationType"] = "N"
-                    else:
-                        seq_err += 1
-                        if template_seq[i] == consensus_seq[i]:
-                            conserve2Nonconserve += 1
-                            err_outrow["MutationType"] = "Conserve2Nonconserve"
+            # Count the number of mismatches.
+            # Count number of N's
+            cmp_outrow = dict()
+            cmp_outrow["Source"] = source
+
+            for record in SeqIO.parse(msa_fasta, "fasta"):
+                template, read = record.id.split("_")
+                cmp_outrow["Template"] = template
+                cmp_outrow["Read"] = read
+                start = re.search(r"[^\-]", str(record.seq)).start() + 1  # 1-based
+                end = re.search(r"[^\-][\-]*$", str(record.seq)).start() + 1  # 1-based
+                cmp_outrow["Start"] = start
+                cmp_outrow["End"] = end
+                cmp_outrow["Ns"] = str(record.seq).count("N")
+
+                # Only look non-left/right padded slice
+                read_seq = str(record.seq[start-1:end])
+                template_seq = str(full_popn_recdict[template].seq[start-1:end])
+                consensus_seq = str(consec_rec.seq[start-1:end])
+
+                ns = 0
+                seq_err = 0
+                consensus_mismatch = 0
+                template_consensus_mismatch = 0
+                conserve2Nonconserve = 0
+                nonconserve2Conserve = 0
+                err_outrow = dict()
+                err_outrow["Source"] = source
+                err_outrow["Template"] = template
+                err_outrow["Read"] = read
+                err_outrow["Start"] = start
+                err_outrow["End"] = end
+                for i in range(0, len(read_seq)):
+                    if read_seq[i] != consensus_seq[i]:
+                        consensus_mismatch += 1
+                    if template_seq[i] != consensus_seq[i]:
+                        template_consensus_mismatch += 1
+
+                    if read_seq[i] != template_seq[i]:
+                        err_outrow["NucSite"] = start + i
+                        if read_seq[i] == "N":
+                            ns += 1
+                            err_outrow["MutationType"] = "N"
                         else:
-                            nonconserve2Conserve += 1
-                            err_outrow["MutationType"] = "Nonconserve2Conserve"
+                            seq_err += 1
+                            if template_seq[i] == consensus_seq[i]:
+                                conserve2Nonconserve += 1
+                                err_outrow["MutationType"] = "Conserve2Nonconserve"
+                            else:
+                                nonconserve2Conserve += 1
+                                err_outrow["MutationType"] = "Nonconserve2Conserve"
 
-                    writer_err.writerow(err_outrow)
+                        writer_err.writerow(err_outrow)
 
-            cmp_outrow["Ns"] = ns
-            cmp_outrow["SeqErr"] = seq_err
-            cmp_outrow["Consensus_Mismatch"] = consensus_mismatch
-            cmp_outrow["Conserve2Nonconserve"] = conserve2Nonconserve
-            cmp_outrow["Nonconserve2Conserve"] = nonconserve2Conserve
-            cmp_outrow["Template_Consensus_Mismatch"] = template_consensus_mismatch
-            writer_cmp.writerow(cmp_outrow)
+                cmp_outrow["Ns"] = ns
+                cmp_outrow["SeqErr"] = seq_err
+                cmp_outrow["Consensus_Mismatch"] = consensus_mismatch
+                cmp_outrow["Conserve2Nonconserve"] = conserve2Nonconserve
+                cmp_outrow["Nonconserve2Conserve"] = nonconserve2Conserve
+                cmp_outrow["Template_Consensus_Mismatch"] = template_consensus_mismatch
+                writer_cmp.writerow(cmp_outrow)
 
 
 
 
 # Pass Info to R for plotting into HTML format
 ####################################################################
+if os.path.exists(bwa_output_prefix + ".cov.html") and os.path.getsize(bwa_output_prefix + ".cov.html"):
+    LOGGER.warn("Not regerating simulated data stats knitr html " + bwa_output_prefix + ".cov.html")
+else:
+    Rscript_wdir =  os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + os.sep + "R")
+    # Output the R config file (workaround cuz can't seem to set commandline parameters for rmd knitr scripts)
+    Rcov_config_file = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + os.sep + "R" + os.sep + "small_cov.config")
+    with open(Rcov_config_file, 'w') as fh_out_rconfig:
+        fh_out_rconfig.write("FULL_POPN_CONSERVE_CSV={}".format(reference_fasta.replace(".fasta", ".conserve.csv")) + "\n")
+        fh_out_rconfig.write("ART_FOLD_COVER={}".format(ART_FOLD_COVER) + "\n")
+        fh_out_rconfig.write("ORIG_ERR_FREE_COV_TSV={}".format(art_output_prefix + ".errFree.cov.tsv") + "\n")
+        fh_out_rconfig.write("ALN_ERR_FREE_COV_TSV={}".format(bwa_output_prefix + ".errFree.consensus.bwa.cov.tsv") + "\n")
+        fh_out_rconfig.write("ORIG_ERR_FREE_WGS_METRICS={}".format(art_output_prefix + ".errFree.picard.wgsmetrics") + "\n")
+        fh_out_rconfig.write("ALN_ERR_FREE_WGS_METRICS={}".format(bwa_output_prefix + ".errFree.consensus.bwa.picard.wgsmetrics") + "\n")
+        fh_out_rconfig.write("ORIG_ERR_FREE_CONSERVE_CSV={}".format(art_output_prefix + ".errFree.conserve.csv") + "\n")
+        fh_out_rconfig.write("ALN_ERR_FREE_CONSERVE_CSV={}".format(bwa_output_prefix + ".errFree.consensus.bwa.conserve.csv") + "\n")
+        fh_out_rconfig.write("ORIG_COV_TSV={}".format(art_output_prefix + ".cov.tsv") + "\n")
+        fh_out_rconfig.write("ALN_COV_TSV={}".format(bwa_output_prefix + ".consensus.bwa.cov.tsv") + "\n")
+        fh_out_rconfig.write("ORIG_WGS_METRICS={}".format(art_output_prefix + ".picard.wgsmetrics") + "\n")
+        fh_out_rconfig.write("ALN_WGS_METRICS={}".format(bwa_output_prefix + ".consensus.bwa.picard.wgsmetrics") + "\n")
+        fh_out_rconfig.write("ORIG_CONSERVE_CSV={}".format(art_output_prefix + ".conserve.csv") + "\n")
+        fh_out_rconfig.write("ALN_CONSERVE_CSV={}".format(bwa_output_prefix + ".consensus.bwa.conserve.csv") + "\n")
+        fh_out_rconfig.write("INDELIBLE_RATES_CSV={}".format(INDELIBLE_RATES_CSV) + "\n")
+        fh_out_rconfig.write("CMP_READ_ERR_CSV={}".format(output_cmp_msa_csv) + "\n")
 
-Rscript_wdir =  os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + os.sep + "R")
-# Output the R config file (workaround cuz can't seem to set commandline parameters for rmd knitr scripts)
-Rcov_config_file = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + os.sep + "R" + os.sep + "small_cov.config")
-with open(Rcov_config_file, 'w') as fh_out_rconfig:
-    fh_out_rconfig.write("FULL_POPN_CONSERVE_CSV={}".format(reference_fasta.replace(".fasta", ".conserve.csv")) + "\n")
-    fh_out_rconfig.write("ART_FOLD_COVER={}".format(ART_FOLD_COVER) + "\n")
-    fh_out_rconfig.write("ORIG_ERR_FREE_COV_TSV={}".format(art_output_prefix + ".errFree.cov.tsv") + "\n")
-    fh_out_rconfig.write("ALN_ERR_FREE_COV_TSV={}".format(bwa_output_prefix + ".errFree.consensus.bwa.cov.tsv") + "\n")
-    fh_out_rconfig.write("ORIG_ERR_FREE_WGS_METRICS={}".format(art_output_prefix + ".errFree.picard.wgsmetrics") + "\n")
-    fh_out_rconfig.write("ALN_ERR_FREE_WGS_METRICS={}".format(bwa_output_prefix + ".errFree.consensus.bwa.picard.wgsmetrics") + "\n")
-    fh_out_rconfig.write("ORIG_ERR_FREE_CONSERVE_CSV={}".format(art_output_prefix + ".errFree.conserve.csv") + "\n")
-    fh_out_rconfig.write("ALN_ERR_FREE_CONSERVE_CSV={}".format(bwa_output_prefix + ".errFree.consensus.bwa.conserve.csv") + "\n")
-    fh_out_rconfig.write("ORIG_COV_TSV={}".format(art_output_prefix + ".cov.tsv") + "\n")
-    fh_out_rconfig.write("ALN_COV_TSV={}".format(bwa_output_prefix + ".consensus.bwa.cov.tsv") + "\n")
-    fh_out_rconfig.write("ORIG_WGS_METRICS={}".format(art_output_prefix + ".picard.wgsmetrics") + "\n")
-    fh_out_rconfig.write("ALN_WGS_METRICS={}".format(bwa_output_prefix + ".consensus.bwa.picard.wgsmetrics") + "\n")
-    fh_out_rconfig.write("ORIG_CONSERVE_CSV={}".format(art_output_prefix + ".conserve.csv") + "\n")
-    fh_out_rconfig.write("ALN_CONSERVE_CSV={}".format(bwa_output_prefix + ".consensus.bwa.conserve.csv") + "\n")
-    fh_out_rconfig.write("INDELIBLE_RATES_CSV={}".format(INDELIBLE_RATES_CSV) + "\n")
-    fh_out_rconfig.write("CMP_READ_ERR_CSV={}".format(output_cmp_msa_csv) + "\n")
-
-Rscript_cmd = ("library(knitr); " +
-               "setwd('{}'); ".format(Rscript_wdir) +
-               "spin('small_cov.R', knit=FALSE); " +
-               "knit2html('small_cov.Rmd', stylesheet='markdown_bigwidth.css')")
-subprocess.check_call(["Rscript", "-e", Rscript_cmd], env=os.environ)
-shutil.copy(Rscript_wdir + os.sep + "small_cov.html", bwa_output_prefix + ".cov.html")
+    Rscript_cmd = ("library(knitr); " +
+                   "setwd('{}'); ".format(Rscript_wdir) +
+                   "spin('small_cov.R', knit=FALSE); " +
+                   "knit2html('small_cov.Rmd', stylesheet='markdown_bigwidth.css')")
+    subprocess.check_call(["Rscript", "-e", Rscript_cmd], env=os.environ)
+    shutil.copy(Rscript_wdir + os.sep + "small_cov.html", bwa_output_prefix + ".cov.html")
 
 
 
