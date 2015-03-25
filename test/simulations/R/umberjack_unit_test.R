@@ -1,3 +1,6 @@
+library(knitr)
+opts_chunk$set(progress=FALSE, verbose=FALSE, warning=FALSE, message=FALSE, width=1500)
+
 library(ggplot2)
 library(reshape2)
 library(knitr)

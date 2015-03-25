@@ -1,6 +1,6 @@
 #+ setup, include=FALSE
 library(knitr)
-opts_chunk$set(warning=FALSE, message=FALSE, width=1200)
+opts_chunk$set(progress=FALSE, verbose=FALSE, warning=FALSE, message=FALSE, width=1200)
 
 
 
