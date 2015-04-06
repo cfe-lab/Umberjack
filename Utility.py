@@ -550,7 +550,7 @@ class Consensus:
         :param bool is_count_ambig:  whether to include N as 0.25 of A, C, G, T
         :param bool is_count_gaps:  whether to include inner "-" as 0.25 of A, C, G, T
         :param bool is_count_pad:  whether to include outer - as 0.25 of A, C, G, T
-        :return: Metric Shannon Entropy  (the Shannon Entropy divided by the number of sequences), \
+        :return: Metric Shannon Entropy  (the Shannon Entropy divided by log(the number of sequences), \
                 which can be compared across sites to measure randomness
         :rtype float
         """
@@ -559,7 +559,7 @@ class Consensus:
         if not total_seqs:
             return None
         shannon_entropy = self.get_shannon_entropy(pos_0based, is_count_ambig, is_count_gaps, is_count_pad)
-        metric_entropy = shannon_entropy/total_seqs
+        metric_entropy = shannon_entropy/math.log(total_seqs)
         return metric_entropy
 
 
