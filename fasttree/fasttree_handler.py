@@ -15,7 +15,7 @@ GTRRATES_LINE_START = "GTRRates"
 def make_tree(fasta_fname, threads=1, fastree_exe=settings.DEFAULT_FASTTREEMP_EXE, debug=False):
     """
     Creates a phylogenetic tree from the fasta.
-    Tree file written to same directory as fasta and has same name as fasta but with ".tree" suffix.
+    Tree file written to same directory as fasta and has same name as fasta but with ".nwk" suffix.
     FastTree logfile written to same directory as fasta and has same name as fasta but with ".fasttree.log" suffix.
     :param str fasta_fname:  path to multiple sequence aligned fasta file.  File should have .fasta suffix.
     :param int threads: number of FastTreeMP threads
@@ -26,7 +26,7 @@ def make_tree(fasta_fname, threads=1, fastree_exe=settings.DEFAULT_FASTTREEMP_EX
     """
     fasta_fname_prefix = os.path.splitext(fasta_fname)[0]  # Remove the .fasta suffix
     fastree_logfilename = fasta_fname_prefix + ".fasttree.log"
-    fastree_treefilename = fasta_fname_prefix + ".tree"
+    fastree_treefilename = fasta_fname_prefix + ".nwk"
     fasttree_stdouterr_filename = fasta_fname_prefix + ".fasttree.stdouterr.txt"
     LOGGER.debug("Start Fasttree  " + fastree_treefilename)
 
@@ -74,7 +74,7 @@ def make_tree_repro(fasta_fname, intree_fname, fastree_exe=settings.DEFAULT_FAST
 
     NB:  FastTree2.1 sometimes changes the topology if there are duplicate sequences.
 
-    Tree file written to same directory as fasta and has same name as fasta but with ".tree" suffix.
+    Tree file written to same directory as fasta and has same name as fasta but with ".nwk" suffix.
     FastTree logfile written to same directory as fasta and has same name as fasta but with ".fasttree.log" suffix.
     Verbose FastTree stdout/stderr written to same directory as fasta but with ".fasttree.stdouterr.txt" suffix.
 
@@ -84,7 +84,7 @@ def make_tree_repro(fasta_fname, intree_fname, fastree_exe=settings.DEFAULT_FAST
     """
     fasta_fname_prefix = os.path.splitext(fasta_fname)[0]  # Remove the .fasta suffix
     fastree_logfilename = fasta_fname_prefix + ".fasttree.log"
-    fastree_treefilename = fasta_fname_prefix + ".tree"
+    fastree_treefilename = fasta_fname_prefix + ".nwk"
     fasttree_stdouterr_filename = fasta_fname_prefix + ".fasttree.stdouterr.txt"
     LOGGER.debug("Start Fasttree  " + fastree_treefilename)
 
