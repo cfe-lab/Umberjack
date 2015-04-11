@@ -84,6 +84,6 @@ with open(out_fasta_fname, 'w') as fh_out_fasta:
 
 
 # output consensus
-Utility.get_consensus_from_msa(out_fasta_fname, out_fasta_fname.replace(".fasta", ".consensus.fasta"))
+Utility.write_consensus_from_msa(out_fasta_fname, out_fasta_fname.replace(".fasta", ".consensus.fasta"))
 
 

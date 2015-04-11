@@ -281,16 +281,17 @@ else:
 
             aln = Utility.Consensus()
             aln.parse(msa_fasta)
-            codon_depths = Utility.get_total_codons_by_pos(msa_fasta)  # TODO:  cleaner if we put this in Consensus class
+
 
             for nuc_pos_0based in range(0, aln.get_alignment_len()):
+                codon_pos_0based = nuc_pos_0based * Utility.NUC_PER_CODON
                 outrow = dict()
                 outrow["NucSite"] = nuc_pos_0based + 1
                 outrow["Conserve"] = aln.get_conserve(nuc_pos_0based, is_count_ambig=True, is_count_gaps=True, is_count_pad=False)
                 outrow["Entropy"] = aln.get_shannon_entropy(nuc_pos_0based, is_count_ambig=True, is_count_gaps=True, is_count_pad=False)
                 outrow["NucDepth"] = aln.get_depth(nuc_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
                 codon_pos_0based = nuc_pos_0based / Utility.NUC_PER_CODON
-                outrow["CodonDepth"] = codon_depths[codon_pos_0based]
+                outrow["CodonDepth"] = aln.get_codon_depth(codon_pos_0based=codon_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
                 writer.writerow(outrow)
 
 output_cmp_msa_csv  = art_output_prefix + ".cmp.msa.csv"

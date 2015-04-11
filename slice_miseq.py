@@ -11,33 +11,44 @@ LOGGER = logging.getLogger(__name__)
 
 
 
-class _SiteDnDsInfo:
+class SiteDnDsInfo:
     """
-    Internal use only.  Keeps track of selection information at a codon site.
+    Keeps track of selection information at a codon site.
     """
     def __init__(self):
-        self.accum_win_dnds = 0.0
-        self.accum_win_dn_minus_ds = 0.0
         self.total_win_cover_site = 0
         self.total_syn_subs = 0
         self.total_nonsyn_subs = 0
         self.total_reads = 0
         self.total_exp_syn_subs = 0
         self.total_exp_nonsyn_subs = 0
-        self.window_dnds_subs = [] # list of number of substitutions
 
-        self.total_dn_minus_ds_nolowsyn = 0.0
-        self.total_dn_minus_ds_weightby_reads_nolowsyn = 0.0
-        self.total_dnds_nolowsyn = 0.0
-        self.accum_win_dnds_weightby_reads_nolowsyn = 0.0
-        self.total_reads_nolowsyn_for_dnminusds = 0.0
-        self.total_reads_nolowsyn_for_dnds = 0.0
+        self.total_reads_for_dnds = 0.0
+        self.accum_win_dnds_weightby_reads = 0.0
+        self.total_reads_nolowsub_for_dnds = 0.0
+        self.accum_win_dnds_weightby_reads_nolowsub = 0.0
 
-    def add_dnds(self, dnds, dn_minus_ds, reads, syn_subs, nonsyn_subs, exp_syn_subs, exp_nonsyn_subs):
+        self.total_subs_for_dnds = 0.0
+        self.accum_win_dnds_weightby_subs = 0.0
+        self.total_subs_nolowsub_for_dnds = 0.0
+        self.accum_win_dnds_weightby_subs_nolowsub = 0.0
+
+        self.total_reads_for_dnminusds = 0.0
+        self.accum_win_dnminusds_weightby_reads = 0.0
+        self.total_reads_nolowsub_for_dnminusds = 0.0
+        self.total_dn_minus_ds_weightby_reads_nolowsub = 0.0
+
+        self.total_subs_for_dnminusds = 0.0
+        self.accum_win_dnminusds_weightby_subs = 0.0
+        self.total_subs_nolowsub_for_dnminusds = 0.0
+        self.accum_win_dnminusds_weightby_subs_nolowsub = 0.0
+
+
+    def add_window(self, dnds, dn_minus_ds, reads, syn_subs, nonsyn_subs, exp_syn_subs, exp_nonsyn_subs):
         """
         Insert selection information from a window for the codon site.
         :param dnds: dN/dS for this codon site from a single window.
-        :param dn_minus_ds: scaled dN-dS for this codon site from a single window.
+        :param dn_minus_ds: dN-dS/(tree codon length) for this codon site from a single window.
         :param reads: total reads that contain a valid codon (not - or N's) at this codon site in the window.
         :param syn_subs: total synonymous substitutions for this codon site in the window
         :param nonsyn_subs: total nonsynonymous substitutions for this codon site in the window
@@ -45,151 +56,115 @@ class _SiteDnDsInfo:
         :param exp_nonsyn_subs: expected nonsynomous substitutions
         """
         self.total_win_cover_site += 1
-        if dnds is not None:
-            self.accum_win_dnds += dnds
-        self.accum_win_dn_minus_ds += dn_minus_ds
         self.total_reads += reads
         self.total_syn_subs += syn_subs
         self.total_nonsyn_subs += nonsyn_subs
         self.total_exp_syn_subs += exp_syn_subs
         self.total_exp_nonsyn_subs += exp_nonsyn_subs
-        if syn_subs >= 1.0:
+
+        if dnds is not None:
+            self.total_reads_for_dnds += reads
+            self.total_subs_for_dnds += (syn_subs + nonsyn_subs)
+            self.accum_win_dnds_weightby_reads += (reads * dnds)
+            self.accum_win_dnds_weightby_subs += ((syn_subs + nonsyn_subs) * dnds)
+
+        if dn_minus_ds is not None:
+            self.total_reads_for_dnminusds += reads
+            self.total_subs_for_dnminusds += (syn_subs + nonsyn_subs)
+            self.accum_win_dnminusds_weightby_reads += (reads * dn_minus_ds)
+            self.accum_win_dnminusds_weightby_subs += ((syn_subs + nonsyn_subs) * dn_minus_ds)
+
+
+        # Poor accuracy when site has ambiguous codons and all of its unambiguous codons are fully conserved.
+        # Hyphy averages substitutions over ambiguous codons.  If there are no or very few true substitutions,
+        # any fluctation will greatly impact accuracy.
+        if (syn_subs == 0 or syn_subs >= 1) and (nonsyn_subs == 0 or nonsyn_subs >= 1):
             if dn_minus_ds is not None:
-                self.total_reads_nolowsyn_for_dnminusds += reads
-                self.total_dn_minus_ds_nolowsyn += dn_minus_ds
-                self.total_dn_minus_ds_weightby_reads_nolowsyn += (reads*dn_minus_ds)
+                self.total_reads_nolowsub_for_dnminusds += reads
+                self.total_dn_minus_ds_weightby_reads_nolowsub += (reads*dn_minus_ds)
+
+                self.total_subs_nolowsub_for_dnminusds += (syn_subs + nonsyn_subs)
+                self.accum_win_dnminusds_weightby_subs_nolowsub += ((syn_subs + nonsyn_subs) * dn_minus_ds)
+
             if dnds is not None:
-                self.total_reads_nolowsyn_for_dnds += reads
-                self.accum_win_dnds_weightby_reads_nolowsyn += (reads*dnds)
+                self.total_reads_nolowsub_for_dnds += reads
+                self.accum_win_dnds_weightby_reads_nolowsub += (reads*dnds)
 
-        self.window_dnds_subs.append([dnds, syn_subs, nonsyn_subs, reads, exp_syn_subs, exp_nonsyn_subs])
+                self.total_subs_nolowsub_for_dnds += (syn_subs + nonsyn_subs)
+                self.accum_win_dnds_weightby_subs_nolowsub += ((syn_subs + nonsyn_subs) * dnds)
 
 
-    def get_weighted_ave_dnds(self):
+
+    def get_ave_dnds_weightby_subs(self, is_exclude_low_sub=True):
         """
         Return weighted average dN/dS from all windows for the codon site.
-        Average weighted by number of substitutions for the codon site in the window.
+        Average weighted by number of observed substitutions for the codon site in the window.
+        :param bool is_exclude_low_sub: whether to exclude window-sites that have more than zero but less than 1 synonymous or nonsynonymous substitutions.
+                These sites have poor accuracy.
         :rtype : float
         """
-        if not self.window_dnds_subs:
-            return None
-        else:
-            total_weighted_site_dnds_over_all_windows = 0.0
-            total_subs_at_site_over_all_windows = 0
-            for (site_dnds, site_syn_subst, site_nonsyn_subst, reads, exp_syn_subs, exp_nonsyn_subs) in self.window_dnds_subs:
-                if not site_dnds is None:   # sometimes there are zero observed synonymous substitutions.  Thus dn/ds = None.
-                    total_weighted_site_dnds_over_all_windows += (site_dnds * (site_syn_subst+site_nonsyn_subst))
-                    total_subs_at_site_over_all_windows += (site_syn_subst+site_nonsyn_subst)
-            if not total_subs_at_site_over_all_windows:
+        if is_exclude_low_sub:
+            if not self.total_subs_nolowsub_for_dnds:
                 return None
-            return total_weighted_site_dnds_over_all_windows / total_subs_at_site_over_all_windows
+            return self.accum_win_dnds_weightby_subs_nolowsub / self.total_subs_nolowsub_for_dnds
+        else:
+            if not self.total_subs_for_dnds:
+                return None
+            return self.accum_win_dnds_weightby_subs / self.total_subs_for_dnds
 
 
-    def get_ave_dnds_weightby_reads(self):
+    def get_ave_dnds_weightby_reads(self, is_exclude_low_sub=True):
         """
         Return weighted average dN/dS from all windows for the codon site.
-        Average weighted by number of non-gap reads for the codon site in the window.
+        Average weighted by number of reads with unamiguous codons for the codon site in the window.
+        :param bool is_exclude_low_sub: whether to exclude window-sites that have more than zero but less than 1 synonymous or nonsynonymous substitutions.
+                These sites have poor accuracy.
         :rtype : float
         """
-        if not self.window_dnds_subs:
-            return None
-        else:
-            total_weighted_site_dnds_over_all_windows = 0.0
-            total_reads_at_site_over_all_windows = 0
-            for (site_dnds, site_syn_subst, site_nonsyn_subst, reads_in_window, exp_syn_subs, exp_nonsyn_subs) in self.window_dnds_subs:
-                # sometimes there are zero observed synonymous substitutions, thus dn/ds = None.  Don't include those in average dn/ds
-                if not site_dnds is None:
-                    total_weighted_site_dnds_over_all_windows += (site_dnds * reads_in_window)
-                    total_reads_at_site_over_all_windows += reads_in_window
-            # Don't use self.total_reads because that counts the reads even for window-sites where dn/ds = None
-            if not total_reads_at_site_over_all_windows:
+        if is_exclude_low_sub:
+            if not self.total_reads_nolowsub_for_dnds:
                 return None
-            return total_weighted_site_dnds_over_all_windows / total_reads_at_site_over_all_windows
-
-
-    def get_ave_dnds_weightby_reads_nolowsyn_aveall(self):
-        """
-        Returns weighted average dN/dS from all windows for the codon site.
-        Excludes any windows in which the number of synonymous substitutions < 1.
-        Also does summed of each N, EN, S, ES before calcaulting end dN/dS instead of ave of dN/dS.
-        :return float:
-        """
-        if not self.window_dnds_subs:
-            return None
+            return self.accum_win_dnds_weightby_reads_nolowsub / self.total_reads_nolowsub_for_dnds
         else:
-            total_reads_at_site_over_all_windows = 0.0
-            total_nonsyn_subs_at_site = 0.0
-            total_exp_nonsyn_subs_at_site = 0.0
-            total_syn_subs_at_site = 0.0
-            total_exp_syn_subs_at_site = 0.0
-            for (site_dnds, site_syn_subst, site_nonsyn_subst, reads_in_window, exp_syn_subs, exp_nonsyn_subs) in self.window_dnds_subs:
-                # sometimes there are less than one observed synonymous substitutions.  Don't include those in average dn/ds
-                # These are pretty iffy
-                if site_syn_subst >= 1.0:
-                    total_nonsyn_subs_at_site += (site_nonsyn_subst * reads_in_window)
-                    total_exp_nonsyn_subs_at_site += (exp_nonsyn_subs * reads_in_window)
-                    total_syn_subs_at_site += (site_syn_subst * reads_in_window)
-                    total_exp_syn_subs_at_site += (exp_syn_subs * reads_in_window)
-                    total_reads_at_site_over_all_windows += reads_in_window
-
-            # Don't use self.total_reads because that counts the reads for every window
-            if not total_reads_at_site_over_all_windows:
+            if not self.total_reads_for_dnds:
                 return None
-            # dN/dS = (total non synon subst / total exp non syn subst ) / (total syn subst / total exp syn subst)
-            # = (total non synon subst * total exp syn subst ) / (total exp non syn subst * total syn subst)
-            return (total_nonsyn_subs_at_site * total_exp_syn_subs_at_site)/(total_exp_nonsyn_subs_at_site * total_syn_subs_at_site )
+            return self.accum_win_dnds_weightby_reads / self.total_reads_for_dnds
 
 
-    def get_ave_dnds_weightby_reads_nolowsyn(self):
-        """
-        Returns weighted average dN/dS from all windows for the codon site.
-        Excludes any windows in which the number of synonymous substitutions < 1.
-        :return float:
-        """
-        if not self.total_reads_nolowsyn_for_dnds:
-            return None
-        return self.accum_win_dnds_weightby_reads_nolowsyn/self.total_reads_nolowsyn_for_dnds
-
-
-
-    def get_ave_dnds(self):
-        """
-        Return average dN/dS from all windows for the codon site.
-        NB:  if there is dn/dS=None, then we don't want to count that window
-        :rtype : float
-        """
-        total_site_dnds_over_all_windows = 0.0
-        total_windows = 0
-        # Sometimes dN/dS=None because there are 0 synonumous substitutions.  Don't include those windows
-        for (site_dnds, site_syn_subst, site_nonsyn_subst, reads_in_window, exp_syn_subs, exp_nonsyn_subs) in self.window_dnds_subs:
-            if not site_dnds is None:   # sometimes there are zero observed synonymous substitutions.  Thus dn/ds = None.
-                    total_site_dnds_over_all_windows += site_dnds
-                    total_windows += 1
-        if not total_windows:
-            return None
-        return total_site_dnds_over_all_windows / total_windows
-
-
-    def get_ave_dn_minus_ds(self):
-        """
-        Return average scaled dN-dS from all windows for the codon site
-        :rtype : float
-        """
-        if not self.total_win_cover_site:
-            return None
-        else:
-            return self.accum_win_dn_minus_ds / self.total_win_cover_site
-
-    def get_ave_dn_minus_ds_weightby_reads_nolowsyn(self):
+    def get_ave_dn_minus_ds_weightby_reads(self, is_exclude_low_sub=True):
         """
         Return average scaled dN-dS across all windows for the codon site, weighted by reads per window.
         Ignore windows in which there are less than 1 synonymous substitution at the site
+        :param bool is_exclude_low_sub: whether to exclude window-sites that have more than zero but less than 1 synonymous or nonsynonymous substitutions.
+                These sites have poor accuracy.
         :return float:
         """
-        if not self.total_reads_nolowsyn_for_dnminusds:
-            return None
+        if is_exclude_low_sub:
+            if not self.total_reads_nolowsub_for_dnminusds:
+                return None
+            return self.total_dn_minus_ds_weightby_reads_nolowsub/self.total_reads_nolowsub_for_dnminusds
+        else:
+            if not self.total_reads_for_dnminusds:
+                return None
+            return self.accum_win_dnminusds_weightby_reads / self.total_reads_for_dnminusds
 
-        return self.total_dn_minus_ds_weightby_reads_nolowsyn/self.total_reads_nolowsyn_for_dnminusds
+
+    def get_ave_dn_minus_ds_weightby_subs(self, is_exclude_low_sub=True):
+        """
+        Return average scaled dN-dS across all windows for the codon site, weighted by reads per window.
+        Ignore windows in which there are less than 1 synonymous substitution at the site
+        :param bool is_exclude_low_sub: whether to exclude window-sites that have more than zero but less than 1 synonymous or nonsynonymous substitutions.
+                These sites have poor accuracy.
+        :return float:
+        """
+        if is_exclude_low_sub:
+            if not self.total_subs_nolowsub_for_dnminusds:
+                return None
+            return self.accum_win_dnminusds_weightby_subs_nolowsub/self.total_subs_nolowsub_for_dnminusds
+        else:
+            if not self.total_subs_for_dnminusds:
+                return None
+            return self.accum_win_dnminusds_weightby_subs / self.total_subs_for_dnminusds
 
 
     def get_window_coverage(self):
@@ -199,9 +174,10 @@ class _SiteDnDsInfo:
         """
         return self.total_win_cover_site
 
+
     def get_ave_read_coverage(self):
         """
-        Return average reads that cover this codon site with a valid codon (is not - or Ns) over all windows.
+        Return average reads that cover this codon site with an unambiguous codon (is not - or Ns) over all windows.
         :rtype : float
         """
         if not self.total_win_cover_site:
@@ -240,271 +216,17 @@ class _SiteDnDsInfo:
             return float(self.total_nonsyn_subs + self.total_syn_subs)/self.total_win_cover_site
 
 
-class SeqDnDsInfo:
+
+
+def get_seq_dnds_info(dnds_tsv_dir, ref_codon_len):
     """
-    Keeps track of selection information at a sequence of codon sites.
-    """
-    def __init__(self, seq_len):
-        """
-        Constructor.
-        :rtype : SeqDnDsInfo
-        :param int seq_len: total codons in the sequence
-        """
-        self.dnds_seq = [_SiteDnDsInfo() for i in range(seq_len)]
+    Get dN/dS information from multiple windows for multiple codon sites as a list of SiteDnDsInfo object.
+    We expect that all HyPhy has written out dn/ds tsv files for every window with suffix ".<win1basedStart>_<win1basedEnd>.dnds.tsv"
 
-    def add_site_dnds(self, site_1based, dnds, dn_minus_ds, reads, syn_subs, nonsyn_subs, exp_syn_subs, exp_nonsyn_subs):
-        """
-        Keep track of dn/ds from a window containing this site.
-        :param site_1based: 1-based codon site
-        :param dnds: dn/ds for this codon site as determined from a window fed into hyphy
-        :param dn_minus_ds:
-        :param reads:
-        :param syn_subs:
-        :param nonsyn_subs:
-        :param exp_syn_subs:  expected synonymous substitutions
-        :param exp_nonsyn_subs: expected nonsynomous substitutions
-        """
-        self.dnds_seq[site_1based-1].add_dnds(dnds=dnds, dn_minus_ds=dn_minus_ds, reads=reads,
-                                              syn_subs=syn_subs, nonsyn_subs=nonsyn_subs,
-                                              exp_syn_subs=exp_syn_subs, exp_nonsyn_subs=exp_nonsyn_subs)
-
-
-    def get_site_ave_dnds(self, site_1based):
-        """
-        Get the average dN/dS at the codon site over all windows.
-
-        :return: average dN/dS at the codon site over all windows.
-        :rtype : float
-        :param int site_1based : 1-based codon site position
-        """
-        return self.dnds_seq[site_1based-1].get_ave_dnds()
-
-    def get_site_ave_dn_minus_ds(self, site_1based):
-        """
-        Get the average scaled dN - dS at the codon site over all windows.
-
-        :return: average scaled dN - dS at the codon site over all windows.
-        :rtype : float
-        :param int site_1based : 1-based codon site position
-        """
-        return self.dnds_seq[site_1based-1].get_ave_dn_minus_ds()
-
-    def get_seq_len(self):
-        """
-        Get the length of the codon sequence.
-
-        :return: length of codon sequence
-        :rtype : int
-        """
-        return len(self.dnds_seq)
-
-    def get_site_window_cov(self, site_1based):
-        """
-        Get the total windows that cover the given codon site.
-
-        :return: total windows that cover the given codon site.
-        :rtype : int
-        :param int site_1based : 1-based codon site position
-        """
-        return self.dnds_seq[site_1based-1].get_window_coverage()
-
-    def get_site_ave_read_cov(self, site_1based):
-        """
-        Get the average number of reads that cover the given codon site over all windows.
-        The reads must contain a valid codon at the given codon site (as opposed to - or N)
-
-        :return: average number of reads that cover the given codon site over all windows.
-        :rtype : float
-        :param int site_1based : 1-based codon site position
-        """
-        return self.dnds_seq[site_1based-1].get_ave_read_coverage()
-
-    def get_site_ave_syn_subs(self, site_1based):
-        """
-        Get the average number of synonymous substitutions at the given codon site over all windows.
-
-        :return: average number of synonymous substitutions at the given codon site over all windows.
-        :rtype : float
-        :param int site_1based : 1-based codon site position
-        """
-        return self.dnds_seq[site_1based-1].get_ave_syn_subs()
-
-    def get_site_ave_nonsyn_subs(self, site_1based):
-        """
-        Get the average number of nonsynonymous substitutions at the given codon site over all windows.
-
-        :return: average number of nonsynonymous substitutions at the given codon site over all windows.
-        :rtype : float
-        :param int site_1based : 1-based codon site position
-        """
-        return self.dnds_seq[site_1based-1].get_ave_nonsyn_subs()
-
-    def get_site_ave_subs(self, site_1based):
-        """
-        Get the average number of substitutions at the given codon site over all windows.
-
-        :return: average number of substitutions at the given codon site over all windows.
-        :rtype : float
-        :param int site_1based : 1-based codon site position
-        """
-        return self.dnds_seq[site_1based-1].get_ave_subs()
-
-    def get_weighted_site_ave_dnds(self, site_1based):
-        """
-        Get the average number of substitutions at the given codon site over all windows,
-        weighted by the number of substitutions at the site in a window
-
-        :return: average number of substitutions at the given codon site over all windows.
-        :rtype : float
-        :param int site_1based : 1-based codon site position
-        """
-        return self.dnds_seq[site_1based-1].get_weighted_ave_dnds()
-
-    def get_weighted_byreads_ave_dnds(self, site_1based):
-        """
-        Get the average number of substitutions at the given codon site over all windows,
-        weighted by the number of substitutions at the site in a window
-
-        :return: average number of substitutions at the given codon site over all windows.
-        :rtype : float
-        :param int site_1based : 1-based codon site position
-        """
-        return self.dnds_seq[site_1based-1].get_ave_dnds_weightby_reads()
-
-    def get_ave_dnds_weightby_reads_nolowsyn(self, site_1based):
-        return self.dnds_seq[site_1based-1].get_ave_dnds_weightby_reads_nolowsyn()
-
-    def get_ave_dnds_weightby_reads_nolowsyn_aveall(self, site_1based):
-        return self.dnds_seq[site_1based-1].get_ave_dnds_weightby_reads_nolowsyn_aveall()
-
-    def get_ave_dn_minus_ds_weightby_reads_nolowsyn(self, site_1based):
-        return self.dnds_seq[site_1based-1].get_ave_dn_minus_ds_weightby_reads_nolowsyn()
-
-    def get_multisite_weighted_bysubst_ave_dnds(self, site_start_1based, site_end_1based):
-        """
-        Gets the average dN/dS weighted by substiutions across a range of codon sites over all windows covering the codon range
-        :param site_start_1based:
-        :param site_end_1based:
-        :return:
-        """
-        total_dnds = 0.0
-        if site_start_1based > site_end_1based:
-            raise ValueError("Codon range start must be before range end")
-
-        total_sites = 0.0
-        for site_0based in range(site_start_1based-1, site_end_1based):
-            site_weighted_ave_dnds = self.dnds_seq[site_0based].get_weighted_ave_dnds()
-            if site_weighted_ave_dnds is not None:
-                total_dnds += site_weighted_ave_dnds
-                total_sites += 1
-
-        if not total_sites:
-            return None
-
-        return total_dnds / total_sites
-
-    def get_multisite_weighted_byreads_ave_dnds(self, site_start_1based, site_end_1based):
-        """
-        Gets the average dN/dS weighted by reads across a range of codon sites over all windows covering the codon range
-        :param site_start_1based:
-        :param site_end_1based:
-        :return:
-        """
-        total_dnds = 0.0
-        if site_start_1based > site_end_1based:
-            raise ValueError("Codon range start must be before range end")
-
-        total_sites = 0.0
-        for site_0based in range(site_start_1based-1, site_end_1based):
-            site_weighted_ave_dnds = self.dnds_seq[site_0based].get_weighted_ave_dnds()
-            if site_weighted_ave_dnds is not None:
-                total_dnds += site_weighted_ave_dnds
-                total_sites += 1
-
-        if not total_sites:
-            return None
-
-        return total_dnds / total_sites
-
-    def get_multisite_ave_dnds(self, site_start_1based, site_end_1based):
-        """
-        Finds the average for the set of site-average dN/dS in the specified codon range.
-        :param site_start_1based:
-        :param site_end_1based:
-        :return:
-        """
-        total_dnds = 0.0
-        if site_start_1based > site_end_1based:
-            raise ValueError("Codon range start must be before range end")
-
-        # total_nonsyn = 0.0
-        # total_syn = 0.0
-        # total_exp_nonsyn = 0.0
-        # total_exp_syn = 0.0
-        #
-        #
-        # for site_0based in range(site_start_1based-1, site_end_1based):
-        #     total_nonsyn += self.dnds_seq[site_0based].total_nonsyn_subs
-        #     total_syn += self.dnds_seq[site_0based].total_syn_subs
-        #     total_exp_nonsyn += self.dnds_seq[site_0based].total_exp_nonsyn_subs
-        #     total_exp_syn += self.dnds_seq[site_0based].total_exp_syn_subs
-        #
-        # if total_syn == 0 or total_exp_nonsyn == 0:
-        #     return None
-        # else:
-        #     return (total_nonsyn / total_exp_nonsyn) * (total_exp_syn / total_syn)
-        total_site_ave_dnds = 0.0
-        total_sites = 0
-        for site_0based in range(site_start_1based-1, site_end_1based):
-            site_ave_dnds = self.dnds_seq[site_0based].get_ave_dnds()
-            if site_ave_dnds is not None:
-                total_site_ave_dnds += site_ave_dnds
-                total_sites += 1
-
-        if total_sites == 0:
-            return None
-        else:
-            return total_site_ave_dnds / total_sites
-
-
-def __get_window_seq(seq, start_pos, end_pos, breadth_thresh=0.0):
-    """
-    If the sequence fits the window constraints, then returns the sliced sequence.
-    Otherwise returns None.
-
-    :return:  Sequence that fits in the window, right padded if necessary.  None if sequence doesn't fit window constraints.
-    :rtype : str
-    :param str seq: sequence with no newlines
-    :param int start_pos : 1-based start position of window
-    :param int end_pos : 1-based end position of window
-    :param float breadth_thresh : fraction of sequence that be A,C,T,or G within start_pos and end_pos inclusive.
-    """
-    if seq and len(seq) >= start_pos:
-        slice_seq = seq[start_pos-1:end_pos]
-        slice_seq_uc = slice_seq.upper()
-        a_count = slice_seq_uc.count('A')
-        t_count = slice_seq_uc.count('T')
-        g_count = slice_seq_uc.count('G')
-        c_count = slice_seq_uc.count('C')
-        if float(a_count+g_count+c_count+t_count)/(end_pos - start_pos + 1) >= breadth_thresh:
-            pad = '-' * max(0, end_pos - len(seq))
-            return slice_seq
-
-    return None
-
-
-
-def get_seq_dnds_info(dnds_tsv_dir, ref, ref_codon_len):
-    """
-    Get dN/dS information from multiple windows for multiple codon sites as a SeqDnDsInfo object.
-    We expect that all HyPhy has written out dn/ds tsv files for every window.
-
-    :return: a SeqDnDsInfo object containing the information about selection at all codon sites from multiple windows
-    :rtype: SeqDnDsInfo
+    :return: a list of SiteDnDsInfo objects, each containing the information about selection at a codon site across all windows
+    :rtype: [SiteDnDsInfo]
     :param str dnds_tsv_dir:  directory containing sitewise dn/ds tab-separated files generated by HyPhy
-    :param str ref: reference contig/chromosome name.  Does not include the '>' faster header delimtier or
-                    any thing after the first space in the header text
-    :param int ref_codon_len:  length of the reference in codons
+    :param  int ref_codon_len: length of reference in codons
 
     Assumes these are the columns in the HyPhy DN/DS TSV output:
     - Observed S Changes
@@ -521,25 +243,25 @@ def get_seq_dnds_info(dnds_tsv_dir, ref, ref_codon_len):
     - P{S geq. observed}: binomial distro  pvalue (for the other tail).  Probability of getting more than the observed synonymous substitutions
         under the binomial distribution where probability of 1 synonymous codon = P{S}
     - Scaled dN-dS:  dN-dS normalized by the total length of the tree.
-
-    We only want significant Dn/Ds.
     """
-    seq_dnds_info = SeqDnDsInfo(seq_len=ref_codon_len)
+    seq_dnds_info =  [SiteDnDsInfo() for i in range(ref_codon_len)]
 
     for dnds_tsv_filename in glob.glob(dnds_tsv_dir + os.sep + "*.dnds.tsv"):
         with open(dnds_tsv_filename, 'r') as dnds_fh:
             # *.{start bp}_{end bp}.dnds.tsv filenames use 1-based nucleotide position numbering
             dnds_tsv_fileprefix = dnds_tsv_filename.split('.dnds.tsv')[0]
             win_nuc_range = dnds_tsv_fileprefix.split('.')[-1]
-            # Window ends at this 1-based nucleotide position with respect to the reference
+            # Window starts at this 1-based nucleotide position with respect to the reference
             win_start_nuc_pos_1based_wrt_ref = int(win_nuc_range.split('_')[0])
             # Window starts at this 1-based codon position with respect to the reference
             win_start_codon_1based_wrt_ref = win_start_nuc_pos_1based_wrt_ref/Utility.NUC_PER_CODON + 1
 
             msa_slice_fasta_filename = dnds_tsv_fileprefix + ".fasta"
-            codons_by_window_pos = Utility.get_total_codons_by_pos(msa_fasta_filename=msa_slice_fasta_filename)
+            aln = Utility.Consensus()
+            aln.parse(msa_fasta_filename=msa_slice_fasta_filename)
+            total_codons = aln.get_alignment_len()/Utility.NUC_PER_CODON  # Hyphy drops codons with less than 3 characters
 
-            reader = csv.DictReader(dnds_fh, delimiter='\t',)
+            reader = csv.DictReader(dnds_fh, delimiter='\t')
             offset = 0
             for offset, codon_row in enumerate(reader):    # Every codon site is a row in the *.dnds.tsv file
                 dN = float(codon_row[hyphy_handler.HYPHY_TSV_DN_COL])
@@ -549,20 +271,20 @@ def get_seq_dnds_info(dnds_tsv_dir, ref, ref_codon_len):
                 nonsyn_subs = float(codon_row[hyphy_handler.HYPHY_TSV_N_COL])
                 exp_syn_subs = float(codon_row[hyphy_handler.HYPHY_TSV_EXP_S_COL])
                 exp_nonsyn_subs = float(codon_row[hyphy_handler.HYPHY_TSV_EXP_N_COL])
-                ref_codon_1based = win_start_codon_1based_wrt_ref + offset
-                codons = codons_by_window_pos[offset]
+                ref_codon_0based = win_start_codon_1based_wrt_ref + offset - 1
+                codons = aln.get_codon_depth(codon_pos_0based=offset, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
 
                 if dS == 0:
                     dnds = None
                 else:
                     dnds = dN/dS
-                seq_dnds_info.add_site_dnds(site_1based=ref_codon_1based, dnds=dnds, dn_minus_ds=dn_minus_ds,
+                seq_dnds_info[ref_codon_0based].add_window(dnds=dnds, dn_minus_ds=dn_minus_ds,
                                             reads=codons, syn_subs=syn_subs, nonsyn_subs=nonsyn_subs,
                                             exp_syn_subs=exp_syn_subs, exp_nonsyn_subs=exp_nonsyn_subs)
 
-            if offset+1 != len(codons_by_window_pos):
+            if offset+1 != total_codons:
                 raise ValueError("The hyphy output dnds file " + dnds_tsv_filename +
-                                 " should have " + str(len(codons_by_window_pos)) + " codon sites but it only  has" +
+                                 " should have " + str(total_codons) + " codon sites but it only  has" +
                                  str(offset+1))
 
     return seq_dnds_info
@@ -576,12 +298,23 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, output_csv_filename, comments)
     Output selection information into a tab separated file with the following columns:
     - Ref:  reference name
     - Site:  1-based codon site in the reference
-    - dNdS:  dN/dS
-    - dN_minus_dS:  dN - dS  (this has not been scaled by the number of substitutions at the codon site)
-    - Codons: the number of reads containing a valid codon at this codon site
-    - NonSyn: the number of nonsynonymous substitutions at this codon site amongst the reads
-    - Syn:  the number of synonymous substitutions at this codon site amongst the reads
-    - Subst:  the number of substitutions at this codon site amongst the reads
+    - Windows:  total windows covering this site
+    - Codons: the average reads containing an unambiguous codon at this codon site across windows
+    - NonSyn: the average observed nonsynonymous substitutions at this codon site across windows
+    - Syn:  the average observed synonymous substitutions at this codon site across windows
+    - Subst:  the average observed substitutions at this codon site across windows
+    - dndsWeightByReads:  average site dN/dS across windows, weighted window-site depth of unambiguous codons
+    - dNdSWeightBySubs:  average site dN/dS across windows, weighted window-site observed substitutions
+    - dNdSWeightByReadsNoLowSub:  average site dN/dS across windows, weighted window-site depth of unambiguous codons,
+        exclude window-site with nonsynonymous or synonymous substitutions < 1
+    - dNdSWeightBySubsNoLowSub:  average site dN/dS across windows, weighted window-site observed substitutions,
+        exclude window-site with nonsynonymous or synonymous substitutions < 1
+    - dnMinusDsWeightByReads:  average site dN-dS/treelength across windows, weighted window-site depth of unambiguous codons
+    - dnMinusDsWeightBySubs:  average site dN-dS/treelength across windows, weighted window-site observed substitutions
+    - dnMinusDsWeightByReadsNoLowSubs:  average site dN-dS/treelength across windows, weighted window-site depth of unambiguous codons,
+        exclude window-site with nonsynonymous or synonymous substitutions < 1
+    - dnMinusDsWeightBySubsNoLowSubs:  average site dN-dS/treelength across windows, weighted window-site observed substitutions,
+        exclude window-site with nonsynonymous or synonymous substitutions < 1
 
     :return: a SeqDnDsInfo object containing the information about selection at all codon sites from all windows
     :rtype : SeqDnDsInfo
@@ -591,35 +324,38 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, output_csv_filename, comments)
     :param str output_csv_filename: full filepath of aggregated selection tsv to write to
     :param str comments: any comments to add at the top of the aggregated selection tsv
     """
-    seq_dnds_info = get_seq_dnds_info(dnds_tsv_dir=dnds_tsv_dir, ref=ref,
+    seq_dnds_info = get_seq_dnds_info(dnds_tsv_dir=dnds_tsv_dir,
                                       ref_codon_len=ref_nuc_len / Utility.NUC_PER_CODON)
 
 
     with open(output_csv_filename, 'w') as dnds_fh:
         dnds_fh.write("# " + comments + "\n")
         writer = csv.DictWriter(dnds_fh,
-                                fieldnames=["Ref", "Site", "aveDnDs", "dNdSWeightBySubst", "dN_minus_dS", "Windows",
-                                            "Codons", "NonSyn", "Syn", "Subst", "dNdSWeightByReads",
-                                            "multisiteAvedNdS", "multisitedNdSWeightBySubst", "dNdSWeightByReadsNoLowSyn",
-                                            "dNdSWeightByReadsNoLowSynAveAll", "dnMinusDsWeightByReadsNoLowSyn"])
+                                fieldnames=["Ref", "Site", "Windows", "Codons",
+                                            "NonSyn", "Syn", "Subs",
+                                            "dndsWeightByReads", "dNdSWeightBySubs",
+                                            "dNdSWeightByReadsNoLowSub", "dNdSWeightBySubsNoLowSub",
+                                            "dnMinusDsWeightByReads", "dnMinusDsWeightBySubs",
+                                            "dnMinusDsWeightByReadsNoLowSubs", "dnMinusDsWeightBySubsNoLowSubs"])
 
         writer.writeheader()
-        for site in range(1, seq_dnds_info.get_seq_len() + 1):
-            outrow = {}
+        for site_0based, site_dnds_info in enumerate(seq_dnds_info):
+            outrow = dict()
             outrow["Ref"] = ref
-            outrow["Site"] = site
-            outrow["aveDnDs"] = seq_dnds_info.get_site_ave_dnds(site_1based=site)
-            outrow["dNdSWeightBySubst"] = seq_dnds_info.get_weighted_site_ave_dnds(site_1based=site)
-            outrow["dN_minus_dS"] = seq_dnds_info.get_site_ave_dn_minus_ds(site_1based=site)
-            outrow["Windows"] = seq_dnds_info.get_site_window_cov(site_1based=site)
-            outrow["Codons"] = seq_dnds_info.get_site_ave_read_cov(site_1based=site)
-            outrow["NonSyn"] = seq_dnds_info.get_site_ave_nonsyn_subs(site_1based=site)
-            outrow["Syn"] = seq_dnds_info.get_site_ave_syn_subs(site_1based=site)
-            outrow["Subst"] = seq_dnds_info.get_site_ave_subs(site_1based=site)
-            outrow["dNdSWeightByReads"] = seq_dnds_info.get_weighted_byreads_ave_dnds(site_1based=site)
-            outrow["dNdSWeightByReadsNoLowSyn"] = seq_dnds_info.get_ave_dnds_weightby_reads_nolowsyn(site_1based=site)
-            outrow["dNdSWeightByReadsNoLowSynAveAll"] = seq_dnds_info.get_ave_dnds_weightby_reads_nolowsyn_aveall(site_1based=site)
-            outrow["dnMinusDsWeightByReadsNoLowSyn"] = seq_dnds_info.get_ave_dn_minus_ds_weightby_reads_nolowsyn(site_1based=site)
+            outrow["Site"] = site_0based + 1
+            outrow["Windows"] = site_dnds_info.get_window_coverage()
+            outrow["Codons"] = site_dnds_info.get_ave_read_coverage()
+            outrow["NonSyn"] = site_dnds_info.get_ave_nonsyn_subs()
+            outrow["Syn"] = site_dnds_info.get_ave_syn_subs()
+            outrow["Subs"] = site_dnds_info.get_ave_subs()
+            outrow["dndsWeightByReads"] = site_dnds_info.get_ave_dnds_weightby_reads(is_exclude_low_sub=False)
+            outrow["dNdSWeightBySubs"] = site_dnds_info.get_ave_dnds_weightby_subs(is_exclude_low_sub=False)
+            outrow["dNdSWeightByReadsNoLowSub"] = site_dnds_info.get_ave_dnds_weightby_reads(is_exclude_low_sub=True)
+            outrow["dNdSWeightBySubsNoLowSub"] = site_dnds_info.get_ave_dnds_weightby_subs(is_exclude_low_sub=True)
+            outrow["dnMinusDsWeightByReads"] = site_dnds_info.get_ave_dn_minus_ds_weightby_reads(is_exclude_low_sub=False)
+            outrow["dnMinusDsWeightBySubs"] = site_dnds_info.get_ave_dn_minus_ds_weightby_subs(is_exclude_low_sub=False)
+            outrow["dnMinusDsWeightByReadsNoLowSubs"] = site_dnds_info.get_ave_dn_minus_ds_weightby_reads(is_exclude_low_sub=True)
+            outrow["dnMinusDsWeightBySubsNoLowSubs"] = site_dnds_info.get_ave_dn_minus_ds_weightby_subs(is_exclude_low_sub=True)
             writer.writerow(outrow)
 
     return seq_dnds_info

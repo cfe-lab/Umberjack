@@ -2,7 +2,8 @@ import os
 import errno
 import math
 import re
-import Bio.Phylo  as Phylo
+from collections import defaultdict
+
 
 NUC_PER_CODON = 3
 STOP_AA = "*"
@@ -225,8 +226,46 @@ def get_total_nongap_nuc_all_pos(msa_fasta_filename):
     return total_nongap_by_pos
 
 
+def get_total_unambig_aa_by_codonpos(msa_fasta_filename):
+    """
+     Gets List of  total number of sequences with a codon that can be translated ambiguously to 1 amino acid for every codon position.
+     ASSUME that fasta sequences start at ORF start.
+     ASSUME that fasta sequences are multiple sequence aligned
 
-def get_total_codons_by_pos(msa_fasta_filename):
+    :return: list of codon counts for each position
+    :rtype : list of int
+    :param str msa_fasta_filename:  full filepath to nucleotide fasta
+    """
+    longest_seq = get_longest_seq_size_from_fasta(msa_fasta_filename)
+    total_unambig_codon_by_pos = [0] * int(math.floor(float(longest_seq)/NUC_PER_CODON)) # if the last codon doesn't have enuf chars, then hyphy ignores it
+    with open(msa_fasta_filename, 'rU') as fh:
+        seq = ""
+        for line in fh:
+            line = line.rstrip()
+            if line[0] == '>':
+                seq = seq.upper().replace("-", "N")
+                for nuc_pos in range(0, len(seq), 3):
+                    codon = seq[nuc_pos:nuc_pos + NUC_PER_CODON]
+                    #codon += ("N" * (NUC_PER_CODON - len(codon)))  # right pad with N's
+                    if len(codon) == NUC_PER_CODON and CODON2AA.get(codon):
+                        codon_pos = nuc_pos/NUC_PER_CODON
+                        total_unambig_codon_by_pos[codon_pos] += 1
+                seq = ""
+            else:
+                seq += line
+
+        seq = seq.upper().replace("-", "N")
+        for nuc_pos in range(0, len(seq), 3):
+            codon = seq[nuc_pos:nuc_pos + NUC_PER_CODON]
+            #codon += ("N" * (NUC_PER_CODON - len(codon)))  # right pad with N's
+            if len(codon) == NUC_PER_CODON and CODON2AA.get(codon):
+                codon_pos = nuc_pos/NUC_PER_CODON
+                total_unambig_codon_by_pos[codon_pos] += 1
+
+    return total_unambig_codon_by_pos
+
+
+def get_sitelist_unambig_aa(msa_fasta_filename):
     """
      Gets List of  total number of sequences with an unambiguous codon for every codon position.
      ASSUME that fasta sequences start at ORF start.
@@ -267,111 +306,107 @@ def get_total_codons_by_pos(msa_fasta_filename):
 
 class Consensus:
     """
-    Keeps track of consensus information for a sequence.
+    Keeps track of consensus info, letter counts for nucleotide sequence.
     """
+    PAD_CHAR = "X"  # left or right pad gap, aka external gap
+    GAP_CHAR = "-"  # internal gap, aka gap sandwiched between true bases
+    AMBIG_NUC_CHAR = "N"
 
-    __base_count = {'A': 0, 'C': 0, 'T': 0, 'G': 0, 'N':0, '-':0, 'X':0}
-
-    # ? means unkknown amino acid.  X means left or right pad gap in amino acid
-    __aa_count = {'?':0, 'A':0, 'B':0, 'C':0, 'D':0, 'E':0, 'F':0, 'G':0, 'H':0,
-                     'I':0, 'K':0, 'L':0, 'M':0, 'N':0, 'P':0, 'Q':0, 'R':0, 'S':0,
-                     'T':0, 'V':0, 'W':0, 'Y':0, '*':0, 'X':0}
     TRUE_BASES = ["A", "C", "G", "T"]
-    AMBIG_BASES = ["N"]
-    GAPS = ["-"]
-    PADS = ["X"]  # left or right pad
-    NON_BASES = AMBIG_BASES + GAPS + PADS
+    NON_BASES = [PAD_CHAR, GAP_CHAR, AMBIG_NUC_CHAR]
 
 
     def __init__(self):
         self.seq = []
-        self.aa_seq = []  # Assumes that the sequence starts on ORF
+        self.codon_seq = []  # Assumes that the sequence starts on ORF
 
     def parse(self, msa_fasta_filename):
         """
         Reads in multiple sequence alignment file.
+        :returns int:  total number of sequences parsed
+        :param str msa_fasta_filename:  filepath to multiple sequence aligned fasta
+        :raises ValueError:  if sequences are not all the same length
         """
         with open(msa_fasta_filename, 'r') as in_fh:
+            last_width = None
             seq = ""
             for line in in_fh:
                 line = line.rstrip()
                 if line:
                     if line[0] == '>':
                         if seq:
+                            if last_width is not None and last_width != len(seq):
+                                raise ValueError("Expect all sequences same length in multiple sequence aligned fasta " + msa_fasta_filename)
                             self.add_seq(seq)
                             seq = ""
                     else:
                         seq += line
             if seq:
+                if last_width is not None and last_width != len(seq):
+                    raise ValueError("Expect all sequences same length in multiple sequence aligned fasta " + msa_fasta_filename)
                 self.add_seq(seq)
 
 
     def add_seq(self, seq):
         """
-        Add a sequence to the consensus
+        Add a nucleotide sequence to the consensus.  Assumes internal gaps are represented by "-".
+        External gaps can be represented by either "-" or "X".
+        Assumes that sequence starts on ORF.
+        NB:  Does not handle mixtures other than N
+        :param str seq:  Nucleotide Sequence as String.  Should be multiple sequence aligned with all other sequences in the consensus.
+        :raises ValueError:  if seq is not the same length as existing sequences
         """
 
-        # Collect the Nucleotide level stats
+        # initialize the internal lists of counts
+        old_width = len(self.seq)
+        new_width = len(seq)
+        if not old_width:
+            for i in range(new_width):
+                self.seq.append(defaultdict(int))
+            new_codon_width = int(math.ceil(new_width/float(NUC_PER_CODON)))
+            for i in range(new_codon_width):
+                self.codon_seq.append(defaultdict(int))
+        elif old_width != new_width:
+            raise ValueError("Expect all sequences to be same length = " + str(old_width))
+
 
         # Find the position of the first non-gap char.  Anything before this is a left-pad gap.
-        truebase_start = re.search(r"[^\-]", seq).start()
+        truebase_start = re.search(r"[^X\-]", seq).start()
         # Find the position of the last non-gap char.  Anything after this is a right-pad gap.
-        truebase_end = re.search(r"[^\-][\-]*$", seq).start()
+        truebase_end = re.search(r"[^X\-][X\-]*$", seq).start()
 
+        seq = seq.upper()
+        codon = ""
+        pos_0based = 0
         for pos_0based, base in enumerate(seq):
+            if base not in Consensus.TRUE_BASES +  Consensus.NON_BASES:
+                raise ValueError("Unsupported nucleotide " + base + " at 1-based position " + str(pos_0based + 1))
+
             if truebase_start <= pos_0based <= truebase_end:
-                self.add_base(base, pos_0based=pos_0based)  # Inner gap, or ACGT, or N
+                self.seq[pos_0based][base] += 1  # Inner gap, or ACGT
+                codon += base
             else:
-                self.add_base("X", pos_0based=pos_0based)  # left or right pad gap
+                self.seq[pos_0based][Consensus.PAD_CHAR] += 1 # left or right pad gap
+                codon += Consensus.PAD_CHAR
 
-        # # Collect the codon level stats
-        # truecodon_start = truebase_start/NUC_PER_CODON
-        # truecodon_end = truebase_end/NUC_PER_CODON
-        #
-        # for nuc_pos in range(0, len(seq), 3):
-        #     codon = seq[nuc_pos:nuc_pos + NUC_PER_CODON]
-        #     codon += ("N" * (NUC_PER_CODON - len(codon)))  # right pad with N's
-        #     codon_pos = nuc_pos/NUC_PER_CODON
-        #
-        #     if truecodon_start <= codon_pos <= truecodon_end:
-        #         self.add_codon(codon, codon_pos_0based=codon_pos)   # actual codon
-        #     else:
-        #         self.add_codon("X", codon_pos_0based=codon_pos)  # left or right pad gap
+            if (pos_0based+1) % NUC_PER_CODON == 0:  # last base of codon
+                codon_pos_0based = pos_0based / NUC_PER_CODON
+                self.codon_seq[codon_pos_0based][codon] += 1
+                codon = ""
 
+        if codon != "":   # incomplete codon at end of nucleotide sequence.
+            codon += "X"*(NUC_PER_CODON - len(codon))  # right pad so that the codon is 3 characters long
+            codon_pos_0based = pos_0based / NUC_PER_CODON
+            self.codon_seq[codon_pos_0based][codon] += 1
 
-    def add_codon(self, codon, codon_pos_0based):
-        """
-        :param codon:
-        :param codon_pos_0based:  0-based codon position
-        :return:
-        """
-        # Replace the gaps,  pads with N's so that we can translate the codons.
-        codon = codon.upper().replace("-", "N")
+        # do a quick sanity check
+        if sum(self.seq[0].values()) != sum(self.seq[-1].values()):
+            raise ValueError("Internal cache for nucleotide letter counts corrupted")
+        elif sum(self.codon_seq[-1].values()) != sum(self.codon_seq[-1].values()):
+            raise ValueError("Internal cache for codon counts corrupted")
+        elif len(self.codon_seq) != math.ceil(len(self.seq)/float(NUC_PER_CODON)):
+            raise ValueError("Internal cache for codon counts no longer in sync with nucleotide counts")
 
-        if codon_pos_0based >= len(self.aa_seq):
-            for i in range(codon_pos_0based - len(self.aa_seq) + 1):
-                self.seq.append(Consensus.__base_count.copy())
-
-        aa = CODON2AA.get(codon, "?")  # TODO:  don't hardcode this.  ? means unknown aa
-
-        if self.aa_seq[codon_pos_0based].has_key(aa):
-            self.aa_seq[codon_pos_0based][aa] += 1
-
-
-    def add_base(self, base, pos_0based):
-        """
-        Add a base at the given nucleotide position.
-
-        :param str base:  nucleotide base
-        :param int pos_0based: 0-based nucleotide position
-        """
-        base = base.upper()
-        if pos_0based >= len(self.seq):
-            for i in range(pos_0based - len(self.seq) + 1):
-                self.seq.append(Consensus.__base_count.copy())
-
-        if self.seq[pos_0based].has_key(base):
-            self.seq[pos_0based][base] += 1
 
 
     def get_consensus(self):
@@ -417,35 +452,29 @@ class Consensus:
         :param bool is_count_ambig:  whether to include N as 0.25 of A, C, G, T
         :param bool is_count_gaps:  whether to include inner "-" as 0.25 of A, C, G, T
         :param bool is_count_pad:  whether to include outer - as 0.25 of A, C, G, T
-        :return: the fraction of conserved sequences at every position in the multiple sequence alignment.
+        :return: the fraction of conserved sequences at every position in the multiple sequence alignment or None if there are no valid characters
         :rtype float
         """
-        conserve_count = 0
-        total_count = 0
+        conserve_count = 0.0
+        total_count = 0.0
 
-        for base, count in self.seq[pos_0based].iteritems():
-            if base not in Consensus.NON_BASES:
-                total_count += count
+        for base in Consensus.TRUE_BASES:
+            basecount = self.seq[pos_0based][base]
 
-                if is_count_ambig:
-                    count += self.seq[pos_0based]["N"]/4.0
-                if is_count_gaps:
-                    count += self.seq[pos_0based]["-"]/4.0
-                if is_count_pad:
-                    count += self.seq[pos_0based]["X"]/4.0
+            if is_count_ambig:
+                basecount += self.seq[pos_0based]["N"]/4.0
+            if is_count_gaps:
+                basecount += self.seq[pos_0based]["-"]/4.0
+            if is_count_pad:
+                basecount += self.seq[pos_0based]["X"]/4.0
 
-                if conserve_count < count:
-                    conserve_count = count
+            if conserve_count < basecount:
+                conserve_count = basecount
 
-            elif is_count_ambig and base == "N":
-                total_count += count
-            elif is_count_gaps and base == "-":
-                total_count += count
-            elif is_count_pad and base == "X":
-                total_count += count
+            total_count += basecount
 
         if total_count:
-            return float(conserve_count)/total_count
+            return conserve_count/total_count
         else:
             return None
 
@@ -458,14 +487,20 @@ class Consensus:
         :param bool is_count_ambig:  whether to include N as 0.25 of A, C, G, T
         :param bool is_count_gaps:  whether to include inner "-" as 0.25 of A, C, G, T
         :param bool is_count_pad:  whether to include outer - as 0.25 of A, C, G, T
-        :return:  average per-site fraction of conservation across the range.
+        :return:  average per-site fraction of conservation across the range or None if there are no valid characters
         """
         total_conserve = 0.0
+        total_pos = 0.0
         for pos in range(start_pos_0based, after_end_pos_0based):
             conserve = self.get_conserve(pos, is_count_ambig, is_count_gaps, is_count_pad)
-            total_conserve += conserve if conserve else 0
+            if conserve is not None:
+                total_conserve += conserve
+                total_pos += 1
 
-        ave_conserve = total_conserve / (after_end_pos_0based - start_pos_0based)
+        if total_pos:
+            ave_conserve = total_conserve / total_pos
+        else:
+            ave_conserve = None
         return ave_conserve
 
 
@@ -473,7 +508,7 @@ class Consensus:
     def get_shannon_entropy(self, pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False):
         """
         Gets the Shannon Entropy (measure of bits required to represent each symbol) at the given site.  Only considers A, C, G, T.
-        If there are N or -, then adds 1 to each A, C, G, T count.
+        If there are N or -, then adds 0.25 to each A, C, G, T count.
         :param int pos_0based: 0-based nucleotide position in the multiple sequence alignment
         :param bool is_count_ambig:  whether to include N as 0.25 of A, C, G, T
         :param bool is_count_gaps:  whether to include inner "-" as 0.25 of A, C, G, T
@@ -481,14 +516,22 @@ class Consensus:
         :return: Shannon Entropy.  Log2 based.
         :rtype float
         """
-        total_seqs = sum([count for letter, count in self.seq[pos_0based].iteritems()
-                          if (is_count_ambig or letter != "N") and (is_count_gaps or letter != "-") and (is_count_pad or letter != "X")])
-        if not total_seqs:
-            return None
+        total_seqs = 0.0
+        for letter in Consensus.TRUE_BASES:
+            total_seqs += self.seq[pos_0based][letter]
+        if is_count_ambig:
+            total_seqs += self.seq[pos_0based]["N"]
+        if is_count_gaps:
+            total_seqs += self.seq[pos_0based]["-"]
+        if is_count_pad:
+            total_seqs += self.seq[pos_0based]["X"]
 
-        total_entropy = 0.0
-        for letter, count in  self.seq[pos_0based].iteritems():
-            if letter not in self.NON_BASES:
+        if not total_seqs:
+            total_entropy = None
+        else:
+            total_entropy = 0.0
+            for letter in Consensus.TRUE_BASES:
+                count = self.seq[pos_0based][letter]
                 if is_count_ambig:
                     count += self.seq[pos_0based]["N"]/4.0
                 if is_count_gaps:
@@ -497,11 +540,12 @@ class Consensus:
                     count += self.seq[pos_0based]["X"]/4.0
 
                 if count:
-                    p_letter = count / float(total_seqs)  # probability of this letter occuring at this position
+                    p_letter = count / total_seqs  # probability of this letter occuring at this position
                     log_p_letter = math.log(p_letter, 2)  # Log2  probability of letter
                     total_entropy += (p_letter * log_p_letter)
 
-        total_entropy = -total_entropy
+            total_entropy = -total_entropy
+
         return total_entropy
 
     def get_ave_shannon_entropy(self, start_pos_0based, after_end_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False):
@@ -512,15 +556,21 @@ class Consensus:
         :param bool is_count_ambig:  whether to include N as 0.25 of A, C, G, T
         :param bool is_count_gaps:  whether to include inner "-" as 0.25 of A, C, G, T
         :param bool is_count_pad:  whether to include outer - as 0.25 of A, C, G, T
-        :return: Shannon Entropy.  Log2 based.
+        :return: Shannon Entropy.  Log2 based.  or None if no valid characters
         :rtype float
         """
         total_entropy = 0.0
+        total_pos = 0.0
         for pos in range(start_pos_0based, after_end_pos_0based):
             entropy = self.get_shannon_entropy(pos, is_count_ambig, is_count_gaps, is_count_pad)
-            total_entropy += entropy if entropy else 0
+            if entropy is not None:
+                total_entropy += entropy
+                total_pos += 1
 
-        ave_entropy = total_entropy / (after_end_pos_0based - start_pos_0based)
+        if total_pos:
+            ave_entropy = total_entropy / total_pos
+        else:
+            ave_entropy = None
         return ave_entropy
 
 
@@ -535,11 +585,17 @@ class Consensus:
         :return:  average per-site metric entropy across the range.
         """
         total_entropy = 0.0
+        total_pos = 0.0
         for pos in range(start_pos_0based, after_end_pos_0based):
             entropy = self.get_metric_entropy(pos, is_count_ambig, is_count_gaps, is_count_pad)
-            total_entropy += entropy if entropy else 0
+            if entropy is not None:
+                total_entropy += entropy
+                total_pos += 1
 
-        ave_entropy = total_entropy / (after_end_pos_0based - start_pos_0based)
+        if total_pos:
+            ave_entropy = total_entropy / total_pos
+        else:
+            ave_entropy = None
         return ave_entropy
 
 
@@ -554,24 +610,28 @@ class Consensus:
                 which can be compared across sites to measure randomness
         :rtype float
         """
-        total_seqs = sum([count for letter, count in self.seq[pos_0based].iteritems()
-                          if (is_count_ambig or letter != "N") and (is_count_gaps or letter != "-") and (is_count_pad or letter != "X")])
+        total_seqs = self.get_depth(pos_0based=pos_0based, is_count_ambig=is_count_ambig, is_count_gaps=is_count_gaps, is_count_pad=is_count_pad)
+
         if not total_seqs:
-            return None
-        shannon_entropy = self.get_shannon_entropy(pos_0based, is_count_ambig, is_count_gaps, is_count_pad)
-        metric_entropy = shannon_entropy/math.log(total_seqs)
+            metric_entropy = None
+        elif total_seqs == 1:
+            metric_entropy = 0
+        else:
+            shannon_entropy = self.get_shannon_entropy(pos_0based, is_count_ambig, is_count_gaps, is_count_pad)
+            metric_entropy = shannon_entropy/math.log(total_seqs)
         return metric_entropy
 
 
     def get_alignment_len(self):
         """
-        :returns: the length of the longest sequence in the alignment
+        :returns: the length of the longest sequence in the alignment in nucleotides
         :rtype: int
         """
         return len(self.seq)
 
     def get_depth(self, pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False):
         """
+        Finds nucleotide depth at given nucleotide site in multiple sequence alignment.
         :param int pos_0based: 0-based nucleotide position in the multiple sequence alignment
         :param bool is_count_ambig:  whether to include N as 0.25 of A, C, G, T
         :param bool is_count_gaps:  whether to include inner "-" as 0.25 of A, C, G, T
@@ -579,63 +639,74 @@ class Consensus:
         :return: the total sequences with a valid nucleotide (A, C, G, T) at the given position.
         :rtype: int
         """
-        total_seqs = sum([count for letter, count in self.seq[pos_0based].iteritems()
-                          if (is_count_ambig or letter != "N") and (is_count_gaps or letter != "-") and (is_count_pad or letter != "X")])
+        total_seqs = 0.0
+        for letter in Consensus.TRUE_BASES:
+            total_seqs += self.seq[pos_0based][letter]
+        if is_count_ambig:
+            total_seqs += self.seq[pos_0based]["N"]
+        if is_count_gaps:
+            total_seqs += self.seq[pos_0based]["-"]
+        if is_count_pad:
+            total_seqs += self.seq[pos_0based]["X"]
         return total_seqs
 
 
     def get_ambig_count(self, pos_0based):
-        return self.seq[pos_0based]["N"]  # TODO:  don't hardcode
+        """
+        :param int pos_0based: 0based nucleotide position
+        :return int: Returns total ambiguous nucleotide characters (only handles N) at this site
+        """
+        return self.seq[pos_0based][Consensus.AMBIG_NUC_CHAR]
 
     def get_pad_count(self, pos_0based):
         """
-        Here, pad refers to gaps external to the sequence.  I.e.  left and right pad gaps.
+        :return int:  Returns total left and right pad gaps (aka external gaps) at this position
+        :param int pos_0based: 0based nucleotide position in multiple sequence alignment
         """
-        return self.seq[pos_0based]["X"]  # TODO:  don't hardcode
+        return self.seq[pos_0based][Consensus.PAD_CHAR]
 
     def get_gap_count(self, pos_0based):
         """
         Here, gap refers to gap internal in the sequence.  I.e.  surrounded by N, A, C, G, T on either side.
+        :return int: Returns total internal gaps at this position in the multiple sequence alignment
+        :param int pos_0based: 0based nucleotide position in multiple sequence alignment
         """
-        return self.seq[pos_0based]["X"]  # TODO:  don't hardcode
+        return self.seq[pos_0based][Consensus.GAP_CHAR]
 
-    def get_codon_depth(self, codon_pos_0based, is_count_ambig=False, is_count_pad=False):
-        total_seqs = sum([count for letter, count in self.codon_seq[codon_pos_0based].iteritems()
-                          if (is_count_ambig or letter != "?") and (is_count_pad or letter != "X")])
-        return total_seqs
+    def get_codon_depth(self, codon_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False):
+        """
+        Returns depth of codons at the given codon position.
+        NB:  N's are the only allowed mixture code right now.
+
+        :param codon_pos_0based: 0-based codon position in the multiple sequence alignment.  Assumes sequences start on ORF.
+        :param bool is_count_ambig:  whether to allow codons with mixture nucleotides
+        :param bool is_count_gaps:  whether to allow codons with internal gaps
+        :param bool is_count_pad:  whether to allow codons with external gaps
+        :return float:  total codons at the codon position
+        """
+        depth = 0
+        for codon, count in self.codon_seq[codon_pos_0based].iteritems():
+            if ((Consensus.AMBIG_NUC_CHAR in codon and not is_count_ambig) or
+                    (Consensus.GAP_CHAR in codon and not is_count_gaps) or
+                    (Consensus.PAD_CHAR in codon and not is_count_pad)):
+                continue
+            depth += count
+        return depth
 
 
 
-def get_consensus_from_msa(msa_fasta_filename, consensus_fasta_filename):
+
+def write_consensus_from_msa(msa_fasta_filename, consensus_fasta_filename):
     """
-    Gets the consensus from a multiple sequence aligned fasta and prints out stats to stdout
-
+    Gets the consensus from a multiple sequence aligned fasta
     :param msa_fasta_filename: full filepath to multiple sequence aligned fasta
     :param consensus_fasta_filename:  full filepath to censusus fasta output
     """
-    consensus = ""
-    with open(msa_fasta_filename, 'r') as in_fh, open(consensus_fasta_filename, 'w') as out_fh:
-        seq = ""
-        consensus = Consensus()
-        for line in in_fh:
-            line = line.rstrip()
-            if line:
-                if line[0] == '>':
-                    for pos_0based, base in enumerate(seq):
-                        consensus.add_base(base, pos_0based=pos_0based)
-                    seq = ""
-                else:
-                    seq += line
-
-        for pos_0based, base in enumerate(seq):
-            consensus.add_base(base, pos_0based=pos_0based)
-
-        consensus_seq = consensus.get_consensus()
+    with open(consensus_fasta_filename, 'w') as out_fh:
+        aln = Consensus()
+        cons_seq = aln.get_consensus()
         out_fh.write(">consensus " + msa_fasta_filename + "\n")
-        out_fh.write(consensus_seq + "\n")
-
-        #consensus.print_stats()
-
+        out_fh.write(cons_seq + "\n")
 
 
 def convert_fasta (lines):
@@ -690,33 +761,3 @@ def get_seq_dict(fasta):
             header2seq[header] = seq
 
     return header2seq
-
-# # Only handles the start positions for now
-# def convert_1nuc_to_1codon(nuc_startpos_1based):
-#     return nuc_startpos_1based/NUC_PER_CODON + 1
-#
-# # Only handles the start positions for now
-# def convert_1codon_to_1nuc(codon_startpos_1based):
-#     return ((codon_startpos_1based - 1) * NUC_PER_CODON) + 1
-
-def get_tree_len_depth(treefilename):
-    """
-    Returns tuple of (sum of all branch lengths in tree (excluding root branch), deepest root to tip distance)
-    :param treefilename:
-    :return: total branch length sum of tree (excluding root branch), deepest root to tip distance
-    :rtype: (float, float)
-    """
-    tree = Phylo.read(treefilename, "newick")
-
-    root_branch_length = tree.clade.branch_length  # set to 1.0  for some odd reason
-    tree_branch_length  = tree.clade.total_branch_length()  # sum of all branch lengths including root branch length
-    unroot_tree_len = tree_branch_length  - root_branch_length
-    clade_depths = tree.depths()
-    longest_depth = 0.0
-
-    for clade, depth in clade_depths.iteritems():
-        if clade.is_terminal():
-            if longest_depth < depth:
-                longest_depth = depth
-
-    return unroot_tree_len, longest_depth
