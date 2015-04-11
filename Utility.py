@@ -704,6 +704,7 @@ def write_consensus_from_msa(msa_fasta_filename, consensus_fasta_filename):
     """
     with open(consensus_fasta_filename, 'w') as out_fh:
         aln = Consensus()
+        aln.parse(msa_fasta_filename)
         cons_seq = aln.get_consensus()
         out_fh.write(">consensus " + msa_fasta_filename + "\n")
         out_fh.write(cons_seq + "\n")
