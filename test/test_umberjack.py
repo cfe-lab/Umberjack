@@ -4,7 +4,8 @@ import os
 import subprocess
 import Utility
 import shutil
-
+import csv
+import config.settings as settings
 
 # Simulation Configs
 SIM_DIR = os.path.dirname(os.path.realpath(__file__)) + os.sep + "simulations"
@@ -49,10 +50,24 @@ THREADS_PER_WINDOW = 4
 WINDOW_PROCS = 3
 
 
-
+MIN_CONCORD = 0.8
 
 
 class TestUmberjack(unittest.TestCase):
+
+    def _is_good_concordance(self, concord_csv):
+        """
+        Read in umberjack_unit_test.concordance.csv and check that each estimated dnds metric
+        has concordance with expected dnds >= MIN_CONCORD.
+        :param str concord_csv: file path to umberjack_unit_test.concordance.csv
+        """
+        with open(concord_csv, 'rU') as fh_in_csv:
+            reader = csv.DictReader(fh_in_csv)
+            for row in reader:
+                if row["Metric"].find("NoLowSub") >=0:  # Only the sites in which we exclude window-sites with low substitutions will be accurate
+                    self.assertGreaterEqual(float(row["Concordance"]), MIN_CONCORD,
+                                        "Expect concordance >=" + str(MIN_CONCORD) + " but got " +
+                                        row["Concordance"] + " for metric " + row["Metric"])
 
     def setUp(self):
         """
@@ -131,7 +146,7 @@ class TestUmberjack(unittest.TestCase):
         ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + 'actual_dnds_by_site.csv'
         START_NUCPOS = 1
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
-        # TODO:  automate check output of R scripts.  Right now, we need to manually view HTML generated from R.
+
         # i.e.  it's up to you to open up ./simulations/R/umberjack_unit_test.html and inspect the graphs/contents.
         umberjack.eval_windows_async(ref=REF, sam_filename=SAM_FILENAME,
                                                out_dir=OUT_DIR, map_qual_cutoff=MAPQ_CUTOFF,
@@ -154,10 +169,18 @@ class TestUmberjack(unittest.TestCase):
             fh_out_config.write("EXPECTED_DNDS_FILENAME=" + EXPECTED_DNDS_FILENAME + "\n")
             fh_out_config.write("INDELIBLE_DNDS_FILENAME=" + INDELIBLE_DNDS_FILENAME + "\n")
 
-        subprocess.check_call(["Rscript", "-e", "library(knitr); setwd('" + R_DIR + "'); spin('umberjack_unit_test.R')"],
+        subprocess.check_call(["Rscript", "-e", "library(knitr); " +
+                               "setwd('" + R_DIR + "'); " +
+                               "spin('umberjack_unit_test.R', knit=FALSE);" +
+                               "knit2html('./umberjack_unit_test.Rmd', stylesheet='./markdown_bigwidth.css');"],
                               shell=False, env=os.environ)
         shutil.copy(R_DIR + os.sep + "umberjack_unit_test.html",
                     OUT_DIR + os.sep + "umberjack_unit_test.html")
+
+        concord_csv = OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv"
+        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.concordance.csv",
+                    concord_csv)
+        self._is_good_concordance(concord_csv=concord_csv)
 
 
     def test_eval_windows_async_errfree(self):
@@ -185,17 +208,26 @@ class TestUmberjack(unittest.TestCase):
                                                insert=INSERT,
                                                mask_stop_codon=MASK_STOP_CODON,
                                                debug=True)
-        # TODO:  verify concordance and correlation
+
         rconfig_file = R_DIR + os.sep + "umberjack_unit_test.config"
         with open(rconfig_file, 'w') as fh_out_config:
             fh_out_config.write("ACTUAL_DNDS_FILENAME=" + ERR_FREE_ACTUAL_DNDS_CSV + "\n")
             fh_out_config.write("EXPECTED_DNDS_FILENAME=" + EXPECTED_DNDS_FILENAME + "\n")
             fh_out_config.write("INDELIBLE_DNDS_FILENAME=" + INDELIBLE_DNDS_FILENAME + "\n")
 
-        subprocess.check_call(["Rscript", "-e", "library(knitr); setwd('" + R_DIR + "'); spin('umberjack_unit_test.R')"],
+        subprocess.check_call(["Rscript", "-e", "library(knitr); " +
+                               "setwd('" + R_DIR + "'); " +
+                               "spin('umberjack_unit_test.R', knit=FALSE);" +
+                               "knit2html('./umberjack_unit_test.Rmd', stylesheet='./markdown_bigwidth.css');"],
                               shell=False, env=os.environ)
         shutil.copy(R_DIR + os.sep + "umberjack_unit_test.html",
                     ERR_FREE_OUT_DIR + os.sep + "umberjack_unit_test.html")
+
+        concord_csv = ERR_FREE_OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv"
+        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.concordance.csv",
+                    ERR_FREE_OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv")
+        self._is_good_concordance(concord_csv=concord_csv)
+
 
     def test_eval_windows_mpi(self):
         # ART generated reads aligned to population consensus
@@ -204,8 +236,7 @@ class TestUmberjack(unittest.TestCase):
         ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + 'actual_dnds_by_site.csv'
         START_NUCPOS = 1
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
-        # TODO:  automate check output of R scripts.  Right now, we need to manually view HTML generated from R.
-        # i.e.  it's up to you to open up ./simulations/R/umberjack_unit_test.html and inspect the graphs/contents.
+
 
         # Can't call umberjack.eval_windows_mpi() directly since we need to invoke it with mpirun
         subprocess.check_call(["mpirun",
@@ -239,12 +270,20 @@ class TestUmberjack(unittest.TestCase):
             fh_out_config.write("EXPECTED_DNDS_FILENAME=" + EXPECTED_DNDS_FILENAME + "\n")
             fh_out_config.write("INDELIBLE_DNDS_FILENAME=" + INDELIBLE_DNDS_FILENAME + "\n")
 
-        subprocess.check_call(["Rscript", "-e", "library(knitr); setwd('" + R_DIR + "'); spin('umberjack_unit_test.R')"],
+        subprocess.check_call(["Rscript", "-e", "library(knitr); " +
+                               "setwd('" + R_DIR + "'); " +
+                               "spin('umberjack_unit_test.R', knit=FALSE);" +
+                               "knit2html('./umberjack_unit_test.Rmd', stylesheet='./markdown_bigwidth.css');"],
                               shell=False, env=os.environ)
         shutil.copy(R_DIR + os.sep + "umberjack_unit_test.html",
                     OUT_DIR + os.sep + "umberjack_unit_test.html")
 
+        concord_csv = OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv"
+        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.concordance.csv",
+                    OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv")
+        self._is_good_concordance(concord_csv=concord_csv)
 
 
 if __name__ == '__main__':
+    settings.setup_logging()
     unittest.main()

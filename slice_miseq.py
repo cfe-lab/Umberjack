@@ -36,7 +36,7 @@ class SiteDnDsInfo:
         self.total_reads_for_dnminusds = 0.0
         self.accum_win_dnminusds_weightby_reads = 0.0
         self.total_reads_nolowsub_for_dnminusds = 0.0
-        self.total_dn_minus_ds_weightby_reads_nolowsub = 0.0
+        self.accum_win_dn_minus_ds_weightby_reads_nolowsub = 0.0
 
         self.total_subs_for_dnminusds = 0.0
         self.accum_win_dnminusds_weightby_subs = 0.0
@@ -81,7 +81,7 @@ class SiteDnDsInfo:
         if (syn_subs == 0 or syn_subs >= 1) and (nonsyn_subs == 0 or nonsyn_subs >= 1):
             if dn_minus_ds is not None:
                 self.total_reads_nolowsub_for_dnminusds += reads
-                self.total_dn_minus_ds_weightby_reads_nolowsub += (reads*dn_minus_ds)
+                self.accum_win_dn_minus_ds_weightby_reads_nolowsub += (reads*dn_minus_ds)
 
                 self.total_subs_nolowsub_for_dnminusds += (syn_subs + nonsyn_subs)
                 self.accum_win_dnminusds_weightby_subs_nolowsub += ((syn_subs + nonsyn_subs) * dn_minus_ds)
@@ -142,7 +142,7 @@ class SiteDnDsInfo:
         if is_exclude_low_sub:
             if not self.total_reads_nolowsub_for_dnminusds:
                 return None
-            return self.total_dn_minus_ds_weightby_reads_nolowsub/self.total_reads_nolowsub_for_dnminusds
+            return self.accum_win_dn_minus_ds_weightby_reads_nolowsub/self.total_reads_nolowsub_for_dnminusds
         else:
             if not self.total_reads_for_dnminusds:
                 return None
@@ -333,7 +333,7 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, output_csv_filename, comments)
         writer = csv.DictWriter(dnds_fh,
                                 fieldnames=["Ref", "Site", "Windows", "Codons",
                                             "NonSyn", "Syn", "Subs",
-                                            "dndsWeightByReads", "dNdSWeightBySubs",
+                                            "dNdSWeightByReads", "dNdSWeightBySubs",
                                             "dNdSWeightByReadsNoLowSub", "dNdSWeightBySubsNoLowSub",
                                             "dnMinusDsWeightByReads", "dnMinusDsWeightBySubs",
                                             "dnMinusDsWeightByReadsNoLowSubs", "dnMinusDsWeightBySubsNoLowSubs"])
@@ -348,7 +348,7 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, output_csv_filename, comments)
             outrow["NonSyn"] = site_dnds_info.get_ave_nonsyn_subs()
             outrow["Syn"] = site_dnds_info.get_ave_syn_subs()
             outrow["Subs"] = site_dnds_info.get_ave_subs()
-            outrow["dndsWeightByReads"] = site_dnds_info.get_ave_dnds_weightby_reads(is_exclude_low_sub=False)
+            outrow["dNdSWeightByReads"] = site_dnds_info.get_ave_dnds_weightby_reads(is_exclude_low_sub=False)
             outrow["dNdSWeightBySubs"] = site_dnds_info.get_ave_dnds_weightby_subs(is_exclude_low_sub=False)
             outrow["dNdSWeightByReadsNoLowSub"] = site_dnds_info.get_ave_dnds_weightby_reads(is_exclude_low_sub=True)
             outrow["dNdSWeightBySubsNoLowSub"] = site_dnds_info.get_ave_dnds_weightby_subs(is_exclude_low_sub=True)
