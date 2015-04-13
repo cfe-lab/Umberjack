@@ -126,20 +126,19 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
     # Check whether the msa sliced fasta has enough reads to make a good tree
     if total_slice_seq < window_depth_cutoff:
         LOGGER.warn("MSA Window " + msa_window_fasta_filename + " does not satisfy window depth constraints")
-        return
+    else:
+        LOGGER.debug("MSA Window " + msa_window_fasta_filename + " satisfies window depth constraints")
 
-    LOGGER.debug("MSA Window " + msa_window_fasta_filename + " satisfies window depth constraints")
+        fastree_treefilename = fasttree.make_tree(fasta_fname=msa_window_fasta_filename, threads=threads_per_window, fastree_exe=fastree_exe)
 
-    fastree_treefilename = fasttree.make_tree(fasta_fname=msa_window_fasta_filename, threads=threads_per_window, fastree_exe=fastree_exe)
-
-    if mode == MODE_DNDS:
-        hyphy.calc_dnds(codon_fasta_filename=msa_window_fasta_filename, tree_filename=fastree_treefilename,
-                        hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, threads=threads_per_window)
-    elif mode == MODE_GTR_CMP:
-        hyphy.calc_nuc_subst(hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, threads=threads_per_window,
-                             codon_fasta_filename=msa_window_fasta_filename, tree_filename=fastree_treefilename)
-    elif mode != MODE_GTR_RATE:
-        raise  ValueError("Invalid mode " + mode)
+        if mode == MODE_DNDS:
+            hyphy.calc_dnds(codon_fasta_filename=msa_window_fasta_filename, tree_filename=fastree_treefilename,
+                            hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, threads=threads_per_window)
+        elif mode == MODE_GTR_CMP:
+            hyphy.calc_nuc_subst(hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, threads=threads_per_window,
+                                 codon_fasta_filename=msa_window_fasta_filename, tree_filename=fastree_treefilename)
+        elif mode != MODE_GTR_RATE:
+            raise  ValueError("Invalid mode " + mode)
 
 
 def tabulate_results(ref, sam_filename, out_dir, output_csv_filename, mode, **kwargs):
@@ -245,12 +244,12 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
 
 
     # All nucleotide positions are 1-based
-    total_windows = int(math.ceil((end_nucpos - start_nucpos + 1)/window_slide))
+    total_windows = int(math.ceil(((end_nucpos - window_size + 1) - start_nucpos + 1)/window_slide))
     LOGGER.debug("There are " + str(total_windows) + " total windows to process")
 
 
     process_results = []
-    for start_window_nucpos in range(start_nucpos, end_nucpos-window_slide, window_slide):
+    for start_window_nucpos in range(start_nucpos, end_nucpos-window_size+2, window_slide):
         end_window_nucpos = min(start_window_nucpos + window_size - 1, end_nucpos)
         window_args = {"window_depth_cutoff": window_depth_cutoff,
                        "window_breadth_cutoff": window_breadth_cutoff,
@@ -374,7 +373,7 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
                                       is_insert=insert, is_mask_stop_codon=mask_stop_codon)
 
             # All nucleotide positions are 1-based
-            total_windows = int(math.ceil((end_nucpos - start_nucpos + 1)/window_slide))
+            total_windows = int(math.ceil(((end_nucpos-window_size+1) - start_nucpos + 1)/window_slide))
             LOGGER.debug("Launching " + str(total_windows) + " total windows")
 
             available_replicas = range(1, pool_size)
@@ -383,11 +382,12 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
             start_window_nucpos = start_nucpos
 
 
-
-            while start_window_nucpos < end_nucpos or busy_replica_2_request:
-
+            # TODO:  instead of polling, use a callback function whenever a replicate returns
+            while start_window_nucpos <= end_nucpos - window_size +1 or busy_replica_2_request:
+                LOGGER.debug("busy_replica_2_request=" + str(busy_replica_2_request))
+                LOGGER.debug("start_window_nucpos=" + str(start_window_nucpos))
                 # Assign work to replicas
-                while start_window_nucpos < end_nucpos-window_slide and available_replicas:
+                while start_window_nucpos <= end_nucpos-window_size+1 and available_replicas:
                     end_window_nucpos = min(start_window_nucpos + window_size - 1, end_nucpos)
 
                     window_args = {"window_depth_cutoff": window_depth_cutoff,
@@ -431,6 +431,7 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
                                                                        mpi_rcv_request=rcv_request)
 
                     start_window_nucpos += window_slide
+                    LOGGER.debug(str(start_window_nucpos))
 
                 # Check on replicas
                 if busy_replica_2_request:
