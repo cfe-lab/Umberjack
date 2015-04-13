@@ -6,7 +6,7 @@ import os
 import logging
 from sam_constants import SamFlag as SamFlag
 from sam_constants import  SamHeader as SamHeader
-import sam_record
+import single_record
 import paired_records
 import Utility
 
@@ -40,6 +40,184 @@ def __write_seq(fh_out, name, seq, max_prop_N=1.0, breadth_thresh=0.0):
         return True
     return False
 
+
+def record_iter(sam_filename, ref, mapping_cutoff, read_qual_cutoff,
+                              start_pos=0, end_pos=0, is_insert=False, is_mask_stop_codon=False,
+                              ref_len=0):
+    """
+    Parse SAM file contents for sequences aligned to a reference.
+    Extracts the portion of the read that fits into the desired slice of the genome.
+    For paired-end reads, merges the mates into a single sequence with gaps with respect to the reference.
+    Creates a multiple sequence alignment (MSA) for the desired slice.
+    Left and right pads the reads according to the positions within the slice.
+    Writes the MSA sequences to out_fasta_filename.
+    Converts query names so that they are compatible with Newick format in phylogenetic reconstruction by
+        converting colons, semicolons, parentheses to underscores.
+
+    NB:  Sam file must be query sorted.
+    NB:  Only takes the primary alignment.
+
+    :param str sam_filename: full path to sam file.  Must be queryname sorted.
+    :param str ref: name of reference contig to form MSA alignments to.
+                    If None, then splits out all alignments to any reference that fit within the desired slice positions.
+                    Setting the ref to None is only useful when the reads are aligned to a set of multiple sequence aligned
+                    reference contigs, and you don't care which reference the read hits, just that it fits in the slice.
+    :param int mapping_cutoff:  Ignore alignments with mapping quality lower than the cutoff.
+    :param int read_qual_cutoff: Convert bases with quality lower than this cutoff to N unless both mates agree.
+    :param int start_pos: 1-based start nucleotide start position of slice.  If 0, then uses beginning of ref.
+    :param int end_pos: 1-based end nucleotide start position of slice.  If 0, then uses end of ref.
+    :param bool is_insert: whether to exclude insertions to the reference.
+                If include insertions, then the insertions will be multiple sequence aligned further by MAFFT.
+    :param bool is_mask_stop_codon: whether to mask stop codons with "NNN".
+                Most useful when you want to do codon analysis aftwards, as many codon models do not allow stop codons.
+                Assumes that the reference starts at the beginning of a codon.
+    :param int ref_len: length of reference.  If 0, then takes length from sam headers.
+    :returns int:  total sequences written to multiple sequence aligned fasta
+    :raises : :py:class:`exceptions.ValueError` if sam file is not queryname sorted according to the sam header
+    :return Iterator:  yields the next PairedRecord
+    """
+    if not is_query_sort(sam_filename):
+        raise ValueError("Sam file must be queryname sorted and header must specify sort order")
+
+    if not ref_len:
+        ref_len = get_reflen(sam_filename, ref)
+    with open(sam_filename, 'r') as sam_fh:
+        prev_mate = None
+        for line in sam_fh:
+            if line.startswith(SamHeader.TAG_HEADER_PREFIX):  # skip the headers
+                continue
+
+            lines_arr = line.rstrip().split('\t')
+            if len(lines_arr) < 11:  # in case there are no alignments on this line
+                continue
+
+            qname, flag_str, rname, pos_str, mapq_str, cigar, rnext, pnext, tlen, seq, qual = lines_arr[:11]
+            flag = int(flag_str)
+            pos = int(pos_str)
+            mapq = int(mapq_str)
+
+
+            # If read failed to map or has poor mapping quality, skip it
+            # Be careful!  The rname is only set to '*' and pos is only set to '0'
+            #   if all reads in the mate pair are unmapped.
+            # If the mate is mapped, but this read is not, the rname and pos will be set to the mate's reference hit.
+            # From SAM specs:
+            # "For a unmapped paired-end or mate-pair read whose mate is mapped, the unmapped read
+            #   should have RNAME and POS identical to its mate"
+            #if (SamFlag.IS_UNMAPPED & flag or SamFlag.IS_SECONDARY_ALIGNMENT & flag or SamFlag.IS_CHIMERIC_ALIGNMENT & flag or
+            #        rname == '*' or cigar == '*' or pos == 0 or mapq < mapping_cutoff or (ref and rname != ref)):
+            if SamFlag.IS_UNMAPPED & flag or SamFlag.IS_SECONDARY_ALIGNMENT & flag or SamFlag.IS_CHIMERIC_ALIGNMENT & flag:
+                continue
+
+            is_mate_paired = SamFlag.IS_PAIRED & flag and not SamFlag.IS_MATE_UNMAPPED & flag
+
+            mate = single_record.SingleRecord(ref_len=ref_len)
+            mate.fill_record_vals(qname, flag, rname, seq, cigar, mapq, qual, pos, rnext, pnext)
+
+
+
+            if not prev_mate:  # We are not expecting this mate to be a pair with prev_mate.
+                # If this record isn't paired and it passes our thresholds, then just write it out now
+                if not is_mate_paired and mate.mapq >= mapping_cutoff and (not ref or mate.rname == ref):
+                    # Do low quality masking on the this record and write it out.
+                    mseq, mqual, stats = mate.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=True,
+                                                           do_mask_low_qual=True, q_cutoff=read_qual_cutoff,
+                                                           slice_start_wrt_ref_1based=start_pos,
+                                                           slice_end_wrt_ref_1based=end_pos,
+                                                           do_insert_wrt_ref=is_insert,
+                                                           do_mask_stop_codon=is_mask_stop_codon)
+
+                    prev_mate = None
+                    yield mate
+                # If this mate is paired, wait until we find the next mate in the pair or
+                # know that the next mate doesn't exist before writing this mate out
+                elif is_mate_paired:
+                    prev_mate = mate
+            elif prev_mate:  # We are expecting this mate to be a pair with prev_mate.
+                if not SamFlag.IS_PAIRED & prev_mate.flag and not SamFlag.IS_MATE_UNMAPPED & prev_mate.flag:
+                    raise ValueError("Invalid logic.  Shouldn't get here. - " +
+                                     "Prevmate.qname=" + prev_mate.qname + " flag=" + str(prev_mate.flag) +
+                                     " rnext=" + prev_mate.rnext +
+                                     " mapq=" + str(prev_mate.mapq) + "\n" +
+                                     "LINE=" + line)
+                elif prev_mate.qname == mate.qname and not is_mate_paired:
+                    raise ValueError("Previous mate and this mate have the same qname " + mate.qname +
+                                     " but this mate isn't paired\n" +
+                                     "LINE:" + line)
+                elif prev_mate.qname == qname and is_mate_paired: # prev_mate and this mate are part of the same pair
+                    # Only write out the mates with good map quality and hit our desired ref
+                    if (prev_mate.mapq >= mapping_cutoff and mate.mapq >= mapping_cutoff and
+                            (not ref or prev_mate.rname == ref or prev_mate.rname == "=") and
+                            (not ref or mate.rname == ref or mate.rname == "=")):
+                        pair = paired_records.PairedRecord(prev_mate, mate)
+                        # TODO:  get a merge_sam_reads function that doesn't do all the stats
+                        mseq, stats = pair.get_seq_qual(q_cutoff=read_qual_cutoff,
+                                                           pad_space_btn_mates="N",
+                                                           do_insert_wrt_ref=is_insert,
+                                                           do_pad_wrt_ref=False,
+                                                           do_pad_wrt_slice=True,
+                                                           do_mask_stop_codon=is_mask_stop_codon,
+                                                           slice_start_wrt_ref_1based=start_pos,
+                                                           slice_end_wrt_ref_1based=end_pos)
+
+                        yield pair
+                    elif prev_mate.mapq >= mapping_cutoff  and (not ref or prev_mate.rname == ref or prev_mate.rname == "="):
+                        mseq, mqual, stats = prev_mate.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=True,
+                                                                    do_mask_low_qual=True, q_cutoff=read_qual_cutoff,
+                                                                    slice_start_wrt_ref_1based=start_pos,
+                                                                    slice_end_wrt_ref_1based=end_pos,
+                                                                    do_insert_wrt_ref=is_insert,
+                                                                    do_mask_stop_codon=is_mask_stop_codon)
+
+                        yield prev_mate
+                    elif mate.mapq >= mapping_cutoff  and (not ref or mate.rname == ref or mate.rname == "="):
+                        mseq, mqual, stats = mate.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=True,
+                                                               do_mask_low_qual=True, q_cutoff=read_qual_cutoff,
+                                                               slice_start_wrt_ref_1based=start_pos,
+                                                               slice_end_wrt_ref_1based=end_pos,
+                                                               do_insert_wrt_ref=is_insert,
+                                                               do_mask_stop_codon=is_mask_stop_codon)
+
+                        yield mate
+
+                    # Clear the paired mate expectations for next set of sam records
+                    prev_mate = None
+
+                elif prev_mate.qname != mate.qname:  # This sam record does not pair with the previous sam record.
+                    LOGGER.warn("Sam record inconsistent.  Expected pair for " + prev_mate.qname + " but got " + qname)
+
+                    # Write out prev_mate
+                    if prev_mate.mapq >= mapping_cutoff  and (not ref or prev_mate.rname == ref or prev_mate.rname == "="):
+                        mseq, mqual, stats = prev_mate.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=True,
+                                                                    do_mask_low_qual=True, q_cutoff=read_qual_cutoff,
+                                                                    slice_start_wrt_ref_1based=start_pos,
+                                                                    slice_end_wrt_ref_1based=end_pos,
+                                                                    do_insert_wrt_ref=is_insert,
+                                                                    do_mask_stop_codon=is_mask_stop_codon)
+                        is_written = __write_seq(out_fasta_fh, prev_mate.qname, mseq, max_prop_N, breadth_thresh)
+
+                    if is_mate_paired:  # May this mate will pair with the next record
+                        prev_mate = mate
+                else:
+                    raise ValueError("Unpossible!")
+
+
+
+
+
+
+        # In case the last record expects a mate that is not in the sam file
+        # Do low quality masking on the previous record and write it out.
+        if prev_mate:
+            mseq, mqual = prev_mate.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=True, do_mask_low_qual=True,
+                                                 q_cutoff=read_qual_cutoff, slice_start_wrt_ref_1based=start_pos,
+                                                 slice_end_wrt_ref_1based=end_pos, do_insert_wrt_ref=is_insert,
+                                                 do_mask_stop_codon=is_mask_stop_codon)
+            is_written = __write_seq(out_fasta_fh, prev_mate.qname, mseq, max_prop_N, breadth_thresh)
+            total_written += 1 if is_written else 0
+
+    LOGGER.debug("Done slice fasta " + out_fasta_filename)
+    return total_written
 
 
 def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cutoff, read_qual_cutoff, max_prop_N,
@@ -125,7 +303,7 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
 
             is_mate_paired = SamFlag.IS_PAIRED & flag and not SamFlag.IS_MATE_UNMAPPED & flag
 
-            mate = sam_record.SamRecord(ref_len=ref_len)
+            mate = single_record.SingleRecord(ref_len=ref_len)
             mate.fill_record_vals(qname, flag, rname, seq, cigar, mapq, qual, pos, rnext, pnext)
 
             is_written = False
@@ -164,7 +342,7 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
                             (not ref or mate.rname == ref or mate.rname == "=")):
                         pair = paired_records.PairedRecord(prev_mate, mate)
                         # TODO:  get a merge_sam_reads function that doesn't do all the stats
-                        mseq, stats = pair.merge_sam_reads(q_cutoff=read_qual_cutoff,
+                        mseq, stats = pair.get_seq_qual(q_cutoff=read_qual_cutoff,
                                                            pad_space_btn_mates="N",
                                                            do_insert_wrt_ref=is_insert,
                                                            do_pad_wrt_ref=False,

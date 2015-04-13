@@ -1,19 +1,20 @@
+"""
+Parses Single Sam Record, Sequence Manipulation
+"""
 import logging
 import sam_constants
 import align_stats
 import Utility
-
+from sam_seq import SamSequence
 
 LOGGER = logging.getLogger(__name__)
 
+class SingleRecord(SamSequence):
+    """
+    Handles single ended reads or paired reads with missing mate.
+    """
 
-
-
-
-class SamRecord:
-
-
-    def __init__(self, ref_len):
+    def __init__(self, ref_len, sam_row_dict=None):
         self.ref_len = ref_len
         self.qname = None
         self.flag = None
@@ -32,15 +33,22 @@ class SamRecord:
         self.seq_end_wrt_ref = None
         self.ref_align_len = 0  # includes deletions wrt reference.  Excludes insertions wrt reference
         self.seq_align_len = 0  # includes insertions wrt reference.  Excludes deletions wrt reference
+        if sam_row_dict:
+            self.fill_record(sam_row_dict)
+
 
     def is_empty(self):
+        """
+        Returns whether the sam record has been filled
+        :return:
+        """
         return not self.qname and not self.seq
+
 
     def fill_record(self, sam_row_dict):
         """
         Fills the sam record using a dict created from a row in a sam file.
-        :param sam_row_dict:
-        :return:
+        :param dict sam_row_dict:  csv.DictReader dict for a row in a sam file
         """
         self.qname = sam_row_dict["qname"]
         self.flag = int(sam_row_dict["flag"])
@@ -54,7 +62,21 @@ class SamRecord:
         self.pnext = int(sam_row_dict["pnext"])
         self.mate_record = None
 
+
     def fill_record_vals(self, qname, flag, rname, seq, cigar, mapq, qual, pos, rnext, pnext):
+        """
+        Fills in the sam record using the given values
+        :param qname:
+        :param flag:
+        :param rname:
+        :param seq:
+        :param cigar:
+        :param mapq:
+        :param qual:
+        :param pos:
+        :param rnext:
+        :param pnext:
+        """
         self.qname = qname
         self.flag = flag
         self.rname = rname
@@ -67,38 +89,49 @@ class SamRecord:
         self.pnext = pnext
 
     def fill_mate(self, mate_record):
+        """
+        Sets the mate SamRecord.
+        :param SingleRecord mate_record:  mate's SamRecord
+        """
         self.mate_record = mate_record
         if not mate_record.mate_record:
             mate_record.mate_record = self
 
-    def get_mate_slice_intersect_wrt_ref(self, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
+    def get_name(self):
         """
-        Gets the 1-based position with respect to the reference of the intersection between the mate and slice.
+        :return str:  Return read name as seen in sam file.
+        """
+        return self.qname
+
+
+    def get_slice_intersect_coord(self, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
+        """
+        Gets the 1-based position with respect to the reference of the intersection
+        between the sam record sequence and the slice.
         If there is no intersection, returns (None, None)
-        :param slice_start_wrt_ref_1based:
-        :param slice_start_wrt_ref_1based:
+        :param int slice_start_wrt_ref_1based: 1-based slice start position with respect to reference
+        :param int slice_end_wrt_ref_1based: 1-based slice end position with respect to reference
         :return tuple (int, int): (intersection start, intersection end)
         """
         mate_slice_intersect_start_wrt_ref = None
         mate_slice_intersect_end_wrt_ref = None
-        if slice_start_wrt_ref_1based <= self.get_seq_end_wrt_ref() and slice_end_wrt_ref_1based >= self.get_seq_start_wrt_ref():
+        if slice_start_wrt_ref_1based <= self.get_read_end_wrt_ref() and slice_end_wrt_ref_1based >= self.get_read_start_wrt_ref():
             # 1-based position with respect to reference of the start of intersection of the read fragment and slice
-            mate_slice_intersect_start_wrt_ref = max(self.get_seq_start_wrt_ref(), slice_start_wrt_ref_1based)
+            mate_slice_intersect_start_wrt_ref = max(self.get_read_start_wrt_ref(), slice_start_wrt_ref_1based)
             # 1-based position with respect to reference of the end of intersection of read fragment and slice
-            mate_slice_intersect_end_wrt_ref = min(self.get_seq_end_wrt_ref(), slice_end_wrt_ref_1based)
+            mate_slice_intersect_end_wrt_ref = min(self.get_read_end_wrt_ref(), slice_end_wrt_ref_1based)
         return mate_slice_intersect_start_wrt_ref, mate_slice_intersect_end_wrt_ref
 
 
     def is_intersect_slice(self, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
         """
-        Returns if the mate aligns to the slice region.
-         the 1-based position with respect to the reference of the intersection between the mate and slice.
-        :param slice_start_wrt_ref_1based:  1-based slice start position with respect to reference
-        :param slice_start_wrt_ref_1based:  1-based slice end position with respect to reference
-        :return:  True if the mate hits the slice (even with deletions, insertions, or non bases).  False otherwise.
+        Returns whether the read intersects the slice coordinates.
+        :param int slice_start_wrt_ref_1based:  1-based slice start position with respect to reference
+        :param int slice_end_wrt_ref_1based:  1-based slice end position with respect to reference
+        :return:  True if the sequence hits the slice (even with deletions, insertions, or non bases).  False otherwise.
         :rtype: bool
         """
-        return slice_start_wrt_ref_1based <= self.get_seq_end_wrt_ref() and slice_end_wrt_ref_1based >= self.get_seq_start_wrt_ref()
+        return slice_start_wrt_ref_1based <= self.get_read_end_wrt_ref() and slice_end_wrt_ref_1based >= self.get_read_start_wrt_ref()
 
 
     def get_seq_qual(self, do_pad_wrt_ref=False, do_pad_wrt_slice=False, do_mask_low_qual=False, q_cutoff=10,
@@ -146,20 +179,20 @@ class SamRecord:
         if slice_start_wrt_ref_1based > slice_end_wrt_ref_1based:
             raise ValueError("slice start must be <= slice end")
 
-        read_slice_xsect_start_wrt_ref,  read_slice_xsect_end_wrt_ref= self.get_mate_slice_intersect_wrt_ref(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based)
+        read_slice_xsect_start_wrt_ref,  read_slice_xsect_end_wrt_ref= self.get_slice_intersect_coord(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based)
         # Does slice start after the sequence ends or does the slice end before the sequence starts?
         # Then just return empty string or padded gaps wrt ref or slice as desired.
         if not read_slice_xsect_start_wrt_ref and not read_slice_xsect_end_wrt_ref:
             if do_pad_wrt_ref:
-                result_seq = SamRecord.do_pad(result_seq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                result_seq = SingleRecord.do_pad(result_seq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
                                           pad_start_wrt_ref=1, pad_end_wrt_ref=self.ref_len, pad_char=sam_constants.SEQ_PAD_CHAR)
-                result_qual = SamRecord.do_pad(result_qual, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                result_qual = SingleRecord.do_pad(result_qual, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
                                           pad_start_wrt_ref=1, pad_end_wrt_ref=self.ref_len, pad_char=sam_constants.QUAL_PAD_CHAR)
             elif do_pad_wrt_slice:
-                result_seq = SamRecord.do_pad(result_seq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                result_seq = SingleRecord.do_pad(result_seq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
                                           pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based,
                                           pad_char=sam_constants.SEQ_PAD_CHAR)
-                result_qual = SamRecord.do_pad(result_qual, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                result_qual = SingleRecord.do_pad(result_qual, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
                                            pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based,
                                            pad_char=sam_constants.QUAL_PAD_CHAR)
             return result_seq, result_qual, stats
@@ -168,9 +201,9 @@ class SamRecord:
         # Slice
 
         # 0-based start position of slice wrt result_seq
-        slice_start_wrt_result_seq_0based = read_slice_xsect_start_wrt_ref - self.get_seq_start_wrt_ref()
+        slice_start_wrt_result_seq_0based = read_slice_xsect_start_wrt_ref - self.get_read_start_wrt_ref()
         # 0-based end position of slice wrt result_seq
-        slice_end_wrt_result_seq_0based = self.get_ref_align_len() - 1 - (self.get_seq_end_wrt_ref() - read_slice_xsect_end_wrt_ref)
+        slice_end_wrt_result_seq_0based = self.get_ref_align_len() - 1 - (self.get_read_end_wrt_ref() - read_slice_xsect_end_wrt_ref)
         result_seq = self.nopad_noinsert_seq[slice_start_wrt_result_seq_0based:slice_end_wrt_result_seq_0based+1]
         result_qual = self.nopad_noinsert_qual[slice_start_wrt_result_seq_0based:slice_end_wrt_result_seq_0based+1]
 
@@ -252,19 +285,19 @@ class SamRecord:
 
         # Pad
         if do_pad_wrt_ref:
-            result_seq = SamRecord.do_pad(result_seq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+            result_seq = SingleRecord.do_pad(result_seq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
                                           seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
                                           pad_start_wrt_ref=1, pad_end_wrt_ref=self.ref_len, pad_char=sam_constants.SEQ_PAD_CHAR)
-            result_qual = SamRecord.do_pad(result_qual, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+            result_qual = SingleRecord.do_pad(result_qual, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
                                            seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
                                           pad_start_wrt_ref=1, pad_end_wrt_ref=self.ref_len, pad_char=sam_constants.QUAL_PAD_CHAR)
 
         elif do_pad_wrt_slice:
-            result_seq = SamRecord.do_pad(result_seq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+            result_seq = SingleRecord.do_pad(result_seq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
                                           seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
                                           pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based,
                                           pad_char=sam_constants.SEQ_PAD_CHAR)
-            result_qual = SamRecord.do_pad(result_qual, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+            result_qual = SingleRecord.do_pad(result_qual, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
                                            seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
                                            pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based,
                                            pad_char=sam_constants.QUAL_PAD_CHAR)
@@ -274,14 +307,29 @@ class SamRecord:
         return result_seq, result_qual, stats
 
 
-    def get_insert_dict(self):
+    def get_insert_dict(self, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
+        """
+        Returns the dict of insert positions to inserts.  Ignores insert positions outside of slice.
+        :param int slice_start_wrt_ref_1based: 1-based slice start position with respect to reference.  If 0 or None, uses read start wrt ref.
+        :param int slice_end_wrt_ref_1based: 1-based slice end position with respect to reference.  If 0 or None, uses read end wrt ref.
+        :return {int: str}:  dict of 1-based ref position right before the insert => inserted sequence
+        """
         if not self.ref_pos_to_insert_seq_qual:
             self.__parse_cigar()
-        return self.ref_pos_to_insert_seq_qual
+        slice_dict = dict()
+        if not slice_start_wrt_ref_1based:
+            slice_start_wrt_ref_1based = self.get_read_start_wrt_ref()
+        if not slice_end_wrt_ref_1based:
+            slice_end_wrt_ref_1based = self.get_read_end_wrt_ref()
+        for insert_pos_1based, insert in self.ref_pos_to_insert_seq_qual.iteritems():
+            if (slice_start_wrt_ref_1based <= insert_pos_1based <= slice_end_wrt_ref_1based-1 or
+                    (insert_pos_1based == slice_end_wrt_ref_1based and slice_end_wrt_ref_1based == self.get_read_end_wrt_ref())):
+                slice_dict[insert_pos_1based] = insert
+        return slice_dict
 
 
 
-    def get_seq_start_wrt_ref(self):
+    def get_read_start_wrt_ref(self):
         """
         Gets the 1-based start position with respect to the reference of the unclipped portion of the sequence.
         :return:
@@ -289,7 +337,7 @@ class SamRecord:
         return self.pos
 
 
-    def get_seq_end_wrt_ref(self):
+    def get_read_end_wrt_ref(self):
         """
         Gets the 1-based end position with respect to the reference of the unclipped portion of the sequence.
         :return:
@@ -370,7 +418,7 @@ class SamRecord:
         Left and Right Pads the sequence.
         :param seq:
         :param seq_start_wrt_ref:
-        :param pad_start_wrt_ref:
+        :param seq_end_wrt_ref:
         :param pad_end_wrt_ref:
         :param str pad_char:  By default, pads with "-"
         :return:

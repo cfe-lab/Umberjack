@@ -1,13 +1,18 @@
+"""
+Handles finding merged sequences for paired mates in sam records.
+Here, read refers to both mates.
+"""
+
 import logging
 import sam_constants
 import sam.align_stats
 import math
-from sam.sam_record import SamRecord as SamRecord
+from sam.single_record import SingleRecord as SamRecord
 import Utility
-
+from sam_seq import SamSequence
 LOGGER = logging.getLogger(__name__)
 
-class PairedRecord:
+class PairedRecord(SamSequence):
     """
     Only for mates that hit the same reference.
     """
@@ -18,12 +23,17 @@ class PairedRecord:
         if self.mate1.rname != self.mate2.rname:
             raise ValueError("mate1_record and mate2_record  must align to the same reference.  " +
                              "Refs: =(" + str(self.mate1.rname) + ", " + str(self.mate2.rname) + ")")
+        if self.mate1.qname != self.mate2.qname:
+            raise ValueError("mate1_record and mate2_record should have the same qname.  {}, {}".format(self.mate1.qname, self.mate2.qname))
         self.mate1.fill_mate(self.mate2)
         self.read_start_wrt_ref = None
         self.read_end_wrt_ref = None
 
 
     def get_name(self):
+        """
+        :return str:  Return read name as seen in sam file.
+        """
         return self.mate1.qname
 
     def get_read_start_wrt_ref(self):
@@ -32,7 +42,7 @@ class PairedRecord:
         :return:
         """
         if not self.read_start_wrt_ref:
-            self.read_start_wrt_ref = min(self.mate1.get_seq_start_wrt_ref(), self.mate2.get_seq_start_wrt_ref())
+            self.read_start_wrt_ref = min(self.mate1.get_read_start_wrt_ref(), self.mate2.get_read_start_wrt_ref())
         return self.read_start_wrt_ref
 
 
@@ -42,16 +52,17 @@ class PairedRecord:
         :return:
         """
         if not self.read_end_wrt_ref:
-            self.read_end_wrt_ref = max(self.mate1.get_seq_end_wrt_ref(), self.mate2.get_seq_end_wrt_ref())
+            self.read_end_wrt_ref = max(self.mate1.get_read_end_wrt_ref(), self.mate2.get_read_end_wrt_ref())
         return self.read_end_wrt_ref
 
 
-    def is_slice_intersect_read(self, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
+    def is_intersect_slice(self, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
         """
-        Returns whether the slice intersects the read
-        :param slice_start_wrt_ref_1based:
-        :param slice_end_wrt_ref_1based:
-        :return:
+        Returns whether the read intersects the slice coordinates.
+        :param int slice_start_wrt_ref_1based:  1-based slice start position with respect to reference
+        :param int slice_end_wrt_ref_1based:  1-based slice end position with respect to reference
+        :return:  True if the sequence hits the slice (even with deletions, insertions, or non bases).  False otherwise.
+        :rtype: bool
         """
         return slice_start_wrt_ref_1based <= self.get_read_end_wrt_ref() and slice_end_wrt_ref_1based >= self.get_read_start_wrt_ref()
 
@@ -62,21 +73,22 @@ class PairedRecord:
         :param pos_wrt_ref_1based:  1-based position with respect to reference
         :return:
         """
-        return ((self.mate1.get_seq_end_wrt_ref() < pos_wrt_ref_1based < self.mate2.get_seq_start_wrt_ref()) or
-                (self.mate2.get_seq_end_wrt_ref() < pos_wrt_ref_1based < self.mate1.get_seq_start_wrt_ref()))
+        return ((self.mate1.get_read_end_wrt_ref() < pos_wrt_ref_1based < self.mate2.get_read_start_wrt_ref()) or
+                (self.mate2.get_read_end_wrt_ref() < pos_wrt_ref_1based < self.mate1.get_read_start_wrt_ref()))
 
 
-    def get_read_slice_intersect(self, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
+    def get_slice_intersect_coord(self, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
         """
-        Gets the 1-based position with respect to the reference of the intersection between the read and slice.
+        Gets the 1-based position with respect to the reference of the intersection
+        between the read and the slice.
         If there is no intersection, returns (None, None)
-        :param slice_start_wrt_ref_1based:
-        :param slice_start_wrt_ref_1based:
+        :param int slice_start_wrt_ref_1based: 1-based slice start position with respect to reference
+        :param int slice_end_wrt_ref_1based: 1-based slice end position with respect to reference
         :return tuple (int, int): (intersection start, intersection end)
         """
         read_slice_intersect_start_wrt_ref = None
         read_slice_intersect_end_wrt_ref = None
-        if self.is_slice_intersect_read(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
+        if self.is_intersect_slice(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
             # 1-based position with respect to reference of the start of intersection of the read fragment and slice
             read_slice_intersect_start_wrt_ref = max(self.get_read_start_wrt_ref(), slice_start_wrt_ref_1based)
             # 1-based position with respect to reference of the end of intersection of read fragment and slice
@@ -91,54 +103,50 @@ class PairedRecord:
         :param pos_wrt_ref_1based:  1-based position with respect to the reference
         :return:
         """
-        return ((self.mate1.get_seq_start_wrt_ref() <= pos_wrt_ref_1based <= self.mate1.get_seq_end_wrt_ref()) and
-                (self.mate2.get_seq_start_wrt_ref() <= pos_wrt_ref_1based <= self.mate2.get_seq_end_wrt_ref()))
-
-    @staticmethod
-    def is_in_slice(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based, pos_wrt_ref_1based):
-        """
-        Returns whether the position is within the slice
-        :param slice_start_wrt_ref_1based:
-        :param slice_end_wrt_ref_1based:
-        :param pos_wrt_ref_1based:
-        :return:
-        """
-        return slice_start_wrt_ref_1based <= pos_wrt_ref_1based <= slice_end_wrt_ref_1based
+        return ((self.mate1.get_read_start_wrt_ref() <= pos_wrt_ref_1based <= self.mate1.get_read_end_wrt_ref()) and
+                (self.mate2.get_read_start_wrt_ref() <= pos_wrt_ref_1based <= self.mate2.get_read_end_wrt_ref()))
 
 
     @staticmethod
     def calc_q_cutoff_overlap(q_cutoff):
-        # If overlapping mate bases agree, either mate quality can be lower as long as the
-        #   Probability of single base error at the quality cutoff >= Probability of both mates having same erroneous base
-        # Quality = -10 log P(error),  P(error) = 1e-(Quality/10)  by Phred Score definition.
-        # Assume that the probability of a wrong base is independent across mates, positions.
-        # Say the correct base = G, the permutations of wrong overlapping bases = {AA, AC, AT, CA, CC, CT, TA, TC, TT}.
-        # ==> There are 3 permutations where the overlapping bases are the same; There are 9 possible permutations of wrong overlapping bases.
-        #
-        # P(single base error at q_cutoff) >= P(both mates same base & both mates wrong base)
-        # P(single base error at q_cutoff) >= P(both mates wrong base) P(both mates same base | both mates wrong base)
-        # 1e-(q_cutoff/10) >= P(mate1 1-base error) P(mate2 1-base error) [3 matching overlaps / 9 possible permutations of overlapping wrong bases)
-        # 1e-(q_cutoff/10) >= 1e-q1/10 *  1e-q2/10  * 1/3
-        # 3e-(q_cutoff/10) >= 1e-q1/10 *  1e-q2/10
-        # log3 - q_cutoff/10 >= -q1/10 - q2/10
-        # -10log3 + qcutoff <= q1 + q2
-        # qcutoff_overlap = -10log3 + qcutoff <= q1 + q2
+        """
+        If overlapping mate bases agree, either mate quality can be lower as long as the
+          Probability of single base error at the quality cutoff >= Probability of both mates having same erroneous base
+        Quality = -10 log P(error),  P(error) = 1e-(Quality/10)  by Phred Score definition.
+        Assume that the probability of a wrong base is independent across mates, positions.
+        Say the correct base = G, the permutations of wrong overlapping bases = {AA, AC, AT, CA, CC, CT, TA, TC, TT}.
+        ==> There are 3 permutations where the overlapping bases are the same; There are 9 possible permutations of wrong overlapping bases.
+
+        P(single base error at q_cutoff) >= P(both mates same base & both mates wrong base)
+        P(single base error at q_cutoff) >= P(both mates wrong base) P(both mates same base | both mates wrong base)
+        1e-(q_cutoff/10) >= P(mate1 1-base error) P(mate2 1-base error) [3 matching overlaps / 9 possible permutations of overlapping wrong bases)
+        1e-(q_cutoff/10) >= 1e-q1/10 *  1e-q2/10  * 1/3
+        3e-(q_cutoff/10) >= 1e-q1/10 *  1e-q2/10
+        log3 - q_cutoff/10 >= -q1/10 - q2/10
+        -10log3 + qcutoff <= q1 + q2
+        qcutoff_overlap = -10log3 + qcutoff <= q1 + q2
+        :param int q_cutoff:  single base quality cutoff.
+        :return float:  overlapping base quality cutoff, which is much lower than single base quality cutoff.
+        """
         q_cutoff_overlap = -10 * math.log10(3) + q_cutoff
         return q_cutoff_overlap
 
 
-    def get_read_inserts(self, slice_start_wrt_ref_1based=None, slice_end_wrt_ref_1based=None):
+    def get_insert_dict(self, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
         """
         Combines the dicts for mate1 and mate2 inserts into a single dict.  Ignores inserts outside of the slice.
-        :param slice_start_wrt_ref_1based:
-        :param slice_end_wrt_ref_1based:
-        :return:
+        The exception is when the slice end is at the end of the reference, any inserts to the right of the
+        end of the slice is always given.
+        :param int slice_start_wrt_ref_1based: 1-based slice start position with respect to reference
+        :param int slice_end_wrt_ref_1based: 1-based slice end position with respect to reference
+        :return {int: str}:  dict of 1-based ref position right before the insert => inserted sequence
         """
         merge_rpos_to_insert = dict()  # {pos : { 1: (seq1, qual1), 2: (seq1, qual2)}
         for mate, insert_dict in [(1, self.mate1.get_insert_dict()), (2, self.mate2.get_insert_dict())]:
             for insert_pos, (insert_seq, insert_qual) in insert_dict.iteritems():
-                # Ignore inserts outside of slice
-                if PairedRecord.is_in_slice(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based-1, insert_pos):
+                # Ignore inserts outside of slice, unless the slice ends at the end of the reference
+                if (slice_start_wrt_ref_1based <= insert_pos <= slice_end_wrt_ref_1based-1 or
+                        (insert_pos == slice_end_wrt_ref_1based and slice_end_wrt_ref_1based == self.get_read_end_wrt_ref())):
                     if not merge_rpos_to_insert.get(insert_pos):
                         merge_rpos_to_insert[insert_pos] = dict()
                     if not merge_rpos_to_insert[insert_pos].get(mate):
@@ -153,11 +161,11 @@ class PairedRecord:
         """
         Assumes that sliced_mseq only contains the sliced portion of the merged read sequence.
 
-        :param sliced_mseq:
-        :param q_cutoff:
-        :param slice_start_wrt_ref_1based:
-        :param slice_end_wrt_ref_1based:
-        :return:
+        :param str sliced_mseq:  merged, sliced read sequence
+        :param int q_cutoff:  bases with quality lower than this will be masked
+        :param int slice_start_wrt_ref_1based: 1-based slice start position with respect to reference
+        :param int slice_end_wrt_ref_1based: 1-based slice end position with respect to reference
+        :return str, AlignStats:  merged, sliced read sequence with inserts, AlignStats
         """
         # track stats about inserts
         if not stats:
@@ -165,7 +173,7 @@ class PairedRecord:
 
         q_cutoff_overlap = PairedRecord.calc_q_cutoff_overlap(q_cutoff)
 
-        read_insert_dict = self.get_read_inserts(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based)
+        read_insert_dict = self.get_insert_dict(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based)
         merge_rpos_to_insert = dict()
 
         # For the positions in which the mates overlap, check if the inserts are the same in both mates
@@ -283,9 +291,9 @@ class PairedRecord:
     def __merge_match(self, q_cutoff=10, pad_space_btn_mate="N", slice_start_wrt_ref_1based=None, slice_end_wrt_ref_1based=None, stats=None):
         """
         Merge bases in reads that align as a match to the reference (as opposed to bases that align as an insert to the ref).
-        :param q_cutoff:
-        :param slice_end_wrt_ref_1based:  If None or slice_start_wrt_ref_1based is None, then uses the read end wrt ref
-        :param slice_start_wrt_ref_1based: If None or slice_end_wrt_ref_1based is None, then uses the read start wrt ref
+        :param int q_cutoff:  bases with quality lower than this will be masked
+        :param int slice_start_wrt_ref_1based: 1-based slice start position with respect to reference.  If 0 or None, uses read start wrt ref.
+        :param int slice_end_wrt_ref_1based: 1-based slice end position with respect to reference.  If 0 or None, uses read end wrt ref
         :param stats:
         :return:
         """
@@ -400,7 +408,7 @@ class PairedRecord:
         return mseq
 
 
-    def merge_sam_reads(self, q_cutoff=10, pad_space_btn_mates="N", do_insert_wrt_ref=False, do_pad_wrt_ref=True,
+    def get_seq_qual(self, q_cutoff=10, pad_space_btn_mates="N", do_insert_wrt_ref=False, do_pad_wrt_ref=True,
                         do_pad_wrt_slice=False, do_mask_stop_codon=False, slice_end_wrt_ref_1based=None, slice_start_wrt_ref_1based=None,
                         stats=None):
         """
@@ -435,20 +443,20 @@ class PairedRecord:
 
         # If the slice does not intersect either mate,
         # Then just return empty string or padded gaps wrt ref or slice as desired.
-        if not self.is_slice_intersect_read(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
+        if not self.is_intersect_slice(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
             if do_pad_wrt_ref:
-                mseq = SamRecord.do_pad(mseq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                mseq = SingleRecord.do_pad(mseq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
                                         pad_start_wrt_ref=1, pad_end_wrt_ref=self.mate1.ref_len,
                                         pad_char=sam_constants.SEQ_PAD_CHAR)
             elif do_pad_wrt_slice:
-                mseq = SamRecord.do_pad(mseq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                mseq = SingleRecord.do_pad(mseq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
                                         pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based,
                                         pad_char=sam_constants.SEQ_PAD_CHAR)
             return mseq, stats
 
 
         # 1-based position with respect to reference of intersection between the read fragment and slice
-        read_slice_xsect_start_wrt_ref, read_slice_xsect_end_wrt_ref = self.get_read_slice_intersect(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based)
+        read_slice_xsect_start_wrt_ref, read_slice_xsect_end_wrt_ref = self.get_slice_intersect_coord(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based)
 
         mseq = self.__merge_match(q_cutoff=q_cutoff, pad_space_btn_mate=pad_space_btn_mates,
                          slice_start_wrt_ref_1based=read_slice_xsect_start_wrt_ref,
@@ -476,12 +484,12 @@ class PairedRecord:
 
         # Now pad with respect to reference
         if do_pad_wrt_ref:
-            mseq = SamRecord.do_pad(seq=mseq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+            mseq = SingleRecord.do_pad(seq=mseq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
                                     seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
                                     pad_start_wrt_ref=1, pad_end_wrt_ref=self.mate1.ref_len)
 
         elif do_pad_wrt_slice:
-            mseq = SamRecord.do_pad(seq=mseq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+            mseq = SingleRecord.do_pad(seq=mseq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
                                     seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
                                     pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based)
 
