@@ -9,7 +9,7 @@ from sam_seq import SamSequence
 
 LOGGER = logging.getLogger(__name__)
 
-class SingleRecord(SamSequence):
+class SamRecord(SamSequence):
     """
     Handles single ended reads or paired reads with missing mate.
     """
@@ -91,7 +91,7 @@ class SingleRecord(SamSequence):
     def fill_mate(self, mate_record):
         """
         Sets the mate SamRecord.
-        :param SingleRecord mate_record:  mate's SamRecord
+        :param SamRecord mate_record:  mate's SamRecord
         """
         self.mate_record = mate_record
         if not mate_record.mate_record:
@@ -103,6 +103,12 @@ class SingleRecord(SamSequence):
         """
         return self.qname
 
+
+    def get_ref_len(self):
+        """
+        :return int:  reference length in nucleotides
+        """
+        return self.ref_len
 
     def get_slice_intersect_coord(self, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
         """
@@ -184,15 +190,15 @@ class SingleRecord(SamSequence):
         # Then just return empty string or padded gaps wrt ref or slice as desired.
         if not read_slice_xsect_start_wrt_ref and not read_slice_xsect_end_wrt_ref:
             if do_pad_wrt_ref:
-                result_seq = SingleRecord.do_pad(result_seq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                result_seq = SamRecord.do_pad(result_seq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
                                           pad_start_wrt_ref=1, pad_end_wrt_ref=self.ref_len, pad_char=sam_constants.SEQ_PAD_CHAR)
-                result_qual = SingleRecord.do_pad(result_qual, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                result_qual = SamRecord.do_pad(result_qual, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
                                           pad_start_wrt_ref=1, pad_end_wrt_ref=self.ref_len, pad_char=sam_constants.QUAL_PAD_CHAR)
             elif do_pad_wrt_slice:
-                result_seq = SingleRecord.do_pad(result_seq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                result_seq = SamRecord.do_pad(result_seq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
                                           pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based,
                                           pad_char=sam_constants.SEQ_PAD_CHAR)
-                result_qual = SingleRecord.do_pad(result_qual, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                result_qual = SamRecord.do_pad(result_qual, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
                                            pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based,
                                            pad_char=sam_constants.QUAL_PAD_CHAR)
             return result_seq, result_qual, stats
@@ -285,19 +291,19 @@ class SingleRecord(SamSequence):
 
         # Pad
         if do_pad_wrt_ref:
-            result_seq = SingleRecord.do_pad(result_seq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+            result_seq = SamRecord.do_pad(result_seq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
                                           seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
                                           pad_start_wrt_ref=1, pad_end_wrt_ref=self.ref_len, pad_char=sam_constants.SEQ_PAD_CHAR)
-            result_qual = SingleRecord.do_pad(result_qual, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+            result_qual = SamRecord.do_pad(result_qual, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
                                            seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
                                           pad_start_wrt_ref=1, pad_end_wrt_ref=self.ref_len, pad_char=sam_constants.QUAL_PAD_CHAR)
 
         elif do_pad_wrt_slice:
-            result_seq = SingleRecord.do_pad(result_seq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+            result_seq = SamRecord.do_pad(result_seq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
                                           seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
                                           pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based,
                                           pad_char=sam_constants.SEQ_PAD_CHAR)
-            result_qual = SingleRecord.do_pad(result_qual, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+            result_qual = SamRecord.do_pad(result_qual, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
                                            seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
                                            pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based,
                                            pad_char=sam_constants.QUAL_PAD_CHAR)
