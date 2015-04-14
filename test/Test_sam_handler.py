@@ -49,7 +49,7 @@ class TestSamHandler(unittest.TestCase):
 
         if os.path.exists(TEST_DIR):
             shutil.rmtree(TEST_DIR)
-            os.makedirs(TEST_DIR)
+        os.makedirs(TEST_DIR)
         self.merge_testcases = sam_test_case.SamTestCase.parse_fastq(TEST_MERGE_FASTQ)
 
         self.TMPSAM_REF1 = "ref1"

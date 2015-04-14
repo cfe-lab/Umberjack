@@ -93,11 +93,11 @@ def record_iter(sam_filename, ref, mapping_cutoff, ref_len=0):
                 continue
 
             if not prev_mate:  # We are not expecting this mate to be a pair with prev_mate.
-                if mate.is_mate_mapped():  # If record is paired, wait till we find its mate
-                        prev_mate = mate
+                if mate.is_mate_mapped(ref):  # If record is paired, wait till we find its mate
+                    prev_mate = mate
                 elif mate.mapq >= mapping_cutoff:  #  If this record isn't paired and it passes our thresholds, then just yield it now
                     pair = paired_records.PairedRecord(None, mate)
-
+                    prev_mate = None
             else:  # We are expecting this mate to be a pair with prev_mate.
                 if not prev_mate.is_mate_mapped(ref):
                     raise ValueError("Invalid logic.  Shouldn't get here. - " +
@@ -118,7 +118,7 @@ def record_iter(sam_filename, ref, mapping_cutoff, ref_len=0):
                             pair = paired_records.PairedRecord(prev_mate, None)
                         elif mate.mapq >= mapping_cutoff:
                             pair = paired_records.PairedRecord(None, mate)
-
+                        prev_mate = None  # Clear the paired mate expectations for next set of sam records
                 else:  # This sam record does not pair with the previous sam record.
                     LOGGER.warn("Sam record inconsistent.  Expected pair for " + prev_mate.qname + " but got " + qname +
                                 ".  If unaligned records are excluded from the samfile, ignore this warning")
@@ -126,12 +126,10 @@ def record_iter(sam_filename, ref, mapping_cutoff, ref_len=0):
                     # Yield previous mate
                     if prev_mate.mapq >= mapping_cutoff:
                         pair = paired_records.PairedRecord(prev_mate, None)
+                    if mate.is_mate_mapped(ref):
+                        prev_mate = mate # Wait for the next record to pair with current mate
 
-            if not pair:
-                if mate.is_mate_mapped():  # Maybe this mate will pair with the next record
-                    prev_mate = mate
-            else:
-                prev_mate = None  # Clear the paired mate expectations for next set of sam records
+            if pair:
                 yield pair
 
         # In case the last record expects a mate that is not in the sam file, yield it if it has good map quality

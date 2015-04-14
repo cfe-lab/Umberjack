@@ -75,6 +75,8 @@ class SamTestCase:
             if self.mate2:
                 self.mate1.rnext = self.mate2.rname
                 self.mate1.pnext = self.mate2.pos
+                self.mate2.rnext = self.mate1.rname
+                self.mate2.pnext = self.mate1.pos
         else:
             if self.mate1  and self.mate1.qname != qname:
                 raise ValueError("Mates must have same name, mate2=" + qname  + " mate1=" + self.mate1.qname)
@@ -82,6 +84,8 @@ class SamTestCase:
             if self.mate1:
                 self.mate2.rnext = self.mate1.rname
                 self.mate2.pnext = self.mate1.pos
+                self.mate1.rnext = self.mate2.rname
+                self.mate1.pnext = self.mate2.pos
 
 
     def add_merged_read(self, seq, inserts):
