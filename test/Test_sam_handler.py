@@ -40,8 +40,10 @@ TEST_DIR = os.path.dirname(os.path.realpath(__file__)) + os.sep + "out"
 
 TEST_MERGE_FASTQ = os.path.dirname(os.path.realpath(__file__)) + os.sep + "data" + os.sep + "test.merge.fq"
 TEST_PAIR_SELECTION_SAM = os.path.dirname(os.path.realpath(__file__)) + os.sep + "data" + os.sep + "test.pairselection.sam"
+TEST_PAIR_SELECTION_REMDUP_SAM = os.path.dirname(os.path.realpath(__file__)) + os.sep + "data" + os.sep + "test.pairselection.remdup.sam"
 TEST_PAIR_SELECTION_TARGET_REF = "targetref"
 EXPECTED_TEST_PAIR_SELECTION_FULL_MSA_FASTA = os.path.dirname(os.path.realpath(__file__)) + os.sep + "data" + os.sep + "test.pairselection.msa.fasta"
+EXPECTED_TEST_PAIR_SELECTION_REMDUP_FULL_MSA_FASTA = os.path.dirname(os.path.realpath(__file__)) + os.sep + "data" + os.sep + "test.pairselection.msa.remdup.fasta"
 
 class TestSamHandler(unittest.TestCase):
 
@@ -218,6 +220,41 @@ class TestSamHandler(unittest.TestCase):
                         ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA + ":\n"  + str(diff_line))
 
         expected_written = Utility.get_total_seq_from_fasta(EXPECTED_TEST_PAIR_SELECTION_FULL_MSA_FASTA)
+        self.assertEqual(expected_written, actual_written,
+                         "Expect total written seq {} but got {} from {}".format(expected_written, actual_written, ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA))
+
+
+    def test_create_msa_slice_from_sam_dup(self):
+        """
+        Tests that the sam_handler.create_msa_slice_from_sam() is iterating through non-duplicate records
+        and selecting the correct records for pairing.
+        """
+
+        ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA = TEST_DIR + os.sep + os.path.basename(TEST_PAIR_SELECTION_REMDUP_SAM).replace(".sam", ".msa.fasta")
+        ACTUAL_TEST_PAIR_SELECTION_DUP_TSV = TEST_DIR + os.sep + os.path.basename(TEST_PAIR_SELECTION_REMDUP_SAM).replace(".sam", ".tsv")
+        # Test that the pairs are selected correctly.   We don't care about slices, breadth thresholds or N's or masking stop codons here.
+        # But we do care about mapping quality and target references.
+        actual_written = sam.sam_handler.create_msa_slice_from_sam(sam_filename=TEST_PAIR_SELECTION_REMDUP_SAM,
+                                                                   ref=TEST_PAIR_SELECTION_TARGET_REF,
+                                                                   out_fasta_filename=ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA,
+                                                                   mapping_cutoff=MAPQ_CUTOFF,
+                                                                   read_qual_cutoff=READ_QUAL_CUTOFF, max_prop_N=1.0,
+                                                                   breadth_thresh=0, start_pos=None, end_pos=None,
+                                                                   do_insert_wrt_ref=False, do_mask_stop_codon=False,
+                                                                   do_remove_dup=True,
+                                                                   out_dup_tsv_filename=ACTUAL_TEST_PAIR_SELECTION_DUP_TSV)
+
+
+        self.assertTrue(os.path.exists(ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA) and os.path.getsize(ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA) > 0,
+                        ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA + " doesn't exist or is empty")
+
+
+        diff_line = TestSamHandler.diff_fasta_line(EXPECTED_TEST_PAIR_SELECTION_REMDUP_FULL_MSA_FASTA, ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA)
+        self.assertIsNone(diff_line,
+                        "Expected full msa fasta " + EXPECTED_TEST_PAIR_SELECTION_REMDUP_FULL_MSA_FASTA + " different than " +
+                        ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA + ":\n"  + str(diff_line))
+
+        expected_written = Utility.get_total_seq_from_fasta(EXPECTED_TEST_PAIR_SELECTION_REMDUP_FULL_MSA_FASTA)
         self.assertEqual(expected_written, actual_written,
                          "Expect total written seq {} but got {} from {}".format(expected_written, actual_written, ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA))
 

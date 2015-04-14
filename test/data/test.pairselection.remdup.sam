@@ -1,0 +1,9 @@
+@HD	VN:1.4	SO:queryname
+@SQ	SN:targetref	LN:21
+@SQ	SN:wrongref	LN:300
+@CO	Tests that sam records are parsed and mate pairs are selected correctly.
+# qname, flag, rname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual
+tc17_read1	99	targetref	4	30	8M	targetref	6	10	GCCTAGAC	HHHHHHHH	CO:Paired mapped records followed by duplicate paired mapped record.  Expect paired record merged into 1 seq in fasta.  If duplicates not allowed, only 1 pair written.
+tc17_read1	147	targetref	6	30	8M	targetref	4	10	CTAGACAT	HHHHHHHH	CO:Paired mapped records followed by duplicate paired mapped record.  Expect paired record merged into 1 seq in fasta.  If duplicates not allowed, only 1 pair written.
+tc17_read2	99	targetref	4	30	8M	targetref	6	10	GCCTAGAC	HHHHHHHH	CO:Paired mapped records followed by duplicate paired mapped record.  Expect paired record merged into 1 seq in fasta.  If duplicates not allowed, only 1 pair written.
+tc17_read2	147	targetref	6	30	8M	targetref	4	10	CTAGACAT	HHHHHHHH	CO:Paired mapped records followed by duplicate paired mapped record.  Expect paired record merged into 1 seq in fasta.  If duplicates not allowed, only 1 pair written.

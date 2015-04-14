@@ -4,18 +4,29 @@ Handles sam parsing.
 import re
 import os
 import logging
-from sam_constants import SamFlag as SamFlag
 from sam_constants import  SamHeader as SamHeader
 import single_record
 import paired_records
 import Utility
+from collections import namedtuple
+import csv
+
+
+LOGGER = logging.getLogger(__name__)
+
+# start = 1 based start position with respect to reference
+# seq = merged sequence, external gaps trimmed
+UniqSeq = namedtuple("UniqSeq", ["start", "seq"], verbose=(LOGGER.level == logging.DEBUG))
+# read = readname
+# score = sum of quality scores for bases that align to reference and aren't masked for low quality or conflict
+# sam_idx = 0-based index of mate1 record in sam
+UniqSeqScore = namedtuple("UniqSeqScore", ["read", "score", "sam_idx"], verbose=(LOGGER.level == logging.DEBUG))
 
 
 
 NEWICK_NAME_RE = re.compile('[:;\-\(\)\[\]]')
 
 
-LOGGER = logging.getLogger(__name__)
 
 
 def __write_seq(fh_out, name, seq, max_prop_N=1.0, breadth_thresh=0.0):
@@ -140,7 +151,7 @@ def record_iter(sam_filename, ref, mapping_cutoff, ref_len=0):
 
 def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cutoff, read_qual_cutoff, max_prop_N,
                               breadth_thresh, start_pos=0, end_pos=0, do_insert_wrt_ref=False, do_mask_stop_codon=False,
-                              ref_len=0):
+                              do_remove_dup=False, out_dup_tsv_filename=None, ref_len=0):
     """
     Parse SAM file contents for sequences aligned to a reference.
     Extracts the portion of the read that fits into the desired slice of the genome.
@@ -173,6 +184,10 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
     :param bool do_mask_stop_codon: whether to mask stop codons with "NNN".
                 Most useful when you want to do codon analysis aftwards, as many codon models do not allow stop codons.
                 Assumes that the reference starts at the beginning of a codon.
+    :param bool do_remove_dup:  whether or not to exclude duplicate sequence.  Only the the merged read with the highest
+        sum of quality scores of aligned bases will be written to fasta if it is duplicated.  To be considered a duplicate
+        the sequence must have same start coordinate with respect to reference and matching bases, gaps, N's.
+    :param str out_dup_tsv_filename:  filepath to output tab separated file of duplicated reads.  Only written if do_remove_dup=True.
     :param int ref_len: length of reference.  If 0, then takes length from sam headers.
     :returns int:  total sequences written to multiple sequence aligned fasta
     :raises : :py:class:`exceptions.ValueError` if sam file is not queryname sorted according to the sam header
@@ -188,7 +203,12 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
 
     total_written = 0
     with open(out_fasta_filename, 'w') as out_fasta_fh:
-        for pair in record_iter(sam_filename=sam_filename, ref=ref, mapping_cutoff=mapping_cutoff, ref_len=ref_len):
+        if do_remove_dup:
+            pair_iter = uniq_record_iter(sam_filename=sam_filename, ref=ref, out_tsv_filename=out_dup_tsv_filename,
+                  mapping_cutoff=mapping_cutoff, read_qual_cutoff=read_qual_cutoff, is_insert=do_insert_wrt_ref)
+        else:
+            pair_iter = record_iter(sam_filename=sam_filename, ref=ref, mapping_cutoff=mapping_cutoff, ref_len=ref_len)
+        for pair in pair_iter:
             mseq, stats = pair.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=True,
                                                    q_cutoff=read_qual_cutoff,
                                                    slice_start_wrt_ref_1based=start_pos,
@@ -250,3 +270,57 @@ def get_reflen(sam_filename, ref):
                 if is_found_ref:
                     return length
     return None
+
+
+
+
+def uniq_record_iter(sam_filename, ref, out_tsv_filename, mapping_cutoff, read_qual_cutoff, is_insert=False):
+    """
+    Goes through the sam, merges paired records, and finds merged sequences that are exact duplicates of other merged sequences.
+    To be exact duplicate, both merged sequences must have the same start coordinates and matching bases, gaps, N's.
+
+    Keeps track of all unique sequences encountered in a dict.
+    Key = tuple (left coordinate wrt ref, sequence with external gaps trimmed)
+    This will be a memory hog.
+
+    :param sam_filename:
+    :param ref:
+    :param str out_tsv_filename:  output file
+    :param mapping_cutoff:
+    :param read_qual_cutoff:
+    :param is_insert:
+    :return :  the next unique paired record
+    :rtype: collections.Iterable[sam.paired_records.PairedRecord]
+    """
+    uniqs = dict()
+    # We are not filtering for reads with N's > max_prop_N or breadth
+    for pair in record_iter(sam_filename=sam_filename, ref=ref, mapping_cutoff=mapping_cutoff, ref_len=0):
+        mseq, mstats = pair.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=False,
+                          q_cutoff=read_qual_cutoff,
+                          slice_start_wrt_ref_1based=0,
+                          slice_end_wrt_ref_1based=0,
+                          do_insert_wrt_ref=is_insert,
+                          do_mask_stop_codon=True)
+
+
+        uniq_seq = UniqSeq(start=pair.get_read_start_wrt_ref(), seq=mseq)
+        # TODO:  get quality scores from merged reads
+        # TODO:  add sam index into SamRecord class
+        uniq_seq_score = UniqSeqScore(read=pair, score=0, sam_idx=0)
+        if uniqs.get(uniq_seq):
+            uniqs[uniq_seq].append(uniq_seq_score)
+        else:
+             uniqs[uniq_seq] = [uniq_seq_score]
+
+    with open(out_tsv_filename, 'w') as fh_out:
+        writer = csv.DictWriter(fh_out, fieldnames=["Seq", "Start", "Reads"], delimiter="\t")
+        writer.writeheader()
+        for uniq_seq, uniq_seq_scores in uniqs.iteritems():
+            outrow = dict()
+            outrow["Seq"] = uniq_seq.seq
+            outrow["Start"] = uniq_seq.start
+            outrow["Reads"] = ",".join([x.read.get_name() for x in uniq_seq_scores])
+            writer.writerow(outrow)
+
+    for uniq_seq, uniq_seq_scores in uniqs.iteritems():
+        yield uniq_seq_scores[0].read  # TODO:  get best scoring read

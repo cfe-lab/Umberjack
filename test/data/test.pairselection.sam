@@ -95,3 +95,4 @@ tc16_read1	99	wrongref	4	30	8M	wrongref	6	10	GCCTAGAC	HHHHHHHH	CO:pair mapped to
 tc16_read1	147	wrongref	6	30	8M	wrongref	4	10	CTAGACAT	HHHHHHHH	CO:pair mapped to wrong ref followed by another pair mapped to wrong ref.  Expect: nothing written to fasta
 tc16_read2	99	wrongref	4	30	8M	wrongref	6	10	GCCTAGAC	HHHHHHHH	CO:pair mapped to wrong ref followed by another pair mapped to wrong ref.  Expect: nothing written to fasta
 tc16_read2	147	wrongref	6	30	8M	wrongref	4	10	CTAGACAT	HHHHHHHH	CO:pair mapped to wrong ref followed by another pair mapped to wrong ref.  Expect: nothing written to fasta
+
