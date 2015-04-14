@@ -50,7 +50,11 @@ def find_dups(sam_filename, ref, out_csv_filename, mapping_cutoff, read_qual_cut
     :return {UniqSeq: :  dict
     """
 
+    for pair in sam_handler.record_iter(sam_filename=sam_filename, ref=ref, mapping_cutoff=mapping_cutoff, ref_len=0):
 
-    sam_handler.create_msa_slice_from_sam(sam_filename=sam_filename, ref=ref, , mapping_cutoff, read_qual_cutoff, max_prop_N,
+
+    sam_handler.create_msa_slice_from_sam(sam_filename=sam_filename, ref=ref, out_fasta_filename=null,
+                                          mapping_cutoff=null, read_qual_cutoff=null, max_prop_N=null,
+                                          breadth_thresh=null), mapping_cutoff, read_qual_cutoff, max_prop_N,
                                   breadth_thresh, start_pos=0, end_pos=0, is_insert=False, is_mask_stop_codon=False,
                                   ref_len=0)

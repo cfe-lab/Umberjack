@@ -6,6 +6,7 @@ import sam_constants
 import align_stats
 import Utility
 from sam_seq import SamSequence
+from sam_constants import SamFlag as SamFlag
 
 LOGGER = logging.getLogger(__name__)
 
@@ -14,7 +15,14 @@ class SamRecord(SamSequence):
     Handles single ended reads or paired reads with missing mate.
     """
 
-    def __init__(self, ref_len, sam_row_dict=None):
+    def __init__(self, ref_len, **kwargs):
+        """
+        Fills in the SamRecord.
+        :param int ref_len:  length of reference in nucleotides
+        :param dict kwargs: optional keywords.  Valid optional keywords:
+        qname, flag, rname, seq, cigar, mapq, qual, pos, rnext, pnext
+        :return SamRecord:  an instance of SamRecord
+        """
         self.ref_len = ref_len
         self.qname = None
         self.flag = None
@@ -33,8 +41,57 @@ class SamRecord(SamSequence):
         self.seq_end_wrt_ref = None
         self.ref_align_len = 0  # includes deletions wrt reference.  Excludes insertions wrt reference
         self.seq_align_len = 0  # includes insertions wrt reference.  Excludes deletions wrt reference
-        if sam_row_dict:
-            self.fill_record(sam_row_dict)
+
+        self.fill_record(**kwargs)
+
+
+    def is_mapped(self, ref=None):
+        """
+        :param str ref:  if defined, the record must map to this reference
+        :return bool: whether the record is mapped
+        """
+        if self.flag is None or self.rname is None:
+            raise ValueError("No flag, or rname associated with this record")
+
+        return not SamFlag.IS_UNMAPPED & self.flag and (not ref or self.rname == ref)
+
+
+    def is_mate_mapped(self, ref=None):
+        """
+        The rname is only set to '*' and pos is only set to '0'
+          if all reads in the mate pair are unmapped.
+        If the mate is mapped, but this read is not, the rname and pos will be set to the mate's reference hit.
+
+        From SAM specs:
+        "For a unmapped paired-end or mate-pair read whose mate is mapped, the unmapped read
+          should have RNAME and POS identical to its mate"
+
+        :param str ref:  if defined, then mate must map to the given reference
+        :return bool:  Returns whether the mate for the current record is mapped
+        """
+        if self.flag is None or self.rnext is None:
+            raise ValueError("No flag, rnext associated with this record")
+
+        return (SamFlag.IS_PAIRED & self.flag and not SamFlag.IS_MATE_UNMAPPED & self.flag and
+                (not ref or self.rnext == self.rname or self.rnext == "="))
+
+
+    def is_primary(self):
+        """
+        :return bool:  Returns whether the current record is primary alignment
+        """
+        if self.flag is None:
+            raise ValueError("No flag associated with this record")
+        return not SamFlag.IS_UNMAPPED & self.flag and not SamFlag.IS_SECONDARY_ALIGNMENT & self.flag
+
+
+    def is_chimeric(self):
+        """
+        :return bool:  Returns whether the current record is chimeric alignment
+        """
+        if self.flag is None:
+            raise ValueError("No flag associated with this record")
+        return SamFlag.IS_CHIMERIC_ALIGNMENT & self.flag
 
 
     def is_empty(self):
@@ -45,48 +102,37 @@ class SamRecord(SamSequence):
         return not self.qname and not self.seq
 
 
-    def fill_record(self, sam_row_dict):
+    def fill_record(self, **kwargs):
         """
         Fills the sam record using a dict created from a row in a sam file.
-        :param dict sam_row_dict:  csv.DictReader dict for a row in a sam file
+        :param dict kwargs:  dict for a row in a sam file.
+            Valid keys:  qname, flag, rname, seq, cigar, mapq, qual, pos, rnext, pnext
         """
-        self.qname = sam_row_dict["qname"]
-        self.flag = int(sam_row_dict["flag"])
-        self.rname = sam_row_dict["rname"]
-        self.seq = sam_row_dict["seq"]
-        self.cigar = sam_row_dict["cigar"]
-        self.mapq = int(sam_row_dict["mapq"])
-        self.qual = sam_row_dict["qual"]
-        self.pos = int(sam_row_dict["pos"])
-        self.rnext = sam_row_dict["rnext"]
-        self.pnext = int(sam_row_dict["pnext"])
-        self.mate_record = None
+        if "qname" in kwargs:
+            self.qname = kwargs["qname"]
+        if "flag" in kwargs:
+            self.flag = int(kwargs["flag"])
+        if "rname" in kwargs:
+            self.rname = kwargs["rname"]
+        if "seq" in kwargs:
+            self.seq = kwargs["seq"]
+        if "cigar" in kwargs:
+            self.cigar = kwargs["cigar"]
+        if "mapq" in kwargs:
+            self.mapq = int(kwargs["mapq"])
+        if "qual" in kwargs:
+            self.qual = kwargs["qual"]
+        if "pos" in kwargs:
+            self.pos = int(kwargs["pos"])
+        if "rnext" in kwargs:
+            self.rnext = kwargs["rnext"]
+        if "pnext" in kwargs:
+            self.pnext = int(kwargs["pnext"])
+        # TODO:  fill in other optional keywords
 
 
-    def fill_record_vals(self, qname, flag, rname, seq, cigar, mapq, qual, pos, rnext, pnext):
-        """
-        Fills in the sam record using the given values
-        :param qname:
-        :param flag:
-        :param rname:
-        :param seq:
-        :param cigar:
-        :param mapq:
-        :param qual:
-        :param pos:
-        :param rnext:
-        :param pnext:
-        """
-        self.qname = qname
-        self.flag = flag
-        self.rname = rname
-        self.seq = seq
-        self.cigar = cigar
-        self.mapq = mapq
-        self.qual = qual
-        self.pos = pos
-        self.rnext = rnext
-        self.pnext = pnext
+
+
 
     def fill_mate(self, mate_record):
         """
@@ -141,7 +187,7 @@ class SamRecord(SamSequence):
 
 
     def get_seq_qual(self, do_pad_wrt_ref=False, do_pad_wrt_slice=False, do_mask_low_qual=False, q_cutoff=10,
-                     slice_start_wrt_ref_1based=None, slice_end_wrt_ref_1based=None, do_insert_wrt_ref=False,
+                     slice_start_wrt_ref_1based=0, slice_end_wrt_ref_1based=0, do_insert_wrt_ref=False,
                      do_mask_stop_codon=False, stats=None):
         """
         Gets the sequence for the sam record.
@@ -313,23 +359,23 @@ class SamRecord(SamSequence):
         return result_seq, result_qual, stats
 
 
-    def get_insert_dict(self, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
+    def get_insert_dict(self, slice_start_wrt_ref_1based=0, slice_end_wrt_ref_1based=0):
         """
         Returns the dict of insert positions to inserts.  Ignores insert positions outside of slice.
-        :param int slice_start_wrt_ref_1based: 1-based slice start position with respect to reference.  If 0 or None, uses read start wrt ref.
-        :param int slice_end_wrt_ref_1based: 1-based slice end position with respect to reference.  If 0 or None, uses read end wrt ref.
+        :param int slice_start_wrt_ref_1based: 1-based slice start position with respect to reference.  If 0 or None, uses position 1 wrt ref.
+        :param int slice_end_wrt_ref_1based: 1-based slice end position with respect to reference.  If 0 or None, uses reference length.
         :return {int: str}:  dict of 1-based ref position right before the insert => inserted sequence
         """
         if not self.ref_pos_to_insert_seq_qual:
             self.__parse_cigar()
         slice_dict = dict()
         if not slice_start_wrt_ref_1based:
-            slice_start_wrt_ref_1based = self.get_read_start_wrt_ref()
+            slice_start_wrt_ref_1based = 1
         if not slice_end_wrt_ref_1based:
-            slice_end_wrt_ref_1based = self.get_read_end_wrt_ref()
+            slice_end_wrt_ref_1based = self.get_ref_len()
         for insert_pos_1based, insert in self.ref_pos_to_insert_seq_qual.iteritems():
             if (slice_start_wrt_ref_1based <= insert_pos_1based <= slice_end_wrt_ref_1based-1 or
-                    (insert_pos_1based == slice_end_wrt_ref_1based and slice_end_wrt_ref_1based == self.get_read_end_wrt_ref())):
+                    (insert_pos_1based == slice_end_wrt_ref_1based and slice_end_wrt_ref_1based == self.get_ref_len())):
                 slice_dict[insert_pos_1based] = insert
         return slice_dict
 

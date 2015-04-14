@@ -59,8 +59,8 @@ def create_full_msa_fasta(sam_filename, out_dir, ref, mapping_cutoff, read_qual_
     if not os.path.exists(msa_fasta_filename) or os.path.getsize(msa_fasta_filename) <= 0:
         sam_handler.create_msa_slice_from_sam(sam_filename=sam_filename, ref=ref, out_fasta_filename=msa_fasta_filename,
                                               mapping_cutoff=mapping_cutoff, read_qual_cutoff=read_qual_cutoff,
-                                              max_prop_N=1.0, breadth_thresh=0.0,
-                                              start_pos=0, end_pos=0, is_insert=is_insert, is_mask_stop_codon=is_mask_stop_codon,
+                                              max_prop_N=1.0, breadth_thresh=0.0, start_pos=0, end_pos=0,
+                                              do_insert_wrt_ref=is_insert, do_mask_stop_codon=is_mask_stop_codon,
                                               ref_len=0)
         LOGGER.debug("Done Full MSA-Fasta from SAM for ref " + ref)
     else:
@@ -110,17 +110,14 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
 
     msa_window_filename_prefix = out_dir + os.sep + sam_filename_prefix + "." + str(start_window_nucpos) + "_" + str(end_window_nucpos)
     msa_window_fasta_filename = msa_window_filename_prefix + ".fasta"
-    total_slice_seq = sam_handler.create_msa_slice_from_sam(sam_filename=sam_filename,
-                                                            ref=ref,
+    total_slice_seq = sam_handler.create_msa_slice_from_sam(sam_filename=sam_filename, ref=ref,
                                                             out_fasta_filename=msa_window_fasta_filename,
                                                             mapping_cutoff=map_qual_cutoff,
-                                                            read_qual_cutoff=read_qual_cutoff,
-                                                            max_prop_N=max_prop_N,
+                                                            read_qual_cutoff=read_qual_cutoff, max_prop_N=max_prop_N,
                                                             breadth_thresh=window_breadth_cutoff,
-                                                            start_pos=start_window_nucpos,
-                                                            end_pos=end_window_nucpos,
-                                                            is_insert=insert,
-                                                            is_mask_stop_codon=mask_stop_codon)
+                                                            start_pos=start_window_nucpos, end_pos=end_window_nucpos,
+                                                            do_insert_wrt_ref=insert,
+                                                            do_mask_stop_codon=mask_stop_codon)
 
 
     # Check whether the msa sliced fasta has enough reads to make a good tree

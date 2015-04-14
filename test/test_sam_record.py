@@ -50,13 +50,13 @@ class TestSamRecord(unittest.TestCase):
                           " slice_end=" + str(slice_end))
 
             LOGGER.debug("TestCase " + str(i+1) + conditions + " read=" + testcase.read_name)
-            sam_rec1 = SamRecord(testcase.ref2len[testcase.target_ref])
-            sam_rec1.fill_record_vals(qname=testcase.mate1.qname, flag=testcase.mate1.flag, rname=testcase.mate1.rname,
+            sam_rec1 = SamRecord(testcase.ref2len[testcase.target_ref],
+                                 qname=testcase.mate1.qname, flag=testcase.mate1.flag, rname=testcase.mate1.rname,
                                       seq=testcase.mate1.seq, cigar=testcase.mate1.cigar, mapq=testcase.mate1.mapq,
                                       qual=testcase.mate1.qual, pos=testcase.mate1.pos,
                                       rnext=testcase.mate1.rnext, pnext=testcase.mate1.pnext)
-            sam_rec2 = SamRecord(testcase.ref2len[testcase.target_ref])
-            sam_rec2.fill_record_vals(qname=testcase.mate2.qname, flag=testcase.mate2.flag, rname=testcase.mate2.rname,
+            sam_rec2 = SamRecord(testcase.ref2len[testcase.target_ref],
+                                 qname=testcase.mate2.qname, flag=testcase.mate2.flag, rname=testcase.mate2.rname,
                                       seq=testcase.mate2.seq, cigar=testcase.mate2.cigar, mapq=testcase.mate2.mapq,
                                       qual=testcase.mate2.qual, pos=testcase.mate2.pos,
                                       rnext=testcase.mate2.rnext, pnext=testcase.mate2.pnext)

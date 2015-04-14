@@ -83,12 +83,11 @@ class PairedRecord(SamSequence):
         """
         if not self.read_end_wrt_ref:
             if self.mate1 and self.mate2:
-                self.read_start_wrt_ref = min(self.mate1.pos, self.mate2.pos)
+                self.read_end_wrt_ref = max(self.mate1.get_read_end_wrt_ref(), self.mate2.get_read_end_wrt_ref())
             elif self.mate1:
-                self.read_start_wrt_ref = self.mate1
+                self.read_end_wrt_ref = self.mate1.get_read_end_wrt_ref()
             elif self.mate2:
-                self.read_start_wrt_ref = self.mate2
-            self.read_end_wrt_ref = max(self.mate1.get_read_end_wrt_ref(), self.mate2.get_read_end_wrt_ref())
+                self.read_end_wrt_ref = self.mate2.get_read_end_wrt_ref()
         return self.read_end_wrt_ref
 
 
@@ -179,20 +178,19 @@ class PairedRecord(SamSequence):
         end of the slice is always given.
         :param int slice_start_wrt_ref_1based: 1-based slice start position with respect to reference
         :param int slice_end_wrt_ref_1based: 1-based slice end position with respect to reference
-        :return {int: str}:  dict of 1-based ref position right before the insert => inserted sequence
+        :return   dict of 1-based ref position right before the insert => list of (insert seq, insert qual) tuples for each mate
+        :rtype:  {int: []}
         """
         merge_rpos_to_insert = dict()  # {pos : { 1: (seq1, qual1), 2: (seq1, qual2)}
-        #for mate, insert_dict in [(1, self.mate1.get_insert_dict()), (2, self.mate2.get_insert_dict())]:
+
         for mate in [self.mate1, self.mate2]:
             if not mate:
                 continue
             insert_dict = mate.get_insert_dict(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based)
             for insert_pos, (insert_seq, insert_qual) in insert_dict.iteritems():
                 if not merge_rpos_to_insert.get(insert_pos):
-                    merge_rpos_to_insert[insert_pos] = dict()
-                if not merge_rpos_to_insert[insert_pos].get(mate):
-                    merge_rpos_to_insert[insert_pos][mate] = dict()
-                merge_rpos_to_insert[insert_pos][mate] = (insert_seq, insert_qual)
+                    merge_rpos_to_insert[insert_pos] = []
+                merge_rpos_to_insert[insert_pos].append( (insert_seq, insert_qual) )
 
         return merge_rpos_to_insert
 
@@ -215,25 +213,25 @@ class PairedRecord(SamSequence):
 
         q_cutoff_overlap = PairedRecord.calc_q_cutoff_overlap(q_cutoff)
 
-        # read_insert_dict = self.get_insert_dict(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based)
+
         merge_rpos_to_insert = OrderedDict()
         mate1_insert_dict = self.mate1.get_insert_dict(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based) if self.mate1 else dict()
-        mate2_insert_dict = self.mate1.get_insert_dict(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based) if self.mate2 else dict()
+        mate2_insert_dict = self.mate2.get_insert_dict(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based) if self.mate2 else dict()
 
         # Merge the insert positions from both mates
         uniq_insert_pos = set()
-        uniq_insert_pos.add(mate1_insert_dict.keys())
-        uniq_insert_pos.add(mate2_insert_dict.keys())
+        for x in mate1_insert_dict.keys() + mate2_insert_dict.keys():
+            uniq_insert_pos.add(x)
 
         # For the positions in which the mates overlap, check if the inserts are the same in both mates
-        # insert_pos1_wrt_ref_1based is the 1-based position wrt ref before after the insertion
+        # insert_pos1_wrt_ref_1based is the 1-based position wrt ref before the insertion
         for insert_pos_wrt_ref_1based in sorted(uniq_insert_pos):
             stats.total_insert_blocks += 1
             # Does this insert fall into the mate overlap?
             insert_seq1, insert_qual1 = mate1_insert_dict.get(insert_pos_wrt_ref_1based, ("", ""))
             insert_seq2, insert_qual2 = mate2_insert_dict.get(insert_pos_wrt_ref_1based, ("", ""))
             if self.is_in_mate_overlap(insert_pos_wrt_ref_1based):
-                # If the inserted position exists in one mate, then remove it.
+                # If the inserted position exists in one mate, then keep it if low quality, else remove
                 # If the inserted position exists in both mates, but they disagree on the base, take the higher quality base > q_cutoff.
                 # If the inserted position exists in both mates, but they disagree on the base, mask it if both low quality.
                 masked_insert_seq = ""
@@ -261,19 +259,19 @@ class PairedRecord(SamSequence):
                         else:
                             masked_insert_seq += "N"
                             stats.total_insert_agree_lo_qual += 1
-                    elif ichar2 and not ichar1 :  # Only mate2 has insert here.  Exclude insert.
+                    elif ichar2 and not ichar1 :  # Only mate2 has insert here.  Exclude insert since insert in overlap
                         stats.total_insert_conflict += 1
                         if iqual2 >= q_cutoff:
                             stats.total_insert_conflict_hino_qual += 1
                         else:
                             stats.total_insert_conflict_lono_qual += 1
-                    elif ichar1 and not ichar2:  # Only mate1 has insert here.  Exclude insert.
+                    elif ichar1 and not ichar2:  # Only mate1 has insert here.  Exclude insert since insert in overlap
                         stats.total_insert_conflict += 1
                         if iqual1 >= q_cutoff:
                             stats.total_insert_conflict_hino_qual += 1
                         else:
                             stats.total_insert_conflict_lono_qual += 1
-                    elif ichar2 != ichar1:  # Mate1 and Mate2 both have inserts here, but bases conflict.
+                    else:  # Mate1 and Mate2 both have inserts here, but bases conflict.
                         stats.total_insert_conflict += 1
 
                         if iqual1 < q_cutoff and iqual2 < q_cutoff:  # Both inserts low quality, mask it
@@ -291,9 +289,10 @@ class PairedRecord(SamSequence):
                         elif iqual2 >= q_cutoff > iqual1:  # seq2 high quality, seq2 low quality
                             masked_insert_seq += ichar2
                             stats.total_insert_conflict_hilo_qual += 1
-                        elif iqual1 == iqual2 >= q_cutoff:  # both seq high equal quality, mask it
+                        else:  # both seq high equal quality, mask it:   iqual1 == iqual2 >= q_cutoff
                             masked_insert_seq += "N"
                             stats.total_insert_conflict_equal_hi_qual += 1
+
 
                 merge_rpos_to_insert[insert_pos_wrt_ref_1based] = masked_insert_seq
             else:
@@ -328,29 +327,24 @@ class PairedRecord(SamSequence):
         mseq_with_inserts += sliced_mseq[last_insert_pos_0based_wrt_mseq+1:len(sliced_mseq)]
 
         if merge_rpos_to_insert:
-            LOGGER.debug("qname=" + self.mate1.qname + " insert stats:\n" + stats.dump_insert_stats())
+            LOGGER.debug("qname=" + self.get_name() + " insert stats:\n" + stats.dump_insert_stats())
 
         return mseq_with_inserts, stats
 
 
 
-    def __merge_match(self, q_cutoff=10, pad_space_btn_mate="N", slice_start_wrt_ref_1based=None, slice_end_wrt_ref_1based=None, stats=None):
+    def __merge_match(self, q_cutoff=10, pad_space_btn_mate="N", slice_start_wrt_ref_1based=0, slice_end_wrt_ref_1based=0, stats=None):
         """
         Merge bases in reads that align as a match to the reference (as opposed to bases that align as an insert to the ref).
+        Does not do validation of slice coordinates.
         :param int q_cutoff:  bases with quality lower than this will be masked
-        :param int slice_start_wrt_ref_1based: 1-based slice start position with respect to reference.  If 0 or None, uses read start wrt ref.
-        :param int slice_end_wrt_ref_1based: 1-based slice end position with respect to reference.  If 0 or None, uses read end wrt ref
+        :param int slice_start_wrt_ref_1based: 1-based slice start position with respect to reference.
+        :param int slice_end_wrt_ref_1based: 1-based slice end position with respect to reference.
         :param stats:
         :return:
         """
         mseq = ""
 
-        if not slice_start_wrt_ref_1based or not slice_end_wrt_ref_1based:
-            slice_start_wrt_ref_1based = self.read_start_wrt_ref()
-            slice_end_wrt_ref_1based = self.read_end_wrt_ref()
-
-        if slice_start_wrt_ref_1based > slice_end_wrt_ref_1based:
-            raise ValueError("Slice start should be <= slice end")
 
         # Extract portion of reads that fit within the intersection of the read fragment & slice.
         # Pad the extracted sequences just enough so that they line up within the intersection.
@@ -366,18 +360,22 @@ class PairedRecord(SamSequence):
                                                          slice_end_wrt_ref_1based=slice_end_wrt_ref_1based,
                                                          do_insert_wrt_ref=False, do_mask_stop_codon=False, stats=stats)
 
+            if not self.mate2: # in case one mate is defined but not the other
+                seq2 = sam_constants.SEQ_PAD_CHAR * len(seq1)
+                qual2 = sam_constants.QUAL_PAD_CHAR * len(qual1)
+
+
         if self.mate2:
             seq2, qual2, stats = self.mate2.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=True,
                                                      do_mask_low_qual=False, q_cutoff=q_cutoff,
                                                      slice_start_wrt_ref_1based=slice_start_wrt_ref_1based,
                                                      slice_end_wrt_ref_1based=slice_end_wrt_ref_1based,
                                                      do_insert_wrt_ref=False, do_mask_stop_codon=False, stats=stats)
-        if not seq1:
-            seq1 = sam_constants.SEQ_PAD_CHAR * len(seq2)
-            qual1 = sam_constants.QUAL_PAD_CHAR * len(qual2)
-        else:
-            seq2 = sam_constants.SEQ_PAD_CHAR * len(seq1)
-            qual2 = sam_constants.QUAL_PAD_CHAR * len(qual1)
+
+            if not self.mate1:  # in case one mate is defined but not the other
+                seq1 = sam_constants.SEQ_PAD_CHAR * len(seq2)
+                qual1 = sam_constants.QUAL_PAD_CHAR * len(qual2)
+
 
         if len(seq1) != len(seq2) or len(qual1) != len(qual2) or len(qual1) != len(seq1):
             raise ValueError("Expect left and right pad mate sequences and qualities such that they line up. " +
@@ -467,7 +465,7 @@ class PairedRecord(SamSequence):
 
 
     def get_seq_qual(self, q_cutoff=10, pad_space_btn_mates="N", do_insert_wrt_ref=False, do_pad_wrt_ref=True,
-                        do_pad_wrt_slice=False, do_mask_stop_codon=False, slice_end_wrt_ref_1based=None, slice_start_wrt_ref_1based=None,
+                        do_pad_wrt_slice=False, do_mask_stop_codon=False, slice_end_wrt_ref_1based=0, slice_start_wrt_ref_1based=0,
                         stats=None):
         """
         Merge two sequences that overlap over some portion (paired-end
@@ -495,7 +493,7 @@ class PairedRecord(SamSequence):
         if not slice_start_wrt_ref_1based:
             slice_start_wrt_ref_1based = 1
         if not slice_end_wrt_ref_1based:
-            slice_end_wrt_ref_1based = self.mate1.ref_len
+            slice_end_wrt_ref_1based = self.get_ref_len()
         if slice_start_wrt_ref_1based > slice_end_wrt_ref_1based:
             raise ValueError("slice start must be before slice end")
 

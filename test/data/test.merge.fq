@@ -643,3 +643,16 @@ H!HH-------HHH-H-----
 ---GCTAGAC-----------
 +
 ---HHHHHHH-----------
+# Both reads mapped to same reference, high quality, multiple inserts in and out of overlap, all concordant.  Expect:  all inserts accepted
+@read50/1    flag=99,rname=ref1,mapq=40,cigar=1M1I2M1I5M,tlen=8
+---GACCGTAGAC----------
++
+---HHHHHHHHHH----------
+@read50/2    flag=147,rname=ref1,mapq=40,cigar=1M1I6M1I1M,tlen=8
+-----CGTAGACAGT--------
++
+-----HHHHHHHHHH--------
+@merged_read50	inserts=5,8,15
+---GACCGTAGACAGT--------
++
+---HHHHHHHHHHHHH--------

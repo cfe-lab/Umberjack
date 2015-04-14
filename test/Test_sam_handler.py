@@ -200,15 +200,12 @@ class TestSamHandler(unittest.TestCase):
         # Test that the pairs are selected correctly.   We don't care about slices, breadth thresholds or N's or masking stop codons here.
         # But we do care about mapping quality and target references.
         actual_written = sam.sam_handler.create_msa_slice_from_sam(sam_filename=TEST_PAIR_SELECTION_SAM,
-                                                            ref=TEST_PAIR_SELECTION_TARGET_REF,
-                                                            out_fasta_filename=ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA,
-                                                            mapping_cutoff=MAPQ_CUTOFF,
-                                                            read_qual_cutoff=READ_QUAL_CUTOFF,
-                                                            max_prop_N=1.0,
-                                                            breadth_thresh=0,
-                                                            start_pos=None, end_pos=None,
-                                                            is_insert=False,
-                                                            is_mask_stop_codon=False)
+                                                                   ref=TEST_PAIR_SELECTION_TARGET_REF,
+                                                                   out_fasta_filename=ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA,
+                                                                   mapping_cutoff=MAPQ_CUTOFF,
+                                                                   read_qual_cutoff=READ_QUAL_CUTOFF, max_prop_N=1.0,
+                                                                   breadth_thresh=0, start_pos=None, end_pos=None,
+                                                                   do_insert_wrt_ref=False, do_mask_stop_codon=False)
 
 
         self.assertTrue(os.path.exists(ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA) and os.path.getsize(ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA) > 0,
@@ -239,8 +236,8 @@ class TestSamHandler(unittest.TestCase):
                           max_prop_N=1.0,
                           breadth_thresh=0,
                           start_pos=None, end_pos=None,
-                          is_insert=False,
-                          is_mask_stop_codon=False)
+                          do_insert_wrt_ref=False,
+                          do_mask_stop_codon=False)
 
 
     def __write_sam_testcase(self, testcases, samfile):
@@ -272,15 +269,13 @@ class TestSamHandler(unittest.TestCase):
                         "Expected test case sam for merging records " + TEST_MERGE_SAM + " does not exist or is empty")
 
         actual_written = sam.sam_handler.create_msa_slice_from_sam(sam_filename=TEST_MERGE_SAM,
-                                                            ref=self.merge_testcases[0].target_ref,
-                                                            out_fasta_filename=ACTUAL_TEST_MERGE_FULL_MSA_FASTA,
-                                                            mapping_cutoff=MAPQ_CUTOFF,
-                                                            read_qual_cutoff=READ_QUAL_CUTOFF,
-                                                            max_prop_N=MAX_PROP_N,
-                                                            breadth_thresh=0,
-                                                            start_pos=None, end_pos=None,
-                                                            is_insert=True,
-                                                            is_mask_stop_codon=True)
+                                                                   ref=self.merge_testcases[0].target_ref,
+                                                                   out_fasta_filename=ACTUAL_TEST_MERGE_FULL_MSA_FASTA,
+                                                                   mapping_cutoff=MAPQ_CUTOFF,
+                                                                   read_qual_cutoff=READ_QUAL_CUTOFF,
+                                                                   max_prop_N=MAX_PROP_N, breadth_thresh=0,
+                                                                   start_pos=0, end_pos=0, do_insert_wrt_ref=True,
+                                                                   do_mask_stop_codon=True)
 
         self.assertTrue(os.path.exists(ACTUAL_TEST_MERGE_FULL_MSA_FASTA) and os.path.getsize(ACTUAL_TEST_MERGE_FULL_MSA_FASTA) > 0,
                         ACTUAL_TEST_MERGE_FULL_MSA_FASTA + " doesn't exist or is empty")

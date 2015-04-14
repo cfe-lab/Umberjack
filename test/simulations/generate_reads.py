@@ -254,15 +254,10 @@ else:
                      (bwa_output_prefix + ".consensus.bwa.sort.query.sam", CONSENSUS_NAME),
                      (bwa_output_prefix + ".errFree.consensus.bwa.sort.query.sam", CONSENSUS_NAME)]:
         msa_fasta = sam.replace(".sort.query.sam", ".msa.fasta")
-        sam_handler.create_msa_slice_from_sam(sam_filename=sam,
-                                              ref=ref,
-                                              out_fasta_filename=msa_fasta,
-                                              mapping_cutoff=MIN_MAP_Q,
-                                              read_qual_cutoff=MIN_BASE_Q,
-                                              max_prop_N=MAX_PROP_N,
-                                              breadth_thresh=0.0,
-                                              start_pos=0, end_pos=0,  # slice is the entire length of the genome
-                                              is_insert=False, ref_len=consensus_len)
+        sam_handler.create_msa_slice_from_sam(sam_filename=sam, ref=ref, out_fasta_filename=msa_fasta,
+                                              mapping_cutoff=MIN_MAP_Q, read_qual_cutoff=MIN_BASE_Q,
+                                              max_prop_N=MAX_PROP_N, breadth_thresh=0.0, start_pos=0, end_pos=0,
+                                              do_insert_wrt_ref=False, ref_len=consensus_len)
 
 
 
