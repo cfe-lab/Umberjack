@@ -1,9 +1,34 @@
 @HD	VN:1.4	SO:queryname
 @SQ	SN:targetref	LN:21
 @SQ	SN:wrongref	LN:300
-@CO	Tests that sam records are parsed and mate pairs are selected correctly.
+@CO	Tests that sam records are parsed and mate pairs are selected correctly, duplicates removed.
 # qname, flag, rname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual
-tc17_read1	99	targetref	4	30	8M	targetref	6	10	GCCTAGAC	HHHHHHHH	CO:Paired mapped records followed by duplicate paired mapped record.  Expect paired record merged into 1 seq in fasta.  If duplicates not allowed, only 1 pair written.
-tc17_read1	147	targetref	6	30	8M	targetref	4	10	CTAGACAT	HHHHHHHH	CO:Paired mapped records followed by duplicate paired mapped record.  Expect paired record merged into 1 seq in fasta.  If duplicates not allowed, only 1 pair written.
-tc17_read2	99	targetref	4	30	8M	targetref	6	10	GCCTAGAC	HHHHHHHH	CO:Paired mapped records followed by duplicate paired mapped record.  Expect paired record merged into 1 seq in fasta.  If duplicates not allowed, only 1 pair written.
-tc17_read2	147	targetref	6	30	8M	targetref	4	10	CTAGACAT	HHHHHHHH	CO:Paired mapped records followed by duplicate paired mapped record.  Expect paired record merged into 1 seq in fasta.  If duplicates not allowed, only 1 pair written.
+tc1_read1	99	targetref	4	30	8M	targetref	6	10	GCCTAGAC	HHHHHHHH	CO:Paired mapped records followed by duplicate paired mapped record with same score.  Expect paired record merged into 1 seq in fasta.  If duplicates not allowed, first pair written.
+tc1_read1	147	targetref	6	30	8M	targetref	4	10	CTAGACAT	HHHHHHHH	CO:Paired mapped records followed by duplicate paired mapped record with same score.  Expect paired record merged into 1 seq in fasta.  If duplicates not allowed, first pair written.
+tc1_read2	99	targetref	4	30	8M	targetref	6	10	GCCTAGAC	HHHHHHHH	CO:Paired mapped records followed by duplicate paired mapped record with same score.  Expect paired record merged into 1 seq in fasta.  If duplicates not allowed, first pair written.
+tc1_read2	147	targetref	6	30	8M	targetref	4	10	CTAGACAT	HHHHHHHH	CO:Paired mapped records followed by duplicate paired mapped record with same score.  Expect paired record merged into 1 seq in fasta.  If duplicates not allowed, first pair written.
+
+
+tc2_read1	99	targetref	4	30	8M	targetref	6	10	AAAAAAAA	BBBBBBBB	CO:paired mapped record followed by single record.  Both records have the same merged sequence, but single record has higher quality sum.  Expect single record to be kept, other records to be excluded from fasta.
+tc2_read1	147	targetref	6	30	8M	targetref	4	10	AAAAAATT	99999999	CO:paired mapped record followed by single record.  Both records have the same merged sequence, but single record has higher quality sum.  Expect single record to be kept, other records to be excluded from fasta.
+tc2_read2	0	targetref	4	30	10M	*	0	0	AAAAAAAATT	HHHHHHHHHH	CO:paired mapped record followed by single record.  Both records have the same merged sequence, but single record has higher quality sum.  Expect single record to be kept, other records to be excluded from fasta.
+
+tc3_read1	0	targetref	4	30	10M	*	0	0	GGGGGGGGGG	>>>>>>>>>>	CO:singled mapped record followed by paired record.  Both records have the same merged sequence, but paired record has higher	 quality sum.  Expect paired record to be kept, other records to be excluded from fasta.
+tc3_read2	99	targetref	4	30	8M	targetref	6	10	GGGGGGGG	BBBBBBBB	CO:singled mapped record followed by paired record.  Both records have the same merged sequence, but paired record has higher quality sum.  Expect paired record to be kept, other records to be excluded from fasta.  In tc3_read2, score uses highest quality score for concordant bases
+tc3_read2	147	targetref	6	30	8M	targetref	4	10	GGGGGGGG	99999999	CO:singled mapped record followed by paired record.  Both records have the same merged sequence, but paired record has higher quality sum.  Expect paired record to be kept, other records to be excluded from fasta.  In tc3_read2, score uses highest quality score for concordant bases
+
+tc4_read1	99	targetref	4	30	6M1D1M	targetref	6	10	AACCGGT	HHHHHHH	CO:Paired mapped records with deletion, paired mapped records with low quality masking.  Deletion and low quality base in same position.  Remaining bases match. Both reads are written out and are not considered duplicates.
+tc4_read1	147	targetref	6	30	4M1D3M	targetref	4	10	CCGGTAA	HHHHHHH	CO:Paired mapped records with deletion followed by paired mapped records with low quality masking.  Deletion and low quality base in same position.  Remaining bases match. Both reads are written out and are not considered duplicates.
+tc4_read2	99	targetref	4	30	8M	targetref	6	10	AACCGGAT	HHHHHH0H	CO:Paired mapped records with deletion followed by paired mapped records with low quality masking.  Deletion and low quality base in same position.  Remaining bases match. Both reads are written out and are not considered duplicates.
+tc4_read2	147	targetref	6	30	8M	targetref	4	10	CCGGTTAA	HHHH2HHH	CO:Paired mapped records with deletion followed by paired mapped records with low quality masking.  Deletion and low quality base in same position.  Remaining bases match. Both reads are written out and are not considered duplicates.
+
+tc5_read1	99	targetref	4	30	4M	targetref	10	10	CTAG	HHHH	CO:Paired mapped records with gap between mates, paired mapped records with low quality masking.  Gap and low quality mask in same position.  Remaining bases match.  Gapped-mate pair has higher quality score.  Assuming that default N-padding between mates used, only the gapped-mate pair written out.
+tc5_read1	147	targetref	10	30	4M	targetref	4	10	TTTT	HHHH	CO:Paired mapped records with gap between mates, paired mapped records with low quality masking.  Gap and low quality mask in same position.  Remaining bases match.  Gapped-mate pair has higher quality score.  Assuming that default N-padding between mates used, only the gapped-mate pair written out.
+tc5_read2	99	targetref	4	30	9M	targetref	6	10	CTAGCCTTT	7777!!777	CO:Paired mapped records with gap between mates, paired mapped records with low quality masking.  Gap and low quality mask in same position.  Remaining bases match.  Gapped-mate pair has higher quality score.  Assuming that default N-padding between mates used, only the gapped-mate pair written out.
+tc5_read2	147	targetref	6	30	8M	targetref	4	10	AGCCTTTT	88!!8888	CO:Paired mapped records with gap between mates, paired mapped records with low quality masking.  Gap and low quality mask in same position.  Remaining bases match.  Gapped-mate pair has higher quality score.  Assuming that default N-padding between mates used, only the gapped-mate pair written out.
+
+tc6_read1	99	targetref	3	30	9M	targetref	4	10	TGTCTCTGG	HHHHHHHHH	CO:Paired mapped records, paired mapped records.  Both reads have same sequence, but start at different coordinates.  Both are written out.
+tc6_read1	147	targetref	4	30	9M	targetref	3	10	GTCTCTGGA	HHHHHHHHH	CO:Paired mapped records, paired mapped records.  Both reads have same sequence, but start at different coordinates.  Both are written out.
+tc6_read2	99	targetref	11	30	9M	targetref	12	10	TGTCTCTGG	HHHHHHHHH	CO:Paired mapped records, paired mapped records.  Both reads have same sequence, but start at different coordinates.  Both are written out.
+tc6_read2	147	targetref	12	30	9M	targetref	11	10	GTCTCTGGA	HHHHHHHHH	CO:Paired mapped records, paired mapped records.  Both reads have same sequence, but start at different coordinates.  Both are written out.
+

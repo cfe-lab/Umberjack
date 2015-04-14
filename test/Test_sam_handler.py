@@ -34,7 +34,7 @@ MAPQ_CUTOFF = 20  # alignment quality cutoff
 MAX_PROP_N = 0.5  # maximum proportion of N bases in MSA-aligned sequence
 READ_QUAL_CUTOFF = 20   # Phred quality score cutoff [0,40]
 
-MIN_WINDOW_BREADTH_COV_FRACTION = 0.875
+MIN_WINDOW_BREADTH_COV_FRACTION = 0.5
 
 TEST_DIR = os.path.dirname(os.path.realpath(__file__)) + os.sep + "out"
 
@@ -55,8 +55,8 @@ class TestSamHandler(unittest.TestCase):
         self.merge_testcases = sam_test_case.SamTestCase.parse_fastq(TEST_MERGE_FASTQ)
 
         self.TMPSAM_REF1 = "ref1"
-        self.TMPSAM_REF1_LEN = 4
 
+        self.TMPSAM_REF1_LEN = 4
         self.TMPSAM_REF2 = "ref2"
         self.TMPSAM_REF2_LEN = 400
 
@@ -97,19 +97,6 @@ class TestSamHandler(unittest.TestCase):
         os.fsync(self.tmpsam_noheader.file.fileno())  # flush os buffer to disk
         self.tmpsam_noheader.close()
 
-
-    #
-    #
-    # def setUp(self):
-    #     """
-    #     Generate simulated data for unit tests
-    #     """
-    #     # Specify sim_pipeline.py configurations into separate config file
-    #     config_filename = SIM_DATA_DIR + os.sep + "umberjack_unittest.conf"
-    #     subprocess.check_call(["python", SIM_PIPELINE_PY, config_filename])
-    #
-    #     if not os.path.exists(OUT_DIR):
-    #         os.makedirs(OUT_DIR)
 
     def test_get_reflen(self):
         """
@@ -206,7 +193,7 @@ class TestSamHandler(unittest.TestCase):
                                                                    out_fasta_filename=ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA,
                                                                    mapping_cutoff=MAPQ_CUTOFF,
                                                                    read_qual_cutoff=READ_QUAL_CUTOFF, max_prop_N=1.0,
-                                                                   breadth_thresh=0, start_pos=None, end_pos=None,
+                                                                   breadth_thresh=0, start_pos=0, end_pos=0,
                                                                    do_insert_wrt_ref=False, do_mask_stop_codon=False)
 
 
@@ -239,11 +226,14 @@ class TestSamHandler(unittest.TestCase):
                                                                    out_fasta_filename=ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA,
                                                                    mapping_cutoff=MAPQ_CUTOFF,
                                                                    read_qual_cutoff=READ_QUAL_CUTOFF, max_prop_N=1.0,
-                                                                   breadth_thresh=0, start_pos=None, end_pos=None,
+                                                                   breadth_thresh=0, start_pos=0, end_pos=0,
                                                                    do_insert_wrt_ref=False, do_mask_stop_codon=False,
                                                                    do_remove_dup=True,
                                                                    out_dup_tsv_filename=ACTUAL_TEST_PAIR_SELECTION_DUP_TSV)
 
+
+        self.assertTrue(os.path.exists(ACTUAL_TEST_PAIR_SELECTION_DUP_TSV) and os.path.getsize(ACTUAL_TEST_PAIR_SELECTION_DUP_TSV)>0,
+                        ACTUAL_TEST_PAIR_SELECTION_DUP_TSV + " doesn't exist or is empty")
 
         self.assertTrue(os.path.exists(ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA) and os.path.getsize(ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA) > 0,
                         ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA + " doesn't exist or is empty")
@@ -257,6 +247,7 @@ class TestSamHandler(unittest.TestCase):
         expected_written = Utility.get_total_seq_from_fasta(EXPECTED_TEST_PAIR_SELECTION_REMDUP_FULL_MSA_FASTA)
         self.assertEqual(expected_written, actual_written,
                          "Expect total written seq {} but got {} from {}".format(expected_written, actual_written, ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA))
+
 
 
     def test_create_msa_slice_from_sam_unsorted(self):
@@ -321,11 +312,59 @@ class TestSamHandler(unittest.TestCase):
 
         expected_written = 0
         for testcase in self.merge_testcases:
-            expected_seq = testcase.get_sliced_merged_read(slice_start_pos_wrt_ref_1based=None, slice_end_pos_wrt_ref_1based=None,
+            expected_seq, expected_qual = testcase.get_sliced_merged_read(slice_start_pos_wrt_ref_1based=None, slice_end_pos_wrt_ref_1based=None,
                                                            do_pad_wrt_slice=True, do_insert_wrt_ref=True, do_mask_stop_codon=True)
             actual_seq = actual_header2seq.get(testcase.read_name, None)
 
             if expected_seq.count("N") / float(len(expected_seq)) > MAX_PROP_N:
+                self.assertIsNone(actual_seq,
+                                  "Expect read " + testcase.read_name + " should not be in " + ACTUAL_TEST_MERGE_FULL_MSA_FASTA)
+            else:
+                expected_written += 1
+                self.assertEqual(expected_seq, actual_seq,
+                                 "Expected {} but got {} for testcase {}".format(expected_seq, actual_seq, testcase.read_name))
+
+        self.assertEqual(expected_written, actual_written,
+                         "Expect total written seq {} but got {} from {}".format(expected_written, actual_written, ACTUAL_TEST_MERGE_FULL_MSA_FASTA))
+
+
+    def test_create_msa_slice_from_sam_slice(self):
+        """
+        Tests that the sam_handler.create_msa_slice_from_sam() slices properly
+        """
+
+        ACTUAL_TEST_MERGE_FULL_MSA_FASTA = TEST_DIR + os.sep + os.path.basename(TEST_MERGE_FASTQ).replace(".fq", ".msa.fasta")
+        TEST_MERGE_SAM = TEST_DIR + os.sep + os.path.basename(TEST_MERGE_FASTQ).replace(".fq", ".sam")
+        self.__write_sam_testcase(self.merge_testcases, TEST_MERGE_SAM)
+
+        self.assertTrue(os.path.exists(TEST_MERGE_SAM) and os.path.getsize(TEST_MERGE_SAM) > 0,
+                        "Expected test case sam for merging records " + TEST_MERGE_SAM + " does not exist or is empty")
+
+
+        actual_written = sam.sam_handler.create_msa_slice_from_sam(sam_filename=TEST_MERGE_SAM,
+                                                                   ref=self.merge_testcases[0].target_ref,
+                                                                   out_fasta_filename=ACTUAL_TEST_MERGE_FULL_MSA_FASTA,
+                                                                   mapping_cutoff=MAPQ_CUTOFF,
+                                                                   read_qual_cutoff=READ_QUAL_CUTOFF,
+                                                                   max_prop_N=1.0, breadth_thresh=MIN_WINDOW_BREADTH_COV_FRACTION,
+                                                                   start_pos=self.merge_testcases[0].slice_start,
+                                                                   end_pos=self.merge_testcases[0].slice_end, do_insert_wrt_ref=True,
+                                                                   do_mask_stop_codon=True)
+
+        self.assertTrue(os.path.exists(ACTUAL_TEST_MERGE_FULL_MSA_FASTA) and os.path.getsize(ACTUAL_TEST_MERGE_FULL_MSA_FASTA) > 0,
+                        ACTUAL_TEST_MERGE_FULL_MSA_FASTA + " doesn't exist or is empty")
+
+        actual_header2seq = Utility.get_seq_dict(ACTUAL_TEST_MERGE_FULL_MSA_FASTA)
+
+        expected_written = 0
+        for testcase in self.merge_testcases:
+            expected_seq, expected_qual = testcase.get_sliced_merged_read(slice_start_pos_wrt_ref_1based=testcase.slice_start,
+                                                           slice_end_pos_wrt_ref_1based=testcase.slice_end,
+                                                           do_pad_wrt_slice=True, do_insert_wrt_ref=True, do_mask_stop_codon=True)
+            actual_seq = actual_header2seq.get(testcase.read_name, None)
+
+            slice_len = self.merge_testcases[0].slice_end - self.merge_testcases[0].slice_start + 1
+            if float(expected_seq.count("N") + expected_seq.count("-")) / slice_len > (1.0- MIN_WINDOW_BREADTH_COV_FRACTION):
                 self.assertIsNone(actual_seq,
                                   "Expect read " + testcase.read_name + " should not be in " + ACTUAL_TEST_MERGE_FULL_MSA_FASTA)
             else:

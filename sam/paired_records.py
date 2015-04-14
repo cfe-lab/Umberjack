@@ -171,41 +171,19 @@ class PairedRecord(SamSequence):
         return q_cutoff_overlap
 
 
-    def get_insert_dict(self, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
-        """
-        Combines the dicts for mate1 and mate2 inserts into a single dict.  Ignores inserts outside of the slice.
-        The exception is when the slice end is at the end of the reference, any inserts to the right of the
-        end of the slice is always given.
-        :param int slice_start_wrt_ref_1based: 1-based slice start position with respect to reference
-        :param int slice_end_wrt_ref_1based: 1-based slice end position with respect to reference
-        :return   dict of 1-based ref position right before the insert => list of (insert seq, insert qual) tuples for each mate
-        :rtype:  {int: []}
-        """
-        merge_rpos_to_insert = dict()  # {pos : { 1: (seq1, qual1), 2: (seq1, qual2)}
-
-        for mate in [self.mate1, self.mate2]:
-            if not mate:
-                continue
-            insert_dict = mate.get_insert_dict(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based)
-            for insert_pos, (insert_seq, insert_qual) in insert_dict.iteritems():
-                if not merge_rpos_to_insert.get(insert_pos):
-                    merge_rpos_to_insert[insert_pos] = []
-                merge_rpos_to_insert[insert_pos].append( (insert_seq, insert_qual) )
-
-        return merge_rpos_to_insert
-
 
     # TODO:  support other quality formats than those that use Sanger phred offsets
-    def __merge_inserts(self, sliced_mseq, q_cutoff, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based,
+    def __merge_inserts(self, sliced_mseq, sliced_mqual, q_cutoff, slice_start_wrt_ref_1based, slice_end_wrt_ref_1based,
                            stats=None):
         """
         Assumes that sliced_mseq only contains the sliced portion of the merged read sequence.
 
         :param str sliced_mseq:  merged, sliced read sequence
+        :param str sliced_mqual:  merged, sliced quality scores in ASCII.  Assumes Phred Sanger format.
         :param int q_cutoff:  bases with quality lower than this will be masked
         :param int slice_start_wrt_ref_1based: 1-based slice start position with respect to reference
         :param int slice_end_wrt_ref_1based: 1-based slice end position with respect to reference
-        :return str, AlignStats:  merged, sliced read sequence with inserts, AlignStats
+        :return str, str, AlignStats:  merged sliced read sequence with inserts, merged sliced qual with inserts, AlignStats
         """
         # track stats about inserts
         if not stats:
@@ -235,6 +213,7 @@ class PairedRecord(SamSequence):
                 # If the inserted position exists in both mates, but they disagree on the base, take the higher quality base > q_cutoff.
                 # If the inserted position exists in both mates, but they disagree on the base, mask it if both low quality.
                 masked_insert_seq = ""
+                masked_insert_qual = ""
                 length = max(len(insert_seq1), len(insert_seq2))
                 for i in range(0, length):
                     stats.total_inserts += 1
@@ -255,9 +234,11 @@ class PairedRecord(SamSequence):
                         stats.total_insert_agree += 1
                         if iqual1 + iqual2 >= q_cutoff_overlap:
                             masked_insert_seq += ichar1
+                            masked_insert_qual += (insert_qual1[i] if iqual1 >= iqual2 else insert_qual2[i])
                             stats.total_insert_agree_hi_qual += 1
                         else:
                             masked_insert_seq += "N"
+                            masked_insert_qual += sam_constants.QUAL_PAD_CHAR
                             stats.total_insert_agree_lo_qual += 1
                     elif ichar2 and not ichar1 :  # Only mate2 has insert here.  Exclude insert since insert in overlap
                         stats.total_insert_conflict += 1
@@ -276,28 +257,35 @@ class PairedRecord(SamSequence):
 
                         if iqual1 < q_cutoff and iqual2 < q_cutoff:  # Both inserts low quality, mask it
                             masked_insert_seq += "N"
+                            masked_insert_qual += sam_constants.QUAL_PAD_CHAR
                             stats.total_insert_conflict_lo_qual += 1
                         elif iqual1 > iqual2 >= q_cutoff:  # both inserts high quality, but insert1 higher
                             masked_insert_seq += ichar1
+                            masked_insert_qual += insert_qual1[i]
                             stats.total_insert_conflict_hi_qual += 1
                         elif iqual2 > iqual1 >= q_cutoff:  # both sequences high quality, but seq2 higher
                             masked_insert_seq += ichar2
+                            masked_insert_qual += insert_qual2[i]
                             stats.total_insert_conflict_hi_qual += 1
                         elif iqual1 >= q_cutoff > iqual2:  # seq1 high quality, seq2 low quality
                             masked_insert_seq += ichar1
+                            masked_insert_qual += insert_qual1[i]
                             stats.total_insert_conflict_hilo_qual += 1
                         elif iqual2 >= q_cutoff > iqual1:  # seq2 high quality, seq2 low quality
                             masked_insert_seq += ichar2
+                            masked_insert_qual += insert_qual2[i]
                             stats.total_insert_conflict_hilo_qual += 1
                         else:  # both seq high equal quality, mask it:   iqual1 == iqual2 >= q_cutoff
                             masked_insert_seq += "N"
+                            masked_insert_qual += sam_constants.QUAL_PAD_CHAR
                             stats.total_insert_conflict_equal_hi_qual += 1
 
 
-                merge_rpos_to_insert[insert_pos_wrt_ref_1based] = masked_insert_seq
+                merge_rpos_to_insert[insert_pos_wrt_ref_1based] = (masked_insert_seq, masked_insert_qual)
             else:
                 # If the the insert is in a region that does not overlap with the mate, exclude it if it's low quality
                 masked_insert_seq = ""
+                masked_insert_qual = ""
                 insert_seq = insert_seq1 if insert_seq1 else insert_seq2
                 insert_qual = insert_qual1 if insert_qual1 else insert_qual2
                 for i, ichar in enumerate(insert_seq):
@@ -306,30 +294,35 @@ class PairedRecord(SamSequence):
                     iqual = ord(insert_qual[i])-sam_constants.PHRED_SANGER_OFFSET
                     if iqual >= q_cutoff:
                         masked_insert_seq += ichar
+                        masked_insert_qual += insert_qual[i]
                         stats.total_insert_1mate_hi_qual += 1
                     else:
                         stats.total_insert_1mate_lo_qual += 1
 
-                merge_rpos_to_insert[insert_pos_wrt_ref_1based] = masked_insert_seq
+                merge_rpos_to_insert[insert_pos_wrt_ref_1based] = (masked_insert_seq, masked_insert_qual)
 
 
 
 
         mseq_with_inserts = ""
+        mqual_with_inserts = ""
         last_insert_pos_0based_wrt_mseq = -1  # 0-based position wrt result_seq before the previous insertion
         # insert_pos_wrt_ref: 1-based reference position before the insertion
-        for insert_1based_pos_wrt_ref, insert_seq in merge_rpos_to_insert.iteritems():
+        for insert_1based_pos_wrt_ref, (insert_seq, insert_qual) in merge_rpos_to_insert.iteritems():
             # 0-based position wrt sliced_mseq right before the insertion
             insert_pos_0based_wrt_mseq =  insert_1based_pos_wrt_ref - slice_start_wrt_ref_1based
             mseq_with_inserts += sliced_mseq[last_insert_pos_0based_wrt_mseq+1:insert_pos_0based_wrt_mseq+1] + insert_seq
+            mqual_with_inserts += sliced_mqual[last_insert_pos_0based_wrt_mseq+1:insert_pos_0based_wrt_mseq+1] + insert_qual
+
             last_insert_pos_0based_wrt_mseq = insert_pos_0based_wrt_mseq
 
         mseq_with_inserts += sliced_mseq[last_insert_pos_0based_wrt_mseq+1:len(sliced_mseq)]
+        mqual_with_inserts += sliced_mqual[last_insert_pos_0based_wrt_mseq+1:len(sliced_mqual)]
 
         if merge_rpos_to_insert:
             LOGGER.debug("qname=" + self.get_name() + " insert stats:\n" + stats.dump_insert_stats())
 
-        return mseq_with_inserts, stats
+        return mseq_with_inserts, mqual_with_inserts, stats
 
 
 
@@ -340,11 +333,15 @@ class PairedRecord(SamSequence):
         :param int q_cutoff:  bases with quality lower than this will be masked
         :param int slice_start_wrt_ref_1based: 1-based slice start position with respect to reference.
         :param int slice_end_wrt_ref_1based: 1-based slice end position with respect to reference.
-        :param stats:
-        :return:
+        :param AlignStats stats:  Keeps track of AlignStats.  Creates a new instance if None.
+        :return str, str:  merged sequence, merged quality.  When there is discordant bases, the quality score for the winning base is chosen.
+        The quality score for deleted or masked bases is set to zero.
         """
         mseq = ""
+        mqual = ""
 
+        if not stats:
+            stats = sam.align_stats.AlignStats()
 
         # Extract portion of reads that fit within the intersection of the read fragment & slice.
         # Pad the extracted sequences just enough so that they line up within the intersection.
@@ -403,15 +400,17 @@ class PairedRecord(SamSequence):
                     mseq += pad_space_btn_mate
                 else:
                     mseq += sam_constants.SEQ_PAD_CHAR
-
+                mqual += sam_constants.QUAL_PAD_CHAR
             # only mate2 has real base here
             elif seq1[i] == sam_constants.SEQ_PAD_CHAR and seq2[i] != sam_constants.SEQ_PAD_CHAR:
                 stats.total_match_1mate += 1
                 if q2 >= q_cutoff:
                     mseq += seq2[i]
+                    mqual += qual2[i]
                     stats.total_match_1mate_hi_qual += 1
                 else:
                     mseq += "N"
+                    mqual += sam_constants.QUAL_PAD_CHAR
                     stats.total_match_1mate_lo_qual += 1
 
             # only mate1 has real base here
@@ -419,9 +418,11 @@ class PairedRecord(SamSequence):
                 stats.total_match_1mate += 1
                 if q1 >= q_cutoff:
                     mseq += seq1[i]
+                    mqual += qual1[i]
                     stats.total_match_1mate_hi_qual += 1
                 else:
                     mseq += "N"
+                    mqual += sam_constants.QUAL_PAD_CHAR
                     stats.total_match_1mate_lo_qual += 1
 
             # Both mates have the same base at this position
@@ -429,9 +430,11 @@ class PairedRecord(SamSequence):
                 stats.total_match_nonconflict += 1
                 if q_cutoff_overlap <= q1 + q2:
                     mseq += seq1[i]
+                    mqual += (qual1[i] if q1 >= q2 else qual2[i])
                     stats.total_match_nonconflict_hi_qual += 1
                 else:
                     mseq += "N"
+                    mqual += sam_constants.QUAL_PAD_CHAR
                     stats.total_match_nonconflict_lo_qual += 1
 
             # Both mates have disagreeing bases at this position: take the high confidence
@@ -439,21 +442,27 @@ class PairedRecord(SamSequence):
                 stats.total_match_conflict += 1
                 if q1 < q_cutoff and q2 < q_cutoff:  # both sequences low quality
                     mseq += "N"
+                    mqual += sam_constants.QUAL_PAD_CHAR
                     stats.total_match_conflict_lo_qual += 1
                 elif q1 > q2 >= q_cutoff:  # both sequences high quality, but seq1 higher
                     mseq += seq1[i]
+                    mqual += qual1[i]
                     stats.total_match_conflict_hi_qual += 1
                 elif q1 >= q_cutoff > q2:  # seq1 high quality, seq2 low quality
                     mseq += seq1[i]
+                    mqual += qual1[i]
                     stats.total_match_conflict_hilo_qual += 1
                 elif q2 > q1 >= q_cutoff:  # both sequences high quality, but seq2 higher
                     mseq += seq2[i]
+                    mqual += qual2[i]
                     stats.total_match_conflict_hi_qual += 1
                 elif q2 >= q_cutoff > q1:  # seq2 high quality, seq2 low quality
                     mseq += seq2[i]
+                    mqual += qual2[i]
                     stats.total_match_conflict_hilo_qual += 1
                 elif q1 == q2 >= q_cutoff:
                     mseq += "N"
+                    mqual += sam_constants.QUAL_PAD_CHAR
                     stats.total_match_conflict_equal_hi_qual += 1
                 else:
                     raise ValueError("We should never get here.  Unanticipated use case for merging sam reads")
@@ -461,10 +470,10 @@ class PairedRecord(SamSequence):
             else:
                 raise ValueError("We should never get here.  Unanticipated use case for merging sam reads")
 
-        return mseq
+        return mseq, mqual
 
 
-    def get_seq_qual(self, q_cutoff=10, pad_space_btn_mates="N", do_insert_wrt_ref=False, do_pad_wrt_ref=True,
+    def get_seq_qual(self, q_cutoff=10, pad_space_btn_segments="N", do_insert_wrt_ref=False, do_pad_wrt_ref=True,
                         do_pad_wrt_slice=False, do_mask_stop_codon=False, slice_end_wrt_ref_1based=0, slice_start_wrt_ref_1based=0,
                         stats=None):
         """
@@ -476,17 +485,29 @@ class PairedRecord(SamSequence):
 
         Allows insertions.
 
-        :param pad_space_btn_mates:
+
+        When merging quality, the quality score for the winning base is chosen for discordant bases.
+        The quality score for deleted or masked bases is set to zero.
+
+        :param q_cutoff:
+        :param do_insert_wrt_ref:
+        :param do_pad_wrt_ref:
+        :param do_mask_stop_codon:
+        :param slice_end_wrt_ref_1based:
+        :param slice_start_wrt_ref_1based:
+        :param stats:
+        :param pad_space_btn_segments:
         :param do_pad_wrt_slice:
-        :return:  merged paired-end read, AlignStats instance
-        :rtype : (str, AlignStats)
         :param int q_cutoff: quality cutoff below which a base is converted to N if there is no consensus between the mates.
         :param bool do_insert_wrt_ref: whether insertions with respect to reference is allowed.
         :param bool do_mask_stop_codon: If True, then masks stop codons with "NNN".  Assumes that reference starts at beginning of codon.
                 Performs stop codon masking after masking low quality bases and after including insertions (if do_insert_wrt_ref==True).
+        :return:  merged paired-end sequence, merged quality, AlignStats instance
+        :rtype : (str, str, AlignStats)
         """
 
-        mseq = ''
+        mseq = ""
+        mqual = ""
         if not stats:
             stats = sam.align_stats.AlignStats()
 
@@ -501,26 +522,32 @@ class PairedRecord(SamSequence):
         # Then just return empty string or padded gaps wrt ref or slice as desired.
         if not self.is_intersect_slice(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based):
             if do_pad_wrt_ref:
-                mseq = SamRecord.do_pad(mseq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                mseq = SamSequence.do_pad(mseq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
                                         pad_start_wrt_ref=1, pad_end_wrt_ref=self.mate1.ref_len,
                                         pad_char=sam_constants.SEQ_PAD_CHAR)
+                mqual = SamSequence.do_pad(mqual, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                                        pad_start_wrt_ref=1, pad_end_wrt_ref=self.mate1.ref_len,
+                                        pad_char=sam_constants.QUAL_PAD_CHAR)
             elif do_pad_wrt_slice:
-                mseq = SamRecord.do_pad(mseq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                mseq = SamSequence.do_pad(mseq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
                                         pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based,
                                         pad_char=sam_constants.SEQ_PAD_CHAR)
-            return mseq, stats
+                mqual = SamSequence.do_pad(mqual, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                                        pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based,
+                                        pad_char=sam_constants.QUAL_PAD_CHAR)
+            return mseq, mqual, stats
 
 
         # 1-based position with respect to reference of intersection between the read fragment and slice
         read_slice_xsect_start_wrt_ref, read_slice_xsect_end_wrt_ref = self.get_slice_intersect_coord(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based)
 
-        mseq = self.__merge_match(q_cutoff=q_cutoff, pad_space_btn_mate=pad_space_btn_mates,
+        mseq, mqual = self.__merge_match(q_cutoff=q_cutoff, pad_space_btn_mate=pad_space_btn_segments,
                          slice_start_wrt_ref_1based=read_slice_xsect_start_wrt_ref,
                          slice_end_wrt_ref_1based=read_slice_xsect_end_wrt_ref, stats=stats)
 
 
         if do_insert_wrt_ref:
-            mseq, stats = self.__merge_inserts(sliced_mseq=mseq, q_cutoff=q_cutoff,
+            mseq, mqual, stats = self.__merge_inserts(sliced_mseq=mseq, sliced_mqual=mqual, q_cutoff=q_cutoff,
                                                   slice_start_wrt_ref_1based=read_slice_xsect_start_wrt_ref,
                                                   slice_end_wrt_ref_1based=read_slice_xsect_end_wrt_ref, stats=stats)
 
@@ -537,18 +564,26 @@ class PairedRecord(SamSequence):
                 codon = mseq[nuc_pos_wrt_result_seq_0based:nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON]
                 if Utility.CODON2AA.get(codon, "") == Utility.STOP_AA:
                     mseq = mseq[0:nuc_pos_wrt_result_seq_0based] + "NNN" + mseq[nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON:]
+                    mqual = mqual[0:nuc_pos_wrt_result_seq_0based] + (sam_constants.QUAL_PAD_CHAR*3) + mqual[nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON:]
 
         # Now pad with respect to reference
         if do_pad_wrt_ref:
-            mseq = SamRecord.do_pad(seq=mseq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+            mseq = SamSequence.do_pad(seq=mseq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
                                     seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
-                                    pad_start_wrt_ref=1, pad_end_wrt_ref=self.mate1.ref_len)
+                                    pad_start_wrt_ref=1, pad_end_wrt_ref=self.mate1.ref_len, pad_char=sam_constants.SEQ_PAD_CHAR)
+            mqual = SamSequence.do_pad(seq=mqual, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+                                    seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
+                                    pad_start_wrt_ref=1, pad_end_wrt_ref=self.mate1.ref_len, pad_char=sam_constants.QUAL_PAD_CHAR)
 
         elif do_pad_wrt_slice:
-            mseq = SamRecord.do_pad(seq=mseq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+            mseq = SamSequence.do_pad(seq=mseq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
                                     seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
-                                    pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based)
-
-        return mseq, stats
+                                    pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based,
+                                    pad_char=sam_constants.SEQ_PAD_CHAR)
+            mqual = SamSequence.do_pad(seq=mqual, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+                                    seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
+                                    pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based,
+                                    pad_char=sam_constants.QUAL_PAD_CHAR)
+        return mseq, mqual, stats
 
 

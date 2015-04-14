@@ -128,6 +128,10 @@ class SamRecord(SamSequence):
             self.rnext = kwargs["rnext"]
         if "pnext" in kwargs:
             self.pnext = int(kwargs["pnext"])
+
+        if self.seq is not None and self.qual is not None and len(self.seq) != len(self.qual):
+            raise ValueError("Expect sequence and quality same length " + str(kwargs) )
+
         # TODO:  fill in other optional keywords
 
 
@@ -188,7 +192,7 @@ class SamRecord(SamSequence):
 
     def get_seq_qual(self, do_pad_wrt_ref=False, do_pad_wrt_slice=False, do_mask_low_qual=False, q_cutoff=10,
                      slice_start_wrt_ref_1based=0, slice_end_wrt_ref_1based=0, do_insert_wrt_ref=False,
-                     do_mask_stop_codon=False, stats=None):
+                     do_mask_stop_codon=False, stats=None, pad_space_btn_segments="N"):
         """
         Gets the sequence for the sam record.
         ASSUMES:  that sam cigar strings do not allow insertions at beginning or end of alignment (i.e.  local alignment as opposed to global alignment).
@@ -206,6 +210,7 @@ class SamRecord(SamSequence):
         :param bool do_mask_stop_codon:  If True, then masks stop codons with "NNN".  Assumes that the reference starts that the beginning of a codon.
                 Performs the stop codon masking after low quality base masking.
         :param AlignStats stats:  keeps track of stats.  Only counts inserts and quality if you allow inserts and mask quality.
+        :param str pad_space_btn_segments:  character to use in between aligned segments of a read.  Not used in this method.
         :return tuple (str, str, AlignStats):  (sequence, quality, AlignStats)
         """
         if not stats:
@@ -236,15 +241,15 @@ class SamRecord(SamSequence):
         # Then just return empty string or padded gaps wrt ref or slice as desired.
         if not read_slice_xsect_start_wrt_ref and not read_slice_xsect_end_wrt_ref:
             if do_pad_wrt_ref:
-                result_seq = SamRecord.do_pad(result_seq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                result_seq = SamSequence.do_pad(result_seq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
                                           pad_start_wrt_ref=1, pad_end_wrt_ref=self.ref_len, pad_char=sam_constants.SEQ_PAD_CHAR)
-                result_qual = SamRecord.do_pad(result_qual, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                result_qual = SamSequence.do_pad(result_qual, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
                                           pad_start_wrt_ref=1, pad_end_wrt_ref=self.ref_len, pad_char=sam_constants.QUAL_PAD_CHAR)
             elif do_pad_wrt_slice:
-                result_seq = SamRecord.do_pad(result_seq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                result_seq = SamSequence.do_pad(result_seq, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
                                           pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based,
                                           pad_char=sam_constants.SEQ_PAD_CHAR)
-                result_qual = SamRecord.do_pad(result_qual, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
+                result_qual = SamSequence.do_pad(result_qual, seq_start_wrt_ref=None, seq_end_wrt_ref=None,
                                            pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based,
                                            pad_char=sam_constants.QUAL_PAD_CHAR)
             return result_seq, result_qual, stats
@@ -262,59 +267,68 @@ class SamRecord(SamSequence):
         # Mask
         if do_mask_low_qual:
             masked_seq = ""
+            masked_qual = ""
             for i, base in enumerate(result_seq):
                 base_qual = ord(result_qual[i])-sam_constants.PHRED_SANGER_OFFSET
                 if base != sam_constants.SEQ_PAD_CHAR:
                     stats.total_match_1mate += 1
                     if base_qual < q_cutoff:
-                        masked_seq += "N"
+                        masked_seq += sam_constants.SEQ_PAD_CHAR
+                        masked_qual += sam_constants.QUAL_PAD_CHAR
                         stats.total_match_1mate_lo_qual += 1
                     else:
                         masked_seq += base
+                        masked_qual += result_qual[i]
                         stats.total_match_1mate_hi_qual += 1
                 else:
                     masked_seq += base
+                    masked_qual += sam_constants.QUAL_PAD_CHAR
 
             result_seq = masked_seq
+            result_qual = masked_qual
 
         # Add Insertions
         if do_insert_wrt_ref:
             result_seq_with_inserts = ""
             result_qual_with_inserts = ""
             last_insert_pos_0based_wrt_result_seq = -1  # 0-based position wrt result_seq before the previous insertion
+
+            sliced_insert_dict = self.get_insert_dict(slice_start_wrt_ref_1based, slice_end_wrt_ref_1based)
             # insert_pos_wrt_ref: 1-based reference position before the insertion
-            is_inserts_in_slice = False
-            for insert_1based_pos_wrt_ref, (insert_seq, insert_qual) in self.ref_pos_to_insert_seq_qual.iteritems():
-                if slice_start_wrt_ref_1based <= insert_1based_pos_wrt_ref < slice_end_wrt_ref_1based:
-                    is_inserts_in_slice = True
-                    stats.total_insert_blocks += 1
-                    stats.total_inserts += len(insert_seq)
-                    stats.total_insert_1mate += len(insert_seq)
-                    # 0-based position wrt result_seq right before the insertion
-                    insert_pos_0based_wrt_result_seq =  insert_1based_pos_wrt_ref - read_slice_xsect_start_wrt_ref
+            for insert_1based_pos_wrt_ref in sorted(sliced_insert_dict.keys()):  # sort so that insert positions are in order
+                insert_seq, insert_qual = sliced_insert_dict[insert_1based_pos_wrt_ref]
 
-                    if do_mask_low_qual:
-                        masked_insert_seq = ""
-                        for i, ichar in enumerate(insert_seq):
-                            iqual = ord(insert_qual[i])-sam_constants.PHRED_SANGER_OFFSET
-                            if iqual >= q_cutoff:  # Only include inserts with high quality
-                                masked_insert_seq += ichar
-                                stats.total_insert_1mate_hi_qual += 1
-                            else:
-                                stats.total_insert_1mate_lo_qual += 1
-                    else:
-                        masked_insert_seq = insert_seq
+                stats.total_insert_blocks += 1
+                stats.total_inserts += len(insert_seq)
+                stats.total_insert_1mate += len(insert_seq)
+                # 0-based position wrt result_seq right before the insertion
+                insert_pos_0based_wrt_result_seq =  insert_1based_pos_wrt_ref - read_slice_xsect_start_wrt_ref
+
+                if do_mask_low_qual:
+                    masked_insert_seq = ""
+                    masked_insert_qual = ""
+                    for i, ichar in enumerate(insert_seq):
+                        iqual = ord(insert_qual[i])-sam_constants.PHRED_SANGER_OFFSET
+                        if iqual >= q_cutoff:  # Only include inserts with high quality
+                            masked_insert_seq += ichar
+                            masked_insert_qual += insert_qual[i]
+                            stats.total_insert_1mate_hi_qual += 1
+                        else:
+                            stats.total_insert_1mate_lo_qual += 1
+                else:
+                    masked_insert_seq = insert_seq
+                    masked_insert_qual = insert_qual
 
 
-                    result_seq_with_inserts += result_seq[last_insert_pos_0based_wrt_result_seq+1:insert_pos_0based_wrt_result_seq+1] + masked_insert_seq
-                    result_qual_with_inserts += result_qual[last_insert_pos_0based_wrt_result_seq+1:insert_pos_0based_wrt_result_seq+1] + insert_qual
-                    last_insert_pos_0based_wrt_result_seq = insert_pos_0based_wrt_result_seq
+                result_seq_with_inserts += result_seq[last_insert_pos_0based_wrt_result_seq+1:insert_pos_0based_wrt_result_seq+1] + masked_insert_seq
+                result_qual_with_inserts += result_qual[last_insert_pos_0based_wrt_result_seq+1:insert_pos_0based_wrt_result_seq+1] + masked_insert_qual
+                last_insert_pos_0based_wrt_result_seq = insert_pos_0based_wrt_result_seq
 
 
             result_seq_with_inserts += result_seq[last_insert_pos_0based_wrt_result_seq+1:len(result_seq)]
             result_qual_with_inserts += result_qual[last_insert_pos_0based_wrt_result_seq+1:len(result_qual)]
 
-            if is_inserts_in_slice:
+            if sliced_insert_dict:
                 LOGGER.debug("qname=" + self.qname + "insert stats:\n" + stats.dump_insert_stats())
 
             result_seq = result_seq_with_inserts
@@ -333,23 +347,23 @@ class SamRecord(SamSequence):
                 codon = result_seq[nuc_pos_wrt_result_seq_0based:nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON]
                 if Utility.CODON2AA.get(codon, "") == Utility.STOP_AA:
                     result_seq = result_seq[0:nuc_pos_wrt_result_seq_0based] + "NNN" + result_seq[nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON:]
-
+                    result_qual = result_qual[0:nuc_pos_wrt_result_seq_0based] + (sam_constants.QUAL_PAD_CHAR*3) + result_qual[nuc_pos_wrt_result_seq_0based+Utility.NUC_PER_CODON:]
 
         # Pad
         if do_pad_wrt_ref:
-            result_seq = SamRecord.do_pad(result_seq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+            result_seq = SamSequence.do_pad(result_seq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
                                           seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
                                           pad_start_wrt_ref=1, pad_end_wrt_ref=self.ref_len, pad_char=sam_constants.SEQ_PAD_CHAR)
-            result_qual = SamRecord.do_pad(result_qual, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+            result_qual = SamSequence.do_pad(result_qual, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
                                            seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
                                           pad_start_wrt_ref=1, pad_end_wrt_ref=self.ref_len, pad_char=sam_constants.QUAL_PAD_CHAR)
 
         elif do_pad_wrt_slice:
-            result_seq = SamRecord.do_pad(result_seq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+            result_seq = SamSequence.do_pad(result_seq, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
                                           seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
                                           pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based,
                                           pad_char=sam_constants.SEQ_PAD_CHAR)
-            result_qual = SamRecord.do_pad(result_qual, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
+            result_qual = SamSequence.do_pad(result_qual, seq_start_wrt_ref=read_slice_xsect_start_wrt_ref,
                                            seq_end_wrt_ref=read_slice_xsect_end_wrt_ref,
                                            pad_start_wrt_ref=slice_start_wrt_ref_1based, pad_end_wrt_ref=slice_end_wrt_ref_1based,
                                            pad_char=sam_constants.QUAL_PAD_CHAR)
@@ -464,21 +478,4 @@ class SamRecord(SamSequence):
         return self.seq_align_len
 
 
-    @staticmethod
-    def do_pad(seq, seq_start_wrt_ref, seq_end_wrt_ref, pad_start_wrt_ref, pad_end_wrt_ref, pad_char=sam_constants.SEQ_PAD_CHAR):
-        """
-        Left and Right Pads the sequence.
-        :param seq:
-        :param seq_start_wrt_ref:
-        :param seq_end_wrt_ref:
-        :param pad_end_wrt_ref:
-        :param str pad_char:  By default, pads with "-"
-        :return:
-        """
-        if not seq_start_wrt_ref or not seq_end_wrt_ref:
-            padded_seq = pad_char * (pad_end_wrt_ref - pad_start_wrt_ref + 1)
-        else:
-            left_pad_len = seq_start_wrt_ref  - pad_start_wrt_ref
-            right_pad_len = pad_end_wrt_ref - seq_end_wrt_ref
-            padded_seq = (pad_char * left_pad_len) + seq + (pad_char * right_pad_len)
-        return padded_seq
+

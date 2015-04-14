@@ -1,2 +1,16 @@
->tc17_read1
+>tc1_read1
 ---GCCTAGACAT--------
+>tc2_read2
+---AAAAAAAATT--------
+>tc3_read2
+---GGGGGGGGGG--------
+>tc4_read1
+---AACCGG-TAA--------
+>tc4_read2
+---AACCGGNTAA--------
+>tc5_read1
+---CTAGNNTTTT--------
+>tc6_read1
+--TGTCTCTGGA---------
+>tc6_read2
+----------TGTCTCTGGA-

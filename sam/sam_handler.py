@@ -5,11 +5,14 @@ import re
 import os
 import logging
 from sam_constants import  SamHeader as SamHeader
+import sam_constants
 import single_record
-import paired_records
+from sam_seq import SamSequence
+from paired_records import  PairedRecord
 import Utility
 from collections import namedtuple
 import csv
+from collections import OrderedDict
 
 
 LOGGER = logging.getLogger(__name__)
@@ -17,10 +20,9 @@ LOGGER = logging.getLogger(__name__)
 # start = 1 based start position with respect to reference
 # seq = merged sequence, external gaps trimmed
 UniqSeq = namedtuple("UniqSeq", ["start", "seq"], verbose=(LOGGER.level == logging.DEBUG))
-# read = readname
+# sam_seq = SamSequence
 # score = sum of quality scores for bases that align to reference and aren't masked for low quality or conflict
-# sam_idx = 0-based index of mate1 record in sam
-UniqSeqScore = namedtuple("UniqSeqScore", ["read", "score", "sam_idx"], verbose=(LOGGER.level == logging.DEBUG))
+ReadScore = namedtuple("ReadScore", ["sam_seq", "score"], verbose=(LOGGER.level == logging.DEBUG))
 
 
 
@@ -75,8 +77,8 @@ def record_iter(sam_filename, ref, mapping_cutoff, ref_len=0):
     :param int ref_len: length of reference.  If 0, then takes length from sam headers.
     :returns int:  total sequences written to multiple sequence aligned fasta
     :raises : :py:class:`exceptions.ValueError` if sam file is not queryname sorted according to the sam header
-    :return :  yields the next PairedRecord.  Even if there is only a single record, it will be returned as a PairedRecord with an empty mate.
-    :rtype: collections.Iterable[sam.paired_records.PairedRecord]
+    :return :  yields the next SamSequence.
+    :rtype: collections.Iterable[sam.sam_seq.SamSequence]
     """
     if not is_query_sort(sam_filename):
         raise ValueError("Sam file must be queryname sorted and header must specify sort order")
@@ -87,7 +89,7 @@ def record_iter(sam_filename, ref, mapping_cutoff, ref_len=0):
     with open(sam_filename, 'r') as sam_fh:
         prev_mate = None
         for line in sam_fh:
-            pair = None
+            sam_seq = None
             if line.startswith(SamHeader.TAG_HEADER_PREFIX):  # skip the headers
                 continue
 
@@ -107,7 +109,7 @@ def record_iter(sam_filename, ref, mapping_cutoff, ref_len=0):
                 if mate.is_mate_mapped(ref):  # If record is paired, wait till we find its mate
                     prev_mate = mate
                 elif mate.mapq >= mapping_cutoff:  #  If this record isn't paired and it passes our thresholds, then just yield it now
-                    pair = paired_records.PairedRecord(None, mate)
+                    sam_seq =  mate
                     prev_mate = None
             else:  # We are expecting this mate to be a pair with prev_mate.
                 if not prev_mate.is_mate_mapped(ref):
@@ -124,11 +126,11 @@ def record_iter(sam_filename, ref, mapping_cutoff, ref_len=0):
                     else: # prev_mate and this mate are part of the same pair
                         # Only yield the mates with good map quality
                         if prev_mate.mapq >= mapping_cutoff and mate.mapq >= mapping_cutoff:
-                            pair = paired_records.PairedRecord(prev_mate, mate)
+                            sam_seq = PairedRecord(prev_mate, mate)
                         elif prev_mate.mapq >= mapping_cutoff:
-                            pair = paired_records.PairedRecord(prev_mate, None)
+                            sam_seq = prev_mate
                         elif mate.mapq >= mapping_cutoff:
-                            pair = paired_records.PairedRecord(None, mate)
+                            sam_seq = mate
                         prev_mate = None  # Clear the paired mate expectations for next set of sam records
                 else:  # This sam record does not pair with the previous sam record.
                     LOGGER.warn("Sam record inconsistent.  Expected pair for " + prev_mate.qname + " but got " + qname +
@@ -136,17 +138,17 @@ def record_iter(sam_filename, ref, mapping_cutoff, ref_len=0):
 
                     # Yield previous mate
                     if prev_mate.mapq >= mapping_cutoff:
-                        pair = paired_records.PairedRecord(prev_mate, None)
+                        sam_seq = PairedRecord(prev_mate, None)
                     if mate.is_mate_mapped(ref):
                         prev_mate = mate # Wait for the next record to pair with current mate
 
-            if pair:
-                yield pair
+            if sam_seq:
+                yield sam_seq
 
         # In case the last record expects a mate that is not in the sam file, yield it if it has good map quality
         if prev_mate and prev_mate.mapq >= mapping_cutoff:
-            pair = paired_records.PairedRecord(prev_mate, None)
-            yield pair
+            sam_seq = prev_mate
+            yield sam_seq
 
 
 def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cutoff, read_qual_cutoff, max_prop_N,
@@ -209,7 +211,7 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
         else:
             pair_iter = record_iter(sam_filename=sam_filename, ref=ref, mapping_cutoff=mapping_cutoff, ref_len=ref_len)
         for pair in pair_iter:
-            mseq, stats = pair.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=True,
+            mseq, mqual, stats = pair.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=True,
                                                    q_cutoff=read_qual_cutoff,
                                                    slice_start_wrt_ref_1based=start_pos,
                                                    slice_end_wrt_ref_1based=end_pos,
@@ -289,38 +291,48 @@ def uniq_record_iter(sam_filename, ref, out_tsv_filename, mapping_cutoff, read_q
     :param mapping_cutoff:
     :param read_qual_cutoff:
     :param is_insert:
-    :return :  the next unique paired record
-    :rtype: collections.Iterable[sam.paired_records.PairedRecord]
+    :return :  the next unique SamSequence
+    :rtype: collections.Iterable[sam.sam_seq.SamSequence]
     """
-    uniqs = dict()
+    uniqs = OrderedDict()  # {UniqSeq: [ReadScore]}  # The first item in the list of ReadScores is always the highest score.  The rest in the list can be any score.
     # We are not filtering for reads with N's > max_prop_N or breadth
-    for pair in record_iter(sam_filename=sam_filename, ref=ref, mapping_cutoff=mapping_cutoff, ref_len=0):
-        mseq, mstats = pair.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=False,
+    for sam_seq in record_iter(sam_filename=sam_filename, ref=ref, mapping_cutoff=mapping_cutoff, ref_len=0):
+        mseq, mqual, mstats = sam_seq.get_seq_qual(do_pad_wrt_ref=False, do_pad_wrt_slice=False,
                           q_cutoff=read_qual_cutoff,
                           slice_start_wrt_ref_1based=0,
                           slice_end_wrt_ref_1based=0,
                           do_insert_wrt_ref=is_insert,
                           do_mask_stop_codon=True)
 
+        sum_qual_score = sum(ord(x)-sam_constants.PHRED_SANGER_OFFSET for x in mqual if x != sam_constants.QUAL_PAD_CHAR)
+        uniq_seq = UniqSeq(start=sam_seq.get_read_start_wrt_ref(), seq=mseq)
+        read_score = ReadScore(sam_seq=sam_seq, score=sum_qual_score)
 
-        uniq_seq = UniqSeq(start=pair.get_read_start_wrt_ref(), seq=mseq)
-        # TODO:  get quality scores from merged reads
-        # TODO:  add sam index into SamRecord class
-        uniq_seq_score = UniqSeqScore(read=pair, score=0, sam_idx=0)
         if uniqs.get(uniq_seq):
-            uniqs[uniq_seq].append(uniq_seq_score)
+            # The first item in the list of ReadScores is always the highest scoring
+            best_scoring_read = uniqs[uniq_seq][0]
+            if read_score.score > best_scoring_read.score:
+                # Move the best scoring read to the end.
+                uniqs[uniq_seq].append(best_scoring_read)
+                # Swap in this current read as the best scoring read at the front of the list.
+                uniqs[uniq_seq][0] = read_score
+            else:
+                uniqs[uniq_seq].append(read_score)
         else:
-             uniqs[uniq_seq] = [uniq_seq_score]
+             uniqs[uniq_seq] = [read_score]
+
 
     with open(out_tsv_filename, 'w') as fh_out:
-        writer = csv.DictWriter(fh_out, fieldnames=["Seq", "Start", "Reads"], delimiter="\t")
+        writer = csv.DictWriter(fh_out, fieldnames=["Seq", "Start", "BestRead", "BestScore", "Reads"], delimiter="\t")
         writer.writeheader()
-        for uniq_seq, uniq_seq_scores in uniqs.iteritems():
+        for uniq_seq, read_scores in uniqs.iteritems():
             outrow = dict()
             outrow["Seq"] = uniq_seq.seq
             outrow["Start"] = uniq_seq.start
-            outrow["Reads"] = ",".join([x.read.get_name() for x in uniq_seq_scores])
+            outrow["BestRead"] = read_scores[0].sam_seq.get_name()
+            outrow["BestScore"] = read_scores[0].score
+            outrow["Reads"] = ",".join([x.sam_seq.get_name() for x in read_scores[1:]])
             writer.writerow(outrow)
 
-    for uniq_seq, uniq_seq_scores in uniqs.iteritems():
-        yield uniq_seq_scores[0].read  # TODO:  get best scoring read
+    for uniq_seq, read_scores in uniqs.iteritems():
+        yield read_scores[0].sam_seq

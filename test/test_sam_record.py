@@ -30,9 +30,6 @@ class TestSamRecord(unittest.TestCase):
         :param do_mask_stop_codon:
         :return:
         """
-
-
-
         for i, testcase in enumerate(self.testcases):
             if do_slice:
                 slice_start = testcase.slice_start
@@ -83,13 +80,13 @@ class TestSamRecord(unittest.TestCase):
                                                                        do_mask_stop_codon=do_mask_stop_codon)
             else:
                 paired_rec = PairedRecord(sam_rec1, sam_rec2)
-                merged_seq, stats = paired_rec.get_seq_qual(q_cutoff=TestSamRecord.Q_CUTOFF,
-                                                               pad_space_btn_mates="N",
+                merged_seq, merged_qual, stats = paired_rec.get_seq_qual(q_cutoff=TestSamRecord.Q_CUTOFF,
+                                                               pad_space_btn_segments="N",
                                                                do_insert_wrt_ref=do_insert_wrt_ref, do_pad_wrt_ref=do_pad_wrt_ref, do_pad_wrt_slice=do_pad_wrt_slice,
                                                                do_mask_stop_codon=do_mask_stop_codon,
                                                                slice_start_wrt_ref_1based=slice_start, slice_end_wrt_ref_1based=slice_end)
 
-            expected_merged_seq = testcase.get_sliced_merged_read(slice_start_pos_wrt_ref_1based=slice_start,
+            expected_merged_seq, expected_merged_qual = testcase.get_sliced_merged_read(slice_start_pos_wrt_ref_1based=slice_start,
                                                                   slice_end_pos_wrt_ref_1based=slice_end,
                                                                   do_pad_wrt_slice=do_pad_wrt_slice, do_insert_wrt_ref=do_insert_wrt_ref,
                                                                   do_mask_stop_codon=do_mask_stop_codon)
@@ -100,6 +97,12 @@ class TestSamRecord(unittest.TestCase):
                               "Expected=" + expected_merged_seq +
                               " Actual= " + merged_seq +
                               " MergeTest=" + testcase.test_desc + " read=" + testcase.read_name)
+
+
+            self.assertEquals(expected_merged_qual, merged_qual,
+                              "ExpectedQual='" + expected_merged_qual +
+                              "' ActualQual='" + merged_qual +
+                              "' MergeTest=" + testcase.test_desc + " read=" + testcase.read_name)
 
 
     def test_merged_reads(self):

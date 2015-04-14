@@ -36,6 +36,7 @@ class SamTestCase:
         self.slice_end = slice_end
         self.read_name = ""     # Should be the same for both mates
         self.merged_read_seq = ""
+        self.merged_read_qual = ""
         self.mate1 = None
         self.mate2 = None
         self.insert_pos_wrt_merged_seq_1based = []
@@ -62,9 +63,9 @@ class SamTestCase:
             raise ValueError("seq should be same length as qual: " + seq + " " + qual)
 
         unpad_seq = seq.replace("-", "")
-        unpad_qual = qual.replace("-", "")
+        unpad_qual = qual.replace(" ", "")
         if len(unpad_seq) != len(unpad_qual):
-            raise ValueError("ungapped seq should be same length as ungapped qual: " + + seq + " " + qual)
+            raise ValueError("ungapped seq should be same length as ungapped qual: " + seq + " " + qual)
         self.read_name = qname
         first_non_gap = re.search(r"[^-]", seq)
         pos = first_non_gap.start() + 1
@@ -88,8 +89,13 @@ class SamTestCase:
                 self.mate1.pnext = self.mate2.pos
 
 
-    def add_merged_read(self, seq, inserts):
+    def add_merged_read(self, seq, qual, inserts):
+        if len(seq) != len(qual):
+            raise ValueError("Expect merged sequence and merged qual to have same length seq='" +
+                             str(seq) + "', qual='" + str(qual) + "'" +
+            ".  TestDesc=" + self.test_desc + " read=" + self.read_name)
         self.merged_read_seq = seq
+        self.merged_read_qual = qual
         self.insert_pos_wrt_merged_seq_1based = inserts
 
 
@@ -135,8 +141,8 @@ class SamTestCase:
         :param int slice_end_pos_wrt_ref_1based:  1-based end position with respect to reference.  If None, then uses full read.
         :param bool do_pad_wrt_slice:  If False, then strips left and right pad gaps.
         :param bool do_insert_wrt_ref:  If False, then strips inserts with respect to reference.
-        :return: Merged sequence of the paired mates, sliced at desired region.
-        :rtype:  str
+        :return: Merged sequence and merged quality of the paired mates, sliced at desired region
+        :rtype:  str, str
         """
         slice_start_pos_wrt_ref_1based = 1 if not slice_start_pos_wrt_ref_1based else slice_start_pos_wrt_ref_1based
         slice_end_pos_wrt_ref_1based = self.ref2len[self.target_ref] if not slice_end_pos_wrt_ref_1based else slice_end_pos_wrt_ref_1based
@@ -144,42 +150,50 @@ class SamTestCase:
         # Start with the full merged read sequence that includes insertions wrt ref, stop codons, left and right padding wrt reference
         # Strip out inserts if necessary
         stripped_insert_seq = self.merged_read_seq
+        stripped_insert_qual = self.merged_read_qual
         if not do_insert_wrt_ref:
             stripped_insert_seq = ""
+            stripped_insert_qual = ""
             for pos_wrt_merged_seq_0based, seqchar in enumerate(self.merged_read_seq):
                 pos_wrt_merged_seq_1based = pos_wrt_merged_seq_0based + 1
                 if pos_wrt_merged_seq_1based not in self.insert_pos_wrt_merged_seq_1based:
                     stripped_insert_seq += seqchar
+                    stripped_insert_qual += self.merged_read_qual[pos_wrt_merged_seq_0based]
 
 
         # Mask stop codons
         stop_codon_masked_seq = stripped_insert_seq
+        stop_codon_masked_qual = stripped_insert_qual
         if do_mask_stop_codon:
             for pos in range(0, len(stripped_insert_seq), 3):
                 codon = stripped_insert_seq[pos:pos+3]
                 if codon in ["TAA", "TGA", "TAG"]:
                     stop_codon_masked_seq =  stripped_insert_seq[0: pos] + "NNN" + stripped_insert_seq[pos+3:]
-
+                    stop_codon_masked_qual = stripped_insert_qual[0: pos] + "   " + stripped_insert_qual[pos+3:]
 
         # Slice
         sliced_merged_seq = stop_codon_masked_seq[slice_start_pos_wrt_ref_1based-1:slice_end_pos_wrt_ref_1based]
+        sliced_merged_qual = stop_codon_masked_qual[slice_start_pos_wrt_ref_1based-1:slice_end_pos_wrt_ref_1based]
         if do_insert_wrt_ref:  #If there are inserts wrt ref, then we need to translate positions wrt to seq to positions wrt ref
             pos_wrt_ref = 0
             sliced_merged_seq = ""
+            sliced_merged_qual = ""
             for pos_wrt_merged_seq_0based, seqchar in enumerate(stop_codon_masked_seq):
                 pos_wrt_merged_seq_1based = pos_wrt_merged_seq_0based + 1
                 if pos_wrt_merged_seq_1based not in self.insert_pos_wrt_merged_seq_1based:
                     pos_wrt_ref += 1
                 if slice_start_pos_wrt_ref_1based <= pos_wrt_ref <= slice_end_pos_wrt_ref_1based:
                     sliced_merged_seq += seqchar
+                    sliced_merged_qual += stop_codon_masked_qual[pos_wrt_merged_seq_0based]
                 elif pos_wrt_ref > slice_end_pos_wrt_ref_1based:
                     break
 
         if not do_pad_wrt_slice:
             sliced_merged_seq = sliced_merged_seq.lstrip("-").rstrip("-")
+            sliced_merged_qual = sliced_merged_qual.lstrip(" ").rstrip(" ")
 
 
-        return sliced_merged_seq
+        return sliced_merged_seq, sliced_merged_qual
 
 
     @staticmethod
@@ -275,11 +289,11 @@ class SamTestCase:
 
                     seq = fh_in.next().rstrip()
                     sep = fh_in.next()
-                    qual = fh_in.next().rstrip()
+                    qual = fh_in.next().rstrip("\n")
 
                     if len(seq) != len(qual):
                         raise ValueError("seq should be same length as qual: line :" + line)
-                    if len(seq.lstrip("-").rstrip("-")) != len(qual.lstrip("-").rstrip("-")):
+                    if len(seq.lstrip("-").rstrip("-")) != len(qual.lstrip(" ").rstrip(" ")):
                         raise ValueError("ungapped seq should be same length as ungapped qual:  line :" + line)
 
                     merge_test.add_read(is_first=is_first, qname=qname, flag=flag, rname=rname, mapq=mapq, cigar=cigar,
@@ -298,9 +312,9 @@ class SamTestCase:
 
                     merged_read_seq = fh_in.next().rstrip()
                     sep = fh_in.next()
-                    merged_read_qual = fh_in.next().rstrip()
+                    merged_read_qual = fh_in.next().rstrip("\n")  # If we just use rstrip(), it will remove blank spaces too
                     i += 3
-                    merge_test.add_merged_read(merged_read_seq, inserts)
+                    merge_test.add_merged_read(merged_read_seq, merged_read_qual, inserts)
                     merge_tests.append(merge_test)
                 else:
                     raise ValueError("Shouldn't get here, invalid test fastq format. line " + str(i+1) + ":" + line)

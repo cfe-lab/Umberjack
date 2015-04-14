@@ -3,7 +3,7 @@ import re
 PHRED_SANGER_OFFSET = 33
 CIGAR_RE = re.compile('[0-9]+[MIDNSHPX=]')
 SEQ_PAD_CHAR = '-'
-QUAL_PAD_CHAR = ' '     # This is the ASCII character right blow lowest PHRED quality score in Sanger qualities  (-1)
+QUAL_PAD_CHAR = ' '     # This is the ASCII character right below lowest PHRED quality score in Sanger qualities  (-1)
 
 class SamFlag:
     IS_PAIRED =                0x001
