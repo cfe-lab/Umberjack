@@ -64,7 +64,7 @@ class TestFastTreeHandler(unittest.TestCase):
         treefilename = fasttree.make_tree(fasta_fname=self.tmpfasta.name, threads=THREADS, debug=True)
         modify_time = os.path.getmtime(treefilename)
         self.assertTrue(treefilename and os.path.exists(treefilename), "Tree not created")
-        stdouterr_file = treefilename.replace(".tree", ".fasttree.stdouterr.txt")
+        stdouterr_file = treefilename.replace(".nwk", ".fasttree.stdouterr.txt")
         self.assertTrue(os.path.exists(stdouterr_file),
                         "Expect debug fasttree_handler.make_tree() outputs fasttree stdout/stderr to " + stdouterr_file)
 
@@ -77,7 +77,7 @@ class TestFastTreeHandler(unittest.TestCase):
 
     def test_extract_gtr_rates(self):
         treefilename = fasttree.make_tree(fasta_fname=self.tmpfasta.name, threads=THREADS)
-        fasttree_log = treefilename.replace(".tree", ".fasttree.log")
+        fasttree_log = treefilename.replace(".nwk", ".fasttree.log")
         expected_rates = (0.0319, 0.0319, 1.2101, 0.0319, 2.1046, 1.0000)
         rates = fasttree.extract_gtr_rates(fasttree_log)
         for i, rate in enumerate(rates):
