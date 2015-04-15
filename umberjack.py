@@ -62,6 +62,7 @@ def create_full_msa_fasta(sam_filename, out_dir, ref, mapping_cutoff, read_qual_
                                               max_prop_N=1.0, breadth_thresh=0.0, start_pos=0, end_pos=0,
                                               do_insert_wrt_ref=is_insert, do_mask_stop_codon=is_mask_stop_codon,
                                               ref_len=0)
+
         LOGGER.debug("Done Full MSA-Fasta from SAM for ref " + ref)
     else:
         LOGGER.warn("Found existing Full MSA-Fasta from SAM for ref " + ref + ".  Not regenerating")
@@ -69,9 +70,42 @@ def create_full_msa_fasta(sam_filename, out_dir, ref, mapping_cutoff, read_qual_
     return msa_fasta_filename
 
 
+def create_dup_tsv(sam_filename, out_dir, ref, mapping_cutoff, read_qual_cutoff, is_insert):
+    """
+    Spits the read duplicates to tab separated file
+
+    :return: path to multiple sequence aligned fasta file of all reads
+    :rtype : str
+    :param str sam_filename: filepath to sam file of read alignments to the reference.  Must have header and must be queryname sorted.
+    :param str out_dir: output directory
+    :param str ref: reference name
+    :param int mapping_cutoff: minimum mapping quality cutoff.  Reads aligned with map quality below this are thrown out.
+    :param int read_qual_cutoff: read quality cutoff.  Bases below this cutoff are converted to N's.
+    :param bool is_insert:  If True, then keeps insertions with respect to reference
+    """
+
+    sam_filename_nopath = os.path.split(sam_filename)[1]
+    sam_filename_prefix = os.path.splitext(sam_filename_nopath)[0]
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)
+    dup_tsv_filename = out_dir + os.sep + sam_filename_prefix + "." + ref + ".dup.tsv"
+
+    LOGGER.debug("Start Duplicate Reads TSV " + dup_tsv_filename + " from SAM for ref " + ref)
+    if not os.path.exists(dup_tsv_filename) or os.path.getsize(dup_tsv_filename) <= 0:
+        total_uniq = sam_handler.write_dup_record_tsv(sam_filename=sam_filename, ref= ref,
+                                         mapping_cutoff=mapping_cutoff, read_qual_cutoff=read_qual_cutoff, is_insert=is_insert,
+                                         out_tsv_filename=dup_tsv_filename)
+
+        LOGGER.debug("Total unique sequences =" + str(total_uniq) + " for " + dup_tsv_filename)
+        LOGGER.debug("Done Duplicate Reads TSV for ref " + ref)
+    else:
+        LOGGER.warn("Found existing Duplicate Reads TSV " + dup_tsv_filename + " for ref " + ref + ".  Not regenerating")
+
+    return dup_tsv_filename
+
 
 def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_cutoff, start_window_nucpos,
-                end_window_nucpos, map_qual_cutoff, read_qual_cutoff, max_prop_N, insert, mask_stop_codon,
+                end_window_nucpos, map_qual_cutoff, read_qual_cutoff, max_prop_N, insert, mask_stop_codon, remove_duplicates,
                 threads_per_window=settings.DEFAULT_THREADS_PER_WINDOW, mode=settings.DEFAULT_MODE,
                 hyphy_exe=settings.DEFAULT_HYPHY_EXE, hyphy_basedir=settings.DEFAULT_HYPHY_BASEDIR,
                 fastree_exe=settings.DEFAULT_FASTTREEMP_EXE):
@@ -93,6 +127,9 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
     :param float max_prop_N:  maximum fraction of single-end read or merged paired read above which read is thrown out
     :param bool insert:  if True, inserts with respect to reference kept
     :param bool mask_stop_codon:  if True, stop codons masked
+    :param bool remove_duplicates:  If True, then removes duplicate sequence from the window multiple sequence alignment fasta.
+        Sequences are only considered duplicates if they start on the same coordinate with respect to the reference as another sequence,
+        and both sequences have matching bases, gaps, N's after quality  masking, insertion processing but before stop codon masking.
     :param int threads_per_window: number of threads allotted to processing this window  (only FastTree and HyPhy will be multithreaded)
     :param str mode: one of [DNDS, GTR_RATE].  Calculate codon site dN/dS or window-specific nucleotide substitution rates.
     :param str hyphy_exe: full filepath to HYPHYMP executable
@@ -117,7 +154,8 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
                                                             breadth_thresh=window_breadth_cutoff,
                                                             start_pos=start_window_nucpos, end_pos=end_window_nucpos,
                                                             do_insert_wrt_ref=insert,
-                                                            do_mask_stop_codon=mask_stop_codon)
+                                                            do_mask_stop_codon=mask_stop_codon,
+                                                            do_remove_dup=remove_duplicates)
 
 
     # Check whether the msa sliced fasta has enough reads to make a good tree
@@ -188,7 +226,7 @@ def plot_results(output_csv, mode=MODE_DNDS):
 
 def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
                        end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, window_slide,
-                       insert, mask_stop_codon,
+                       insert, mask_stop_codon, remove_duplicates,
                        output_csv_filename, mode=settings.DEFAULT_MODE,
                        threads_per_window=1, concurrent_windows=1,
                        hyphy_exe=settings.DEFAULT_HYPHY_EXE, hyphy_basedir=settings.DEFAULT_HYPHY_BASEDIR, fastree_exe=settings.DEFAULT_FASTTREEMP_EXE,
@@ -212,6 +250,9 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
     :param int window_slide:  Number of nucleotide bases to slide the window by.  Default=30.
     :param bool insert:  if True, then keeps insertions with respect to the reference.
     :param bool mask_stop_codon:  If True, then masks stop codons in the window multiple sequence alignment fasta
+    :param bool remove_duplicates:  If True, then removes duplicate sequence from the window multiple sequence alignment fasta.
+        Sequences are only considered duplicates if they start on the same coordinate with respect to the reference as another sequence,
+        and both sequences have matching bases, gaps, N's after quality  masking, insertion processing but before stop codon masking.
     :param int threads_per_window:  number of threads allotted to processing a single window  (only FastTree and HyPhy will be multithreaded).  Default 1.
     :param int concurrent_windows:  the number of windows to process at the same time.
     :param str output_csv_filename:  name of output comma separated file containing per-site results averaged across overlapping windows .  Will be created under out_dir.
@@ -239,6 +280,10 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
                               mapping_cutoff=map_qual_cutoff, read_qual_cutoff=read_qual_cutoff,
                               is_insert=insert, is_mask_stop_codon=mask_stop_codon)
 
+    if remove_duplicates:
+        create_dup_tsv(sam_filename=sam_filename, out_dir=out_dir, ref=ref,
+                       mapping_cutoff=map_qual_cutoff, read_qual_cutoff=read_qual_cutoff,
+                       is_insert=insert)
 
     # All nucleotide positions are 1-based
     total_windows = int(math.ceil(((end_nucpos - window_size + 1) - start_nucpos + 1)/window_slide))
@@ -260,6 +305,7 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
                        "max_prop_N": max_prop_n,
                        "insert": insert,
                        "mask_stop_codon": mask_stop_codon,
+                       "remove_duplicates": remove_duplicates,
                        "threads_per_window": threads_per_window,
                        "mode": mode,
                        "hyphy_exe": hyphy_exe,
@@ -312,7 +358,7 @@ class WindowReplicaInfo:
 
 def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
                      end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, window_slide,
-                     insert, mask_stop_codon,
+                     insert, mask_stop_codon, remove_duplicates,
                      output_csv_filename, mode, threads_per_window,
                      hyphy_exe, hyphy_basedir,
                      fastree_exe, debug):
@@ -333,6 +379,9 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
     :param int window_slide:  Number of nucleotide bases to slide the window by.
     :param bool insert:  if True, then keeps insertions with respect to the reference.
     :param bool mask_stop_codon:  If True, then masks stop codons in the window multiple sequence alignment fasta.
+    :param bool remove_duplicates:  If True, then removes duplicate sequence from the window multiple sequence alignment fasta.
+        Sequences are only considered duplicates if they start on the same coordinate with respect to the reference as another sequence,
+        and both sequences have matching bases, gaps, N's after quality  masking, insertion processing but before stop codon masking.
     :param int threads_per_window:  number of threads allotted to processing a single window  (only FastTree and HyPhy will be multithreaded).  Default 1.
     :param str output_csv_filename:  name of output comma separated file containing per-site results averaged across overlapping windows .  Will be created under out_dir.
     :param str mode:  one of [DNDS, GTR_RATE] for calculating codon-site specific dN/dS, or window-specific general time reversible nucleotide substitution rates.
@@ -369,6 +418,11 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
                                       mapping_cutoff=map_qual_cutoff, read_qual_cutoff=read_qual_cutoff,
                                       is_insert=insert, is_mask_stop_codon=mask_stop_codon)
 
+            if remove_duplicates:
+                create_dup_tsv(sam_filename=sam_filename, out_dir=out_dir, ref=ref,
+                       mapping_cutoff=map_qual_cutoff, read_qual_cutoff=read_qual_cutoff,
+                       is_insert=insert)
+
             # All nucleotide positions are 1-based
             total_windows = int(math.ceil(((end_nucpos-window_size+1) - start_nucpos + 1)/window_slide))
             LOGGER.debug("Launching " + str(total_windows) + " total windows")
@@ -399,6 +453,7 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
                                    "max_prop_N": max_prop_n,
                                    "insert": insert,
                                    "mask_stop_codon": mask_stop_codon,
+                                   "remove_duplicates": remove_duplicates,
                                    "threads_per_window": threads_per_window,
                                    "mode": mode,
                                    "hyphy_exe": hyphy_exe,
@@ -521,6 +576,16 @@ def main():
                         help="Whether to keep insertions with respect to the reference.")
     parser.add_argument("--mask_stop_codon",  action='store_true',
                         help="Whether to mask stop codons with NNN.  Automatically set to True when mode is DNDS")
+    parser.add_argument("--remove_duplicates",  action='store_true',
+                        help="Whether to remove duplicate sequences.  Automatically set to True when mode is DNDS.  "
+                             "Sequences are only considered duplicates if they start on the same coordinate " +
+                             "with respect to the reference, and both sequences have " +
+                             "matching bases, gaps, N's after quality  masking and insertion processing + "
+                             "but before stop codon masking.  The entire sequence, not just the portion that fits " +
+                             " into the window is compared for duplication.  " +
+                             " The sequence with the highest sum of bases (ACGT) aligned to the"
+                             " reference will be written to the window fastas.  The names of all duplicated reads will be " +
+                             " written to a tab-separated file under <out_dir>")
     parser.add_argument("--threads_per_window", type=int, default=settings.DEFAULT_THREADS_PER_WINDOW,
                         help="threads allotted per window.")
     parser.add_argument("--concurrent_windows", type=int, default=settings.DEFAULT_CONCURRENT_WINDOWS,
@@ -567,7 +632,9 @@ def main():
     # Automatically set mask_stop_codon to True for dN/dS analysis.
     if args.mode == MODE_DNDS:
         args.mask_stop_codon = True
+        args.remove_duplicates = True
         LOGGER.warn("Auto-setting --mask_stop_codon to True since Umberjack is in " + MODE_DNDS + " mode")
+        LOGGER.warn("Auto-setting --remove_duplicates to True since Umberjack is in " + MODE_DNDS + " mode")
 
     # deep copy of arguments excluding empty values
     args_msg = ""

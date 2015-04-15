@@ -36,6 +36,7 @@ REF = "consensus"
 MODE = umberjack.MODE_DNDS
 INSERT = False
 MASK_STOP_CODON = True
+REMOVE_DUPLICATES  = True
 MAPQ_CUTOFF = 20  # alignment quality cutoff
 MAX_PROP_N = 0.1  # maximum proportion of N bases in MSA-aligned sequence
 READ_QUAL_CUTOFF = 20   # Phred quality score cutoff [0,40]
@@ -73,10 +74,24 @@ class TestUmberjack(unittest.TestCase):
         """
         Generate simulated data for unit tests
         """
-        subprocess.check_call(["python", SIM_PIPELINE_PY, SIM_DATA_CONFIG_FILE])
+        if os.path.exists(SIM_DATA_DIR):  # Clean the simulated data, except for the config file
+            dirpar, dirnames, files =  os.walk(SIM_DATA_DIR).next()
+            for dirname in dirnames:
+                full_dirpath = dirpar + os.sep + dirname
+                shutil.rmtree(full_dirpath)
+                print ("Removed " + full_dirpath)
+            for file in files:
+                full_filepath = dirpar + os.sep + file
+                if full_filepath != SIM_DATA_CONFIG_FILE:
+                    os.remove(full_filepath)
+                    print ("Removed " + full_filepath)
+
         if os.path.exists(SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX):
             print ("Removed " + SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX)
             shutil.rmtree(SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX)
+
+        subprocess.check_call(["python", SIM_PIPELINE_PY, SIM_DATA_CONFIG_FILE])
+
 
 
     def test_umberjack_config_file(self):
@@ -161,6 +176,7 @@ class TestUmberjack(unittest.TestCase):
                                                window_slide=WINDOW_SLIDE,
                                                insert=INSERT,
                                                mask_stop_codon=MASK_STOP_CODON,
+                                               remove_duplicates=REMOVE_DUPLICATES,
                                                debug=True)
 
         rconfig_file = R_DIR + os.sep + "umberjack_unit_test.config"
@@ -207,6 +223,7 @@ class TestUmberjack(unittest.TestCase):
                                                window_slide=WINDOW_SLIDE,
                                                insert=INSERT,
                                                mask_stop_codon=MASK_STOP_CODON,
+                                               remove_duplicates=REMOVE_DUPLICATES,
                                                debug=True)
 
         rconfig_file = R_DIR + os.sep + "umberjack_unit_test.config"

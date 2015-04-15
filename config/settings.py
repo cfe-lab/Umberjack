@@ -70,6 +70,7 @@ DEFAULT_MODE =  "DNDS"
 DEFAULT_MPI = False
 DEFAULT_DEBUG = False
 DEFAULT_MASK_STOP_CODON = True
+DEFAULT_REMOVE_DUPLICATES = True
 DEFAULT_INSERT = False
 
 
@@ -107,6 +108,7 @@ def setup_umberjack_config(config_file=DEFAULT_UMBERJACK_CONFIG_FILE, argname_pr
         "end_nucpos": DEFAULT_END_NUCPOS,
         "insert": DEFAULT_INSERT,
         "mask_stop_codon": DEFAULT_MASK_STOP_CODON,
+        "remove_duplicates": DEFAULT_REMOVE_DUPLICATES,
         "threads_per_window": DEFAULT_THREADS_PER_WINDOW,
         "concurrent_windows": DEFAULT_CONCURRENT_WINDOWS,
         "mode": DEFAULT_MODE,
