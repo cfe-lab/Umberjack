@@ -157,7 +157,7 @@ class TestUmberjack(unittest.TestCase):
     def test_eval_windows_async(self):
         # ART generated reads aligned to population consensus
         SAM_FILENAME = SIM_DATA_DIR + os.sep + "mixed" + os.sep + "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".mixed.reads.consensus.bwa.sort.query.sam"
-        OUT_DIR =   SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + "Window" + str(WINDOW_SIZE)
+        OUT_DIR =  SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + REF + os.sep + "window{}.breadth{}.depth{}".format(WINDOW_SIZE, MIN_WINDOW_BREADTH_COV_FRACTION, MIN_WINDOW_DEPTH_COV)
         ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + 'actual_dnds_by_site.csv'
         START_NUCPOS = 1
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
@@ -201,7 +201,7 @@ class TestUmberjack(unittest.TestCase):
 
     def test_eval_windows_async_errfree(self):
         ERR_FREE_SAM_FILENAME = SIM_DATA_DIR + os.sep + "mixed" + os.sep + "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".mixed.reads.errFree.consensus.bwa.sort.query.sam"
-        ERR_FREE_OUT_DIR = SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + "Window" + str(WINDOW_SIZE) + ".errFree"
+        ERR_FREE_OUT_DIR =  SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + REF + os.sep + "window{}.breadth{}.depth{}.errFree".format(WINDOW_SIZE, MIN_WINDOW_BREADTH_COV_FRACTION, MIN_WINDOW_DEPTH_COV)
         ERR_FREE_ACTUAL_DNDS_CSV = ERR_FREE_OUT_DIR + os.sep + 'actual_dnds_by_site.csv'
         START_NUCPOS = 1
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
@@ -249,7 +249,7 @@ class TestUmberjack(unittest.TestCase):
     def test_eval_windows_mpi(self):
         # ART generated reads aligned to population consensus
         SAM_FILENAME = SIM_DATA_DIR + os.sep + "mixed" + os.sep + "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".mixed.reads.consensus.bwa.sort.query.sam"
-        OUT_DIR =   SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + "Window" + str(WINDOW_SIZE) + ".mpi"
+        OUT_DIR =  SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + REF + os.sep + "window{}.breadth{}.depth{}.mpi".format(WINDOW_SIZE, MIN_WINDOW_BREADTH_COV_FRACTION, MIN_WINDOW_DEPTH_COV)
         ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + 'actual_dnds_by_site.csv'
         START_NUCPOS = 1
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)

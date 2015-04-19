@@ -37,7 +37,12 @@ randomizer.shuffle(random_codons)  # we randomize which codons are assigned whic
 random_codons_queue = deque(random_codons)
 
 new_fasta = {}
+new_anc_fasta = {}
 for scaling_factor in scaling_factors:
+    if total_codon_sites % len(scaling_factors) != 0:
+        print("ERROR:  The number of scaling factors should divide evenly into the number of codon sites")
+        raise ValueError("The number of scaling factors should divide evenly into the number of codon sites")
+
     num_codons_per_scaling = total_codon_sites / len(scaling_factors)
 
     scaling_factor = scaling_factor.lstrip().rstrip()
@@ -49,11 +54,21 @@ for scaling_factor in scaling_factors:
     indelible_fasta = Utility.convert_fasta(infile.readlines())  # returns a List of (header, sequence) tuples
     infile.close()
 
+
+    # read INDELible ancestor  FASTA
+    # <output_filename_prefix>_<scaling_factor>_ANCESTRAL.fasta are fastas containing the INDELible inner node sequences of a phylogenetic tree
+    fh_in_anc_fasta_ = open(indelible_output_dir+ os.sep + scaling_factor + os.sep + indelible_filename_prefix + "." +scaling_factor+'_TRUE.fasta', 'rU')
+    indelible_anc_fasta = Utility.convert_fasta(fh_in_anc_fasta_.readlines())  # returns a List of (header, sequence) tuples
+    fh_in_anc_fasta_.close()
+
+
     # if this is first time, transfer header
     if len(new_fasta) == 0:
         new_fasta = OrderedDict()
         for h, s in indelible_fasta:
             new_fasta[h] = ctypes.create_string_buffer(s)
+        for h, s in indelible_anc_fasta:
+            new_anc_fasta[h] = ctypes.create_string_buffer(s)
 
 
     # Randomly select mutation scaling rate for each codon site
@@ -64,6 +79,8 @@ for scaling_factor in scaling_factors:
         random_codon_sites_1based.append(random_codon_site+1)
         for h, s in indelible_fasta:
             new_fasta[h][BASES_PER_CODON*random_codon_site : BASES_PER_CODON*(random_codon_site+1)] = s[BASES_PER_CODON*random_codon_site : BASES_PER_CODON*(random_codon_site+1)]
+        for h, s in indelible_anc_fasta:
+            new_anc_fasta[h][BASES_PER_CODON*random_codon_site : BASES_PER_CODON*(random_codon_site+1)] = s[BASES_PER_CODON*random_codon_site : BASES_PER_CODON*(random_codon_site+1)]
 
     indelible_rates_csv = indelible_output_dir + os.sep + scaling_factor + os.sep +  indelible_filename_prefix + "." + scaling_factor+'_RATES.csv'
     with open(indelible_rates_csv, 'rU') as fh_rates_in:
@@ -77,9 +94,14 @@ for scaling_factor in scaling_factors:
 
 # output
 out_fasta_fname = output_dir+ os.sep + output_filename_prefix + ".fasta"
+out_anc_fasta_fname = output_dir+ os.sep + output_filename_prefix + ".anc.fasta"
 with open(out_fasta_fname, 'w') as fh_out_fasta:
     for h in new_fasta.iterkeys():
         fh_out_fasta.write('>%s\n%s\n' % (h, new_fasta[h].value.rstrip()))  # Need rstrip since extra whitespace added to .value
+
+with open(out_anc_fasta_fname, 'w') as fh_out_anc_fasta:
+    for h in new_anc_fasta.iterkeys():
+        fh_out_fasta.write('>%s\n%s\n' % (h, new_anc_fasta[h].value.rstrip()))  # Need rstrip since extra whitespace added to .value
 
 
 
