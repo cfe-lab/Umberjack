@@ -17,6 +17,7 @@ import hyphy.hyphy_handler as hyphy
 import fasttree.fasttree_handler as fasttree
 import config.settings as settings
 import plot.plotter as plotter
+from subprocess import CalledProcessError
 
 LOGGER = logging.getLogger(__name__)
 
@@ -217,11 +218,14 @@ def plot_results(output_csv, mode=MODE_DNDS):
     :param str mode:  Only handles DNDS right now
     :return:
     """
-    if mode == MODE_DNDS:
-        LOGGER.debug("Plotting Ave dN/dS results for " + output_csv)
-        plotter.plot_dnds(output_csv)
-    else:
-        LOGGER.warn("No plots available for mode " + mode)
+    try:
+        if mode == MODE_DNDS:
+            LOGGER.debug("Plotting Ave dN/dS results for " + output_csv)
+            plotter.plot_dnds(output_csv)
+        else:
+            LOGGER.warn("No plots available for mode " + mode)
+    except CalledProcessError, e:
+        LOGGER.exception("Unable to plot dnds values to pdf. \n", e.message)
 
 
 def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cutoff, max_prop_n, start_nucpos,
