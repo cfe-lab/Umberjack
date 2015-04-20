@@ -12,7 +12,7 @@ GTRRATES_LINE_START = "GTRRates"
 
 
 
-def make_tree(fasta_fname, threads=1, fastree_exe=settings.DEFAULT_FASTTREEMP_EXE, debug=False):
+def make_tree(fasta_fname, threads=1, fastree_exe=settings.DEFAULT_FASTTREEMP_EXE, debug=False, custom_flags=None):
     """
     Creates a phylogenetic tree from the fasta.
     Tree file written to same directory as fasta and has same name as fasta but with ".nwk" suffix.
@@ -21,6 +21,7 @@ def make_tree(fasta_fname, threads=1, fastree_exe=settings.DEFAULT_FASTTREEMP_EX
     :param int threads: number of FastTreeMP threads
     :param str fastree_exe:  path to FastTreeMP or FastTree executable.  If empty, then uses FastTreeMP from PATH environment variable.
     :param bool debug:  whether to output verbose fasttree stdout/stderr to file.  File will have same name as fasta but with ".fasttree.stdouterr.txt" suffix.
+    :param list custom_flags:  list of strings for each custom FastTreeMP commandline argument
     :return : file path to tree
     :rtype :  str
     """
@@ -34,14 +35,21 @@ def make_tree(fasta_fname, threads=1, fastree_exe=settings.DEFAULT_FASTTREEMP_EX
         os.environ[ENV_OMP_NUM_THREADS] = str(threads)
         if debug:
             with open(fasttree_stdouterr_filename, 'w') as fasttree_stdouterr_fh:
-                fasttree_debug_cmd = [fastree_exe,
-                                      '-gtr',  # general time reversible nucleotide substitution model
-                                      '-nt',   # nucleotides
-                                      '-gamma',  # sites vary with 20 category gamma distro
-                                      '-nosupport',  # do not output support values in tree
-                                      '-log', fastree_logfilename,  # fast tree log
-                                      '-out', fastree_treefilename,  # tree
-                                      fasta_fname]  # multiple sequence aligned fasta
+
+                if custom_flags:
+                    fasttree_debug_cmd = [fastree_exe] + custom_flags + [
+                        '-log', fastree_logfilename,  # fast tree log
+                        '-out', fastree_treefilename,  # tree
+                        fasta_fname]  # multiple sequence aligned fasta
+                else:
+                    fasttree_debug_cmd = [fastree_exe,
+                                          '-gtr',  # general time reversible nucleotide substitution model
+                                          '-nt',   # nucleotides
+                                          '-gamma',  # sites vary with 20 category gamma distro
+                                          '-nosupport',  # do not output support values in tree
+                                          '-log', fastree_logfilename,  # fast tree log
+                                          '-out', fastree_treefilename,  # tree
+                                          fasta_fname]  # multiple sequence aligned fasta
                 subprocess.check_call(fasttree_debug_cmd,
                                   stdout=fasttree_stdouterr_fh, stderr=fasttree_stdouterr_fh, shell=False,
                                   env=os.environ)

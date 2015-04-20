@@ -693,7 +693,22 @@ class Consensus:
             depth += count
         return depth
 
+    def get_unambig_codon2aa_depth(self, codon_pos_0based):
+        """
+        Returns depth of codons at the given codon position that code for unambiguously for 1 amino acid.
+        Mixtures are allowed as long as the resulting amino acid is unambiguous.
+        NB:  N's are the only allowed mixture code right now.
 
+        :param codon_pos_0based: 0-based codon position in the multiple sequence alignment.  Assumes sequences start on ORF.
+        :return float:  total codons at the codon position
+        """
+        depth = 0
+        for codon, count in self.codon_seq[codon_pos_0based].iteritems():
+            codon = codon.replace("X", "N").replace("-", "N")
+
+            if CODON2AA.get(codon):
+                depth += count
+        return depth
 
 
 def write_consensus_from_msa(msa_fasta_filename, consensus_fasta_filename):

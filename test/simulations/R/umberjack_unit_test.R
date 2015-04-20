@@ -345,7 +345,7 @@ ggplot(actual_dnds, aes(x=Site, y=Windows) ) +
 #' **Plot the expected mutation scaling factor across the genome**
 #' 
 #+ fig.width=20
-ggplot(indelible_dnds, aes(x=Site, y=Scaling_factor) ) + geom_line() + 
+ggplot(indelible_dnds, aes(x=Site, y=as.numeric(as.character(Scaling_factor))) ) + geom_line() + 
   xlab("Codon Site Along Genome") + 
   ylab("Mutation Rate Scaling Factor") + 
   ggtitle("Mutation Scaling Factor Along Genome")
