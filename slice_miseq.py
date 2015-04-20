@@ -25,8 +25,11 @@ class SiteDnDsInfo:
 
         self.total_reads_for_dnds = 0.0
         self.accum_win_dnds_weightby_reads = 0.0
-        self.total_reads_nolowsub_for_dnds = 0.0
-        self.accum_win_dnds_weightby_reads_nolowsub = 0.0
+        self.accum_win_n_weightby_reads_nolowsub = 0.0
+        self.accum_win_s_weightby_reads_nolowsub = 0.0
+        self.accum_win_en_weightby_reads_nolowsub = 0.0
+        self.accum_win_es_weightby_reads_nolowsub = 0.0
+
 
         self.total_subs_for_dnds = 0.0
         self.accum_win_dnds_weightby_subs = 0.0
@@ -47,13 +50,13 @@ class SiteDnDsInfo:
     def add_window(self, dnds, dn_minus_ds, reads, syn_subs, nonsyn_subs, exp_syn_subs, exp_nonsyn_subs):
         """
         Insert selection information from a window for the codon site.
-        :param dnds: dN/dS for this codon site from a single window.
-        :param dn_minus_ds: dN-dS/(tree codon length) for this codon site from a single window.
-        :param reads: total reads that contain a valid codon (not - or N's) at this codon site in the window.
-        :param syn_subs: total synonymous substitutions for this codon site in the window
-        :param nonsyn_subs: total nonsynonymous substitutions for this codon site in the window
-        :param exp_syn_subs:  expected number of synonymous substitutions
-        :param exp_nonsyn_subs: expected nonsynomous substitutions
+        :param float dnds: dN/dS for this codon site from a single window.
+        :param float dn_minus_ds: dN-dS/(tree codon length) for this codon site from a single window.
+        :param int reads: total reads that contain a valid codon (not - or N's) at this codon site in the window.
+        :param float syn_subs: total synonymous substitutions for this codon site in the window
+        :param float nonsyn_subs: total nonsynonymous substitutions for this codon site in the window
+        :param float exp_syn_subs:  expected number of synonymous substitutions
+        :param float exp_nonsyn_subs: expected nonsynomous substitutions
         """
         self.total_win_cover_site += 1
         self.total_reads += reads
@@ -78,7 +81,7 @@ class SiteDnDsInfo:
         # Poor accuracy when site has ambiguous codons and all of its unambiguous codons are fully conserved.
         # Hyphy averages substitutions over ambiguous codons.  If there are no or very few true substitutions,
         # any fluctation will greatly impact accuracy.
-        if (syn_subs == 0 or syn_subs >= 1) and (nonsyn_subs == 0 or nonsyn_subs >= 1):
+        if syn_subs == 0 or syn_subs >= 1:
             if dn_minus_ds is not None:
                 self.total_reads_nolowsub_for_dnminusds += reads
                 self.accum_win_dn_minus_ds_weightby_reads_nolowsub += (reads*dn_minus_ds)
@@ -88,12 +91,14 @@ class SiteDnDsInfo:
 
             if dnds is not None:
                 self.total_reads_nolowsub_for_dnds += reads
-                self.accum_win_dnds_weightby_reads_nolowsub += (reads*dnds)
+                self.accum_win_n_weightby_reads_nolowsub += reads*nonsyn_subs
+                self.accum_win_en_weightby_reads_nolowsub += reads*exp_nonsyn_subs
+                self.accum_win_s_weightby_reads_nolowsub += reads*syn_subs
+                self.accum_win_es_weightby_reads_nolowsub += reads*exp_syn_subs
+
 
                 self.total_subs_nolowsub_for_dnds += (syn_subs + nonsyn_subs)
                 self.accum_win_dnds_weightby_subs_nolowsub += ((syn_subs + nonsyn_subs) * dnds)
-
-
 
     def get_ave_dnds_weightby_subs(self, is_exclude_low_sub=True):
         """
@@ -122,9 +127,9 @@ class SiteDnDsInfo:
         :rtype : float
         """
         if is_exclude_low_sub:
-            if not self.total_reads_nolowsub_for_dnds:
+            if not self.accum_win_s_weightby_reads_nolowsub or not self.accum_win_en_weightby_reads_nolowsub:
                 return None
-            return self.accum_win_dnds_weightby_reads_nolowsub / self.total_reads_nolowsub_for_dnds
+            return (self.accum_win_n_weightby_reads_nolowsub*self.accum_win_es_weightby_reads_nolowsub)/(self.accum_win_s_weightby_reads_nolowsub*self.accum_win_en_weightby_reads_nolowsub)
         else:
             if not self.total_reads_for_dnds:
                 return None
