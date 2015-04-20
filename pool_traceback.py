@@ -6,19 +6,17 @@ Explicitly sets multiprocessing log level to WARN.
 """
 import traceback
 from multiprocessing.pool import Pool
-import multiprocessing
 import logging
 
-LOGGER = logging.getLogger(__name__) #multiprocessing.get_logger()
-#LOGGER.setLevel(logging.WARN)
-#LOGGER.propagate = True
+LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel(logging.WARN)
+
 
 # Shortcut to multiprocessing's logger
 def error(msg, *args):
     """
     use multiprocessing's logger to log an ERROR
     """
-    print "here"
     return LOGGER.error(msg, *args)
 
 
