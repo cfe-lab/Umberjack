@@ -90,7 +90,6 @@ class SiteDnDsInfo:
                 self.accum_win_dnminusds_weightby_subs_nolowsub += ((syn_subs + nonsyn_subs) * dn_minus_ds)
 
             if dnds is not None:
-                self.total_reads_nolowsub_for_dnds += reads
                 self.accum_win_n_weightby_reads_nolowsub += reads*nonsyn_subs
                 self.accum_win_en_weightby_reads_nolowsub += reads*exp_nonsyn_subs
                 self.accum_win_s_weightby_reads_nolowsub += reads*syn_subs
