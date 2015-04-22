@@ -18,6 +18,8 @@ import fasttree.fasttree_handler as fasttree
 import config.settings as settings
 import plot.plotter as plotter
 from subprocess import CalledProcessError
+import rtt.rtt as rtt
+import Utility
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,6 +32,7 @@ TAG_TERMINATE = 2
 MODE_DNDS = "DNDS"
 MODE_GTR_CMP = "GTR_CMP"
 MODE_GTR_RATE = "GTR_RATE"
+MODE_COUNT_SUBS = "COUNT_SUBS"
 
 
 
@@ -148,7 +151,10 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
 
     msa_window_filename_prefix = out_dir + os.sep + sam_filename_prefix + "." + str(start_window_nucpos) + "_" + str(end_window_nucpos)
     msa_window_fasta_filename = msa_window_filename_prefix + ".fasta"
-    total_slice_seq = sam_handler.create_msa_slice_from_sam(sam_filename=sam_filename, ref=ref,
+
+    total_slice_seq = 0
+    if mode == MODE_COUNT_SUBS:
+        total_slice_seq = sam_handler.create_msa_slice_from_sam(sam_filename=sam_filename, ref=ref,
                                                             out_fasta_filename=msa_window_fasta_filename,
                                                             mapping_cutoff=map_qual_cutoff,
                                                             read_qual_cutoff=read_qual_cutoff, max_prop_N=max_prop_N,
@@ -157,6 +163,13 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
                                                             do_insert_wrt_ref=insert,
                                                             do_mask_stop_codon=mask_stop_codon,
                                                             do_remove_dup=remove_duplicates)
+
+    else:
+        # TODO:  hack - assuming that both patient sample fastas have been concatenated already
+        if os.path.exists(msa_window_fasta_filename) and os.path.getsize(msa_window_fasta_filename):
+            LOGGER.warn("Found existing Sliced MSA-Fasta " + msa_window_fasta_filename + ". Not regenerating.")
+            total_slice_seq = Utility.get_total_seq_from_fasta(msa_window_fasta_filename)
+
 
 
     # Check whether the msa sliced fasta has enough reads to make a good tree
@@ -167,8 +180,15 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
 
         fastree_treefilename = fasttree.make_tree(fasta_fname=msa_window_fasta_filename, threads=threads_per_window, fastree_exe=fastree_exe)
 
+        rooted_treefile = None
+        if mode == MODE_COUNT_SUBS:
+            rooted_treefile = rtt.make_rooted_tree(unrooted_treefile=fastree_treefilename, threads=threads_per_window)
+
         if mode == MODE_DNDS:
             hyphy.calc_dnds(codon_fasta_filename=msa_window_fasta_filename, tree_filename=fastree_treefilename,
+                            hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, threads=threads_per_window)
+        elif mode == MODE_COUNT_SUBS:
+            hyphy.count_site_branch_subs(codon_fasta_filename=msa_window_fasta_filename, rooted_treefile=rooted_treefile,
                             hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, threads=threads_per_window)
         elif mode == MODE_GTR_CMP:
             hyphy.calc_nuc_subst(hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, threads=threads_per_window,
@@ -439,7 +459,6 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
 
             # TODO:  instead of polling, use a callback function whenever a replicate returns
             while start_window_nucpos <= end_nucpos - window_size +1 or busy_replica_2_request:
-                LOGGER.debug("busy_replica_2_request=" + str(busy_replica_2_request))
                 LOGGER.debug("start_window_nucpos=" + str(start_window_nucpos))
                 # Assign work to replicas
                 while start_window_nucpos <= end_nucpos-window_size+1 and available_replicas:
@@ -514,7 +533,7 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
             LOGGER.debug("Done tabulating results")
 
             LOGGER.debug("About to plot results")
-            plot_results(output_csv=output_csv_filename)
+            plot_results(output_csv=output_csv_filename, mode=mode)
             LOGGER.debug("Done plot results")
 
         else:  # replica process does the work
@@ -605,7 +624,7 @@ def main():
                         help="full filepath of HyPhy base directory containing template batch files.")
     parser.add_argument("--fastree_exe", default=settings.DEFAULT_FASTTREEMP_EXE,
                         help="full filepath of FastTreeMP or FastTree executable.  Default: taken from PATH")
-    parser.add_argument("--mode", default=settings.DEFAULT_MODE, choices=[MODE_DNDS, MODE_GTR_RATE],
+    parser.add_argument("--mode", default=settings.DEFAULT_MODE, choices=[MODE_DNDS, MODE_GTR_RATE, MODE_COUNT_SUBS],
                         help="DNDS: Execute dN/dS analysis for positive (diversifying "
                              "selection in codon alignment.  GTR_RATE: Profile "
                              "nucleotide substitution rate biases under generalized "
