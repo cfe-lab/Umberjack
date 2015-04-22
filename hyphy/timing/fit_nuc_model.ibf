@@ -1,0 +1,56 @@
+/* This file defines the transition matrix for the Muse-Gaut 94 model x an arbitrary 4x4 rate matrix
+   for nucleotide substituions.
+   
+   The file should be used as follows:
+   
+   1) Read Data File and create datafilter filteredData
+   2) #include this file (or use SelectTemplateModel(filteredData);)
+   3) Define the tree
+   4) Proceed with the likelihood function using 'vectorOfFrequencies' as the vector to pass to the constructor.
+   
+   This model has the following signature:
+   	#Short:MG94custom#
+   	#Desc:Muse-Gaut 94 x an arbitrary 4x4 rate matrix and 9 (3x4) frequency parameters. Possible Gamma Variation.#
+   	#Dimension:*#
+    #DataType:codon#
+   	#FileName:MG94custom.mdl#
+   
+   04/18/2002  by Sergei L. Kosakovsky Pond
+*/
+
+ModelMatrixDimension = 0;
+
+global		R = 1;
+global     AC = 1;
+global 	   AT = 1;
+global     CG = 1;
+global	   CT = 1;
+global     GT = 1;
+
+
+
+
+	
+
+
+
+
+/*---------------------------------------------------------------------------------------------------------------------------------------------*/
+
+
+DataSetFilter nucFilter 	= CreateFilter (codon_dsf,1);
+HarvestFrequencies (overallNucFreq,  nucFilter,1,1,0);
+NucleotideMatrix	 = {{*,AC*t,t,AT*t}{AC*t,*,CG*t,CT*t}{t,CG*t,*,GT*t}{AT*t,CT*t,GT*t,*}};
+Model NucModel = (NucleotideMatrix, overallNucFreq, 1);
+
+Tree nuc_tree = tree_string;
+
+LikelihoodFunction nucLF = (nucFilter, nuc_tree);
+Optimize (res,nucLF);
+
+LIKELIHOOD_FUNCTION_OUTPUT  = 7;
+SetDialogPrompt ("Please specify a file to export nucleotide model likelihood function: ");
+fprintf (PROMPT_FOR_FILE, CLEAR_FILE);
+fprintf (LAST_FILE_PATH, nucLF);
+
+

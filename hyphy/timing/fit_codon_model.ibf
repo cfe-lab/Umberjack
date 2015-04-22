@@ -1,0 +1,252 @@
+/* This file defines the transition matrix for the Muse-Gaut 94 model x an arbitrary 4x4 rate matrix
+   for nucleotide substituions.
+   
+   The file should be used as follows:
+   
+   1) Read Data File and create datafilter filteredData
+   2) #include this file (or use SelectTemplateModel(filteredData);)
+   3) Define the tree
+   4) Proceed with the likelihood function using 'vectorOfFrequencies' as the vector to pass to the constructor.
+   
+   This model has the following signature:
+   	#Short:MG94custom#
+   	#Desc:Muse-Gaut 94 x an arbitrary 4x4 rate matrix and 9 (3x4) frequency parameters. Possible Gamma Variation.#
+   	#Dimension:*#
+    #DataType:codon#
+   	#FileName:MG94custom.mdl#
+   
+   04/18/2002  by Sergei L. Kosakovsky Pond
+*/
+
+// Constants that are used in script but not in models
+NUCCODE_A = 0;
+NUCCODE_C = 1;
+NUCCODE_G = 2;
+NUCCODE_T = 3;
+STOP = 10;
+
+ModelMatrixDimension = 0;
+
+
+
+/*---------------------------------------------------------------------------------------------------------------------------------------------*/
+
+function PopulateModelMatrix (ModelMatrixName&, EFV)
+{
+	if (!ModelMatrixDimension)
+	{
+		ModelMatrixDimension = 64;
+		for (h = 0 ;h<64; h=h+1)
+		{
+			if (_Genetic_Code[h]==STOP)
+			{
+				ModelMatrixDimension = ModelMatrixDimension-1;
+			}
+		}
+	}
+	
+	R  = R;
+	AT = AT;
+	CG = CG;
+	CT = CT;
+	GT = GT;
+	AC = AC;
+
+	ModelMatrixName = {ModelMatrixDimension,ModelMatrixDimension}; 
+	
+
+	hshift = 0;
+
+	for (h=0; h<64; h=h+1)
+	{
+		if (_Genetic_Code[h]==STOP)
+		{
+			hshift = hshift+1;
+			continue; 
+		}
+		vshift = hshift;
+		for (v = h+1; v<64; v=v+1)
+		{
+			diff = v-h;
+			if (_Genetic_Code[v]==STOP) 
+			{
+				vshift = vshift+1;
+				continue; 
+			}
+			nucPosInCodon = 2;
+			// Only traverses 1 nucleotide changes between codons
+			if ((h$4==v$4)||((diff%4==0)&&(h$16==v$16))||(diff%16==0))  // (1st & 2nd position same) or (3rd position same & 1st position same) or (2nd and 3rd position same)
+			{
+				if (h$4==v$4)  //1st & 2nd position same, get 3rd nucleotide
+				{
+					transition = v%4;
+					transition2= h%4;
+				}
+				else
+				{
+					if(diff%16==0)  // 2nd & 3rd position same, get 1st nucleotide
+					{
+						transition = v$16;
+						transition2= h$16;
+						nucPosInCodon = 0;
+					}
+					else  // 1st & 3rd position same, get 2nd nucleotide
+					{
+						transition = v%16$4;
+						transition2= h%16$4;
+						nucPosInCodon = 1;
+					}
+				}
+				// The transition from AC == CA.  Keep track of the nucleotide with lower code and higher code to avoid duplicating model constraints
+				if (transition<transition2)  // 0=A, 1=C, 2=G, 3=T.  Check if AC, AG, AT, CG, CT, GT
+				{
+					trSM = transition;
+					trLG = transition2;
+				}
+				else  // CA, GA, TA, GC, TC, TG
+				{
+					trSM = transition2;
+					trLG = transition;
+				}
+				
+				if (trSM==NUCCODE_A)
+				{
+					if (trLG==NUCCODE_C)
+					{
+						if (_Genetic_Code[0][h]==_Genetic_Code[0][v]) 
+						{
+							ModelMatrixName[h-hshift][v-vshift] := AC*synRate*EFV__[transition__][nucPosInCodon__];
+							ModelMatrixName[v-vshift][h-hshift] := AC*synRate*EFV__[transition2__][nucPosInCodon__];
+						}
+						else
+						{	
+							ModelMatrixName[h-hshift][v-vshift] := AC*R*synRate*EFV__[transition__][nucPosInCodon__];
+							ModelMatrixName[v-vshift][h-hshift] := AC*R*synRate*EFV__[transition2__][nucPosInCodon__];
+						}
+					}
+					else
+					{
+						if (trLG==NUCCODE_G)
+						{
+							if (_Genetic_Code[0][h]==_Genetic_Code[0][v]) 
+							{
+								ModelMatrixName[h-hshift][v-vshift] := synRate*EFV__[transition__][nucPosInCodon__];
+								ModelMatrixName[v-vshift][h-hshift] := synRate*EFV__[transition2__][nucPosInCodon__];
+							}
+							else
+							{								
+								ModelMatrixName[h-hshift][v-vshift] := R*synRate*EFV__[transition__][nucPosInCodon__];
+								ModelMatrixName[v-vshift][h-hshift] := R*synRate*EFV__[transition2__][nucPosInCodon__];
+							}							
+						}
+						else
+						{
+							if (_Genetic_Code[0][h]==_Genetic_Code[0][v]) 
+							{
+								ModelMatrixName[h-hshift][v-vshift] := AT*synRate*EFV__[transition__][nucPosInCodon__];
+								ModelMatrixName[v-vshift][h-hshift] := AT*synRate*EFV__[transition2__][nucPosInCodon__];
+							}
+							else
+							{
+								
+								ModelMatrixName[h-hshift][v-vshift] := AT*R*synRate*EFV__[transition__][nucPosInCodon__];
+								ModelMatrixName[v-vshift][h-hshift] := AT*R*synRate*EFV__[transition2__][nucPosInCodon__];
+							}							
+						}
+					}
+				}
+				else
+				{
+					if (trSM==NUCCODE_C)
+					{
+						if (trLG==NUCCODE_G)
+						{
+							if (_Genetic_Code[0][h]==_Genetic_Code[0][v]) 
+							{
+								ModelMatrixName[h-hshift][v-vshift] := CG*synRate*EFV__[transition__][nucPosInCodon__];
+								ModelMatrixName[v-vshift][h-hshift] := CG*synRate*EFV__[transition2__][nucPosInCodon__];
+							}
+							else
+							{
+								ModelMatrixName[h-hshift][v-vshift] := CG*R*synRate*EFV__[transition__][nucPosInCodon__];
+								ModelMatrixName[v-vshift][h-hshift] := CG*R*synRate*EFV__[transition2__][nucPosInCodon__];
+							}
+						}
+						else
+						{
+							if (_Genetic_Code[0][h]==_Genetic_Code[0][v]) 
+							{
+								ModelMatrixName[h-hshift][v-vshift] := CT*synRate*EFV__[transition__][nucPosInCodon__];
+								ModelMatrixName[v-vshift][h-hshift] := CT*synRate*EFV__[transition2__][nucPosInCodon__];
+							}
+							else
+							{
+								ModelMatrixName[h-hshift][v-vshift] := CT*R*synRate*EFV__[transition__][nucPosInCodon__];
+								ModelMatrixName[v-vshift][h-hshift] := CT*R*synRate*EFV__[transition2__][nucPosInCodon__];
+							}							
+						}
+					}
+					else
+					{
+						if (_Genetic_Code[0][h]==_Genetic_Code[0][v]) 
+						{
+							ModelMatrixName[h-hshift][v-vshift] := GT*synRate*EFV__[transition__][nucPosInCodon__];
+							ModelMatrixName[v-vshift][h-hshift] := GT*synRate*EFV__[transition2__][nucPosInCodon__];
+						}
+						else
+						{
+							ModelMatrixName[h-hshift][v-vshift] := GT*R*synRate*EFV__[transition__][nucPosInCodon__];
+							ModelMatrixName[v-vshift][h-hshift] := GT*R*synRate*EFV__[transition2__][nucPosInCodon__];
+						}							
+					}
+				}
+			}
+	   }
+    }		
+
+	fprintf(stdout, "\nModelMatrixName=", ModelMatrixName, "\n");	
+	return 0;
+
+}
+
+
+/*---------------------------------------------------------------------------------------------------------------------------------------------*/
+// Returns result[0..61][1]= observed fraction of codon, excluding stop codons
+function BuildCodonFrequencies (obsF)
+{
+	PIStop = 1.0;
+	result = {ModelMatrixDimension,1};
+	hshift = 0;
+
+	for (h=0; h<64; h=h+1)
+	{
+		first = h$16;
+		second = h%16$4;
+		third = h%4;
+		if (_Genetic_Code[h]==STOP)   // IsStop defined in chooseGeneticCode.def
+		{
+			hshift = hshift+1;
+			PIStop = PIStop-obsF[first][0]*obsF[second][1]*obsF[third][2];
+			continue; 
+		}
+		result[h-hshift][0]=obsF[first][0]*obsF[second][1]*obsF[third][2];
+	}
+	return result*(1.0/PIStop);
+}
+
+/*---------------------------------------------------------------------------------------------------------------------------------------------*/
+
+
+HarvestFrequencies (observedFreq,codon_dsf,3,1,1);
+
+
+NICETY_LEVEL = 3;
+
+MG94custom = 0;
+
+MULTIPLY_BY_FREQS = PopulateModelMatrix ("MG94custom", observedFreq);
+
+vectorOfFrequencies = BuildCodonFrequencies (observedFreq);
+
+Model MG94customModel = (MG94custom,vectorOfFrequencies,0);
+
