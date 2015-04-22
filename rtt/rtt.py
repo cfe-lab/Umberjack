@@ -26,7 +26,7 @@ def make_rooted_tree(unrooted_treefile, threads=1):
     if os.path.exists(bifurc_treefile) and os.path.getsize(bifurc_treefile):
         LOGGER.warn("Not regenerating " + bifurc_treefile)
     else:
-        Rscript_wdir = os.path.dirname(os.path.realpath(__file__)) + "/../../R/timing"
+        Rscript_wdir = os.path.dirname(os.path.realpath(__file__)) + "/../R/timing"
         subprocess.check_call(["Rscript", Rscript_wdir + "/RemovePolytomies.r",
                                "--newick", "--outnewick",
                                unrooted_treefile, bifurc_treefile], env=os.environ)
@@ -42,7 +42,7 @@ def make_rooted_tree(unrooted_treefile, threads=1):
     if os.path.exists(rooted_treefile) and os.path.getsize(rooted_treefile) and os.path.exists(time_rooted_treefile) and os.path.getsize(time_rooted_treefile):
         LOGGER.warn("Not regenerating rooted trees " + rooted_treefile + " and " + time_rooted_treefile)
     else:
-        subprocess.check_call(["java", "-jar", os.path.dirname(os.path.realpath(__file__)) + os.sep + "RLRootToTip.jar",
+        subprocess.check_call(["java", "-jar", os.path.dirname(os.path.realpath(__file__)) + os.sep + "bin" + os.sep + "RLRootToTip.jar",
                                "-writetree", rooted_treefile,
                                "-timetree", time_rooted_treefile,
                                "-nodedates", node_dates_csv,
