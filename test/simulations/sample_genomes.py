@@ -101,7 +101,7 @@ with open(out_fasta_fname, 'w') as fh_out_fasta:
 
 with open(out_anc_fasta_fname, 'w') as fh_out_anc_fasta:
     for h in new_anc_fasta.iterkeys():
-        fh_out_fasta.write('>%s\n%s\n' % (h, new_anc_fasta[h].value.rstrip()))  # Need rstrip since extra whitespace added to .value
+        fh_out_anc_fasta.write('>%s\n%s\n' % (h, new_anc_fasta[h].value.rstrip()))  # Need rstrip since extra whitespace added to .value
 
 
 
