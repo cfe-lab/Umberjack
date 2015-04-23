@@ -112,39 +112,9 @@ else:
 
 
 # Simulate MiSeq reads from the population genomes.
-ART_BIN_DIR = get_path_str(config.get(SECTION, "ART_BIN_DIR"), OUTDIR)
-ART_QUAL_PROFILE_TSV1 = get_path_str(config.get(SECTION, "ART_QUAL_PROFILE_TSV1"), OUTDIR)
-ART_QUAL_PROFILE_TSV2 = get_path_str(config.get(SECTION, "ART_QUAL_PROFILE_TSV2"), OUTDIR)
-ART_FOLD_COVER = config.getint(SECTION, "ART_FOLD_COVER")
-ART_MEAN_INSERT = config.getint(SECTION, "ART_MEAN_INSERT")
-ART_STDEV_INSERT = config.getint(SECTION, "ART_STDEV_INSERT")
-
-PICARD_BIN_DIR = get_path_str(config.get(SECTION, "PICARD_BIN_DIR"), OUTDIR)
-BWA_BIN_DIR = get_path_str(config.get(SECTION, "BWA_BIN_DIR"), OUTDIR)
-
-PROCS = config.getint(SECTION, "PROCS")
-
-
-
-art_reads_dir = OUTDIR + os.sep + "mixed" + os.sep + "reads"
-art_reads_filename_prefix = FILENAME_PREFIX + ".mixed.reads"
 generate_reads_exe = os.path.abspath(os.path.dirname(__file__) + os.sep + "generate_reads.py")
 generate_reads_cmd = ["python", generate_reads_exe,
-                      ART_BIN_DIR,
-                      ART_QUAL_PROFILE_TSV1,
-                      ART_QUAL_PROFILE_TSV2,
-                      sample_genomes_fasta,
-                      sample_genomes_consensus_fasta,
-                      art_reads_dir + os.sep + art_reads_filename_prefix,  # dir and filename prefix of ART output
-                      str(ART_FOLD_COVER),
-                      str(ART_MEAN_INSERT),
-                      str(ART_STDEV_INSERT),
-                      PICARD_BIN_DIR,
-                      BWA_BIN_DIR,
-                      OUTDIR + os.sep + "mixed" + os.sep + "aln",  # BWA output dir
-                      str(PROCS),
-                      str(SEED),
-                      OUTDIR + os.sep + "mixed" + os.sep + FILENAME_PREFIX + ".mixed.rates.csv"]  # Indelible mixed mutation rates csv
+                      config_file]
 LOGGER.debug("About to execute " + " ".join(generate_reads_cmd))
 subprocess.check_call(generate_reads_cmd, env=os.environ)
 LOGGER.debug("Finished execute ")
@@ -157,6 +127,7 @@ sample_genomes_tree_fname = fasttree_handler.make_tree_repro(fasta_fname=sample_
 
 
 # Calculate HyPhy dN/dS for the full sample_genomes population fasta
+PROCS = config.getint(SECTION, "PROCS")
 HYPHY_EXE = get_path_str(config.get(SECTION, "HYPHY_EXE"), OUTDIR)
 HYPHY_BASEPATH = get_path_str(config.get(SECTION, "HYPHY_BASEPATH"), OUTDIR)
 hyphy_handler.calc_dnds(codon_fasta_filename=sample_genomes_fasta, tree_filename=sample_genomes_tree_fname,

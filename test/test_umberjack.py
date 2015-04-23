@@ -125,6 +125,25 @@ class TestUmberjack(unittest.TestCase):
             fh_config.write("--debug  \n")
         subprocess.check_call(["python", UMBERJACK_PY, "-f", CONFIG_FILE], env=os.environ)
 
+        rconfig_file = R_DIR + os.sep + "umberjack_unit_test.config"
+        with open(rconfig_file, 'w') as fh_out_config:
+            fh_out_config.write("ACTUAL_DNDS_FILENAME=" + ACTUAL_DNDS_FILENAME + "\n")
+            fh_out_config.write("EXPECTED_DNDS_FILENAME=" + EXPECTED_DNDS_FILENAME + "\n")
+            fh_out_config.write("INDELIBLE_DNDS_FILENAME=" + INDELIBLE_DNDS_FILENAME + "\n")
+
+        subprocess.check_call(["Rscript", "-e", "library(knitr); " +
+                               "setwd('" + R_DIR + "'); " +
+                               "spin('umberjack_unit_test.R', knit=FALSE);" +
+                               "knit2html('./umberjack_unit_test.Rmd', stylesheet='./markdown_bigwidth.css');"],
+                              shell=False, env=os.environ)
+        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.html",
+                    OUT_DIR + os.sep + "umberjack_unit_test.html")
+
+        concord_csv = OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv"
+        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.concordance.csv",
+                    concord_csv)
+        self._is_good_concordance(concord_csv=concord_csv)
+
 
     def test_umberjack_cmd_line(self):
         """
@@ -152,6 +171,25 @@ class TestUmberjack(unittest.TestCase):
                "--fastree_exe", FASTTREE_EXE,
                "--mode", MODE]
         subprocess.check_call(cmd, env=os.environ)
+
+        rconfig_file = R_DIR + os.sep + "umberjack_unit_test.config"
+        with open(rconfig_file, 'w') as fh_out_config:
+            fh_out_config.write("ACTUAL_DNDS_FILENAME=" + ACTUAL_DNDS_FILENAME + "\n")
+            fh_out_config.write("EXPECTED_DNDS_FILENAME=" + EXPECTED_DNDS_FILENAME + "\n")
+            fh_out_config.write("INDELIBLE_DNDS_FILENAME=" + INDELIBLE_DNDS_FILENAME + "\n")
+
+        subprocess.check_call(["Rscript", "-e", "library(knitr); " +
+                               "setwd('" + R_DIR + "'); " +
+                               "spin('umberjack_unit_test.R', knit=FALSE);" +
+                               "knit2html('./umberjack_unit_test.Rmd', stylesheet='./markdown_bigwidth.css');"],
+                              shell=False, env=os.environ)
+        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.html",
+                    OUT_DIR + os.sep + "umberjack_unit_test.html")
+
+        concord_csv = OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv"
+        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.concordance.csv",
+                    concord_csv)
+        self._is_good_concordance(concord_csv=concord_csv)
 
 
     def test_eval_windows_async(self):

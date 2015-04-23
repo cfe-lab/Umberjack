@@ -1,4 +1,9 @@
-# ASSUMES that art_illumina is the PATH env var
+"""
+Simulates paired-end read sequencing with ART simulator.
+Aligns the reads to the reference with BWA.
+Converts sam to reads with Picard.
+Outputs coverage stats to HTML using R Knitr package.
+"""
 import os
 import subprocess
 import shutil
@@ -8,7 +13,8 @@ import sam.sam_handler as sam_handler
 import sys
 import logging
 import config.settings as settings
-
+import ConfigParser
+import sim_helper
 # If fragments are 500bp and read pairs do not overlap:  for 1x coverage, 10k indiv * 9kbp per indiv / 500bp per pair = 180000 pairs
 # If fragments are 400bp and read pairs do not overlap: for 1x coverage, 10k indiv * 9kbp per indiv / 400bp per pair = 225000 pairs.
 # If fragments are 500bp and read pairs overlap by 100bp:  225000 pairs x 500bp per pair / (10kindiv * 9kbp) = 1.25x overall population coverage.
@@ -19,24 +25,72 @@ LOGGER = logging.getLogger(__name__)
 
 
 
-ART_BIN_DIR = sys.argv[1]
-ART_QUAL_PROFILE_TSV1 = sys.argv[2]
-ART_QUAL_PROFILE_TSV2 = sys.argv[3]
-reference_fasta = sys.argv[4]
-consensus_fasta = sys.argv[5]
-art_output_prefix = sys.argv[6]
-ART_FOLD_COVER = sys.argv[7]
-art_mean_insert_size = sys.argv[8]
-art_stddev_insert_size = sys.argv[9]
 
-PICARD_BIN_DIR = sys.argv[10]
+# ART_BIN_DIR = sys.argv[1]
+# ART_QUAL_PROFILE_TSV1 = sys.argv[2]
+# ART_QUAL_PROFILE_TSV2 = sys.argv[3]
+# REFERENCE_FASTA = sys.argv[4]
+# CONSENSUS_FASTA = sys.argv[5]
+# ART_OUTPUT_PREFIX = sys.argv[6]
+# ART_INSERT_RATE1 = sys.argv[7]
+# ART_INSERT_RATE2 = sys.argv[8]
+# ART_DEL_RATE1 = sys.argv[9]
+# ART_DEL_RATE2 = sys.argv[10]
+# ART_QUAL_SHIFT1 = sys.argv[11]
+# ART_QUAL_SHIFT12 = sys.argv[12]
+# ART_READ_LENGTH = sys.argv[13]
+# ART_FOLD_COVER = sys.argv[14]
+# ART_MEAN_INSERT_SIZE = sys.argv[15]
+# ART_STDDEV_INSERT_SIZE = sys.argv[16]
+#
+# PICARD_BIN_DIR = sys.argv[17]
+#
+# BWA_BIN_DIR = sys.argv[18]
+# BWA_OUT_DIR = sys.argv[19]
+#
+# PROCS = int(sys.argv[20])
+# SEED = int(sys.argv[21])
+# INDELIBLE_RATES_CSV = sys.argv[22]
 
-BWA_BIN_DIR = sys.argv[11]
-BWA_OUT_DIR = sys.argv[12]
+SECTION = "sim"
 
-PROCS = int(sys.argv[13])
-SEED = int(sys.argv[14])
-INDELIBLE_RATES_CSV = sys.argv[15]
+config_file = sys.argv[1]
+config = ConfigParser.RawConfigParser()
+config.read(config_file)
+
+OUTDIR = os.path.dirname(config_file)  # Output directory for simulated data
+
+SEED = config.getint(SECTION, "SEED")
+FILENAME_PREFIX = config.get(SECTION, "FILENAME_PREFIX")
+
+
+ART_BIN_DIR = sim_helper.get_path_str(config.get(SECTION, "ART_BIN_DIR"), OUTDIR)
+ART_QUAL_PROFILE_TSV1 = sim_helper.get_path_str(config.get(SECTION, "ART_QUAL_PROFILE_TSV1"), OUTDIR)
+ART_QUAL_PROFILE_TSV2 = sim_helper.get_path_str(config.get(SECTION, "ART_QUAL_PROFILE_TSV2"), OUTDIR)
+ART_FOLD_COVER = config.getint(SECTION, "ART_FOLD_COVER")
+ART_MEAN_FRAG = config.getint(SECTION, "ART_MEAN_FRAG")
+ART_STDEV_FRAG = config.getint(SECTION, "ART_STDEV_FRAG")
+ART_INSERT_RATE1 = config.getfloat(SECTION, "ART_INSERT_RATE1")
+ART_INSERT_RATE2 = config.getfloat(SECTION, "ART_INSERT_RATE2")
+ART_DEL_RATE1 = config.getfloat(SECTION, "ART_DEL_RATE1")
+ART_DEL_RATE2 = config.getfloat(SECTION, "ART_DEL_RATE2")
+ART_QUAL_SHIFT1 = config.getint(SECTION, "ART_QUAL_SHIFT1")
+ART_QUAL_SHIFT2 = config.getint(SECTION, "ART_QUAL_SHIFT2")
+ART_READ_LENGTH = config.getint(SECTION, "ART_READ_LENGTH")
+
+
+PICARD_BIN_DIR = sim_helper.get_path_str(config.get(SECTION, "PICARD_BIN_DIR"), OUTDIR)
+BWA_BIN_DIR = sim_helper.get_path_str(config.get(SECTION, "BWA_BIN_DIR"), OUTDIR)
+
+PROCS = config.getint(SECTION, "PROCS")
+
+# TODO:  don't hard code these - get them from config file
+ART_OUTPUT_PREFIX =OUTDIR + os.sep + "mixed" + os.sep + "reads" + os.sep + FILENAME_PREFIX + ".mixed.reads"
+REFERENCE_FASTA = OUTDIR + os.sep + "mixed" + os.sep + FILENAME_PREFIX + ".mixed.fasta"
+CONSENSUS_FASTA = OUTDIR + os.sep + "mixed" + os.sep + FILENAME_PREFIX + ".mixed.consensus.fasta"
+BWA_OUT_DIR = OUTDIR + os.sep + "mixed" + os.sep + "aln"
+INDELIBLE_RATES_CSV = OUTDIR + os.sep + "mixed" + os.sep + FILENAME_PREFIX + ".mixed.rates.csv"
+
 
 CONSENSUS_NAME = "consensus"
 MIN_BASE_Q = 20
@@ -46,12 +100,12 @@ MAX_PROP_N = 0.1
 # Simulate reads with ART
 #############################################
 
-if os.path.exists(art_output_prefix + ".sam"):
+if os.path.exists(ART_OUTPUT_PREFIX + ".sam"):
     LOGGER.warn("Not regenerating ART simulated reads")
 else:
 
-    if not os.path.exists(os.path.dirname(art_output_prefix)):
-        os.makedirs(os.path.dirname(art_output_prefix))
+    if not os.path.exists(os.path.dirname(ART_OUTPUT_PREFIX)):
+        os.makedirs(os.path.dirname(ART_OUTPUT_PREFIX))
 
     ART_CMD=[ART_BIN_DIR + os.sep + "art_illumina",
          "-na", # don't output alignment file
@@ -62,39 +116,39 @@ else:
          "-1", ART_QUAL_PROFILE_TSV1, # 1st read quality  profile
          "-2", ART_QUAL_PROFILE_TSV2,  # 2nd read quality profile
          "-d", "read", # read id prefix
-         "-i",  reference_fasta, # dna reference fasta
-         "-ir", "0", # 1st read insertion rate
-         "-ir2",  "0", # 2nd read insertion rate
-         "-dr",  "0", # 1st read deletion rate
-         "-dr2",  "0", # 2nd read deletion rate
-         "-qs", "2",  # Bump up the quality scores of every base in 1st mate so that average error rate = 0.006
-         "-qs2", "2",  # Bump up the quality scores of every base in 2nd mate so that average error rate = 0.006
-         "-l",  "250", # length of read
-         "-f", ART_FOLD_COVER, # fold coverage
-         "-m",  art_mean_insert_size, # mean fragment size
-         "-s",  art_stddev_insert_size, # std dev fragment size
-         "-o",  art_output_prefix  # output prefix
+         "-i",  REFERENCE_FASTA, # dna reference fasta
+         "-ir", str(ART_INSERT_RATE1), # 1st read insertion rate
+         "-ir2",  str(ART_INSERT_RATE2), # 2nd read insertion rate
+         "-dr",  str(ART_DEL_RATE1), # 1st read deletion rate
+         "-dr2",  str(ART_DEL_RATE2), # 2nd read deletion rate
+         "-qs", str(ART_QUAL_SHIFT1),  # Bump up the quality scores of every base in 1st mate so that average error rate = 0.006
+         "-qs2", str(ART_QUAL_SHIFT2),  # Bump up the quality scores of every base in 2nd mate so that average error rate = 0.006
+         "-l",  str(ART_READ_LENGTH), # length of read
+         "-f", str(ART_FOLD_COVER), # fold coverage
+         "-m",  str(ART_MEAN_FRAG), # mean fragment size
+         "-s",  str(ART_STDEV_FRAG), # std dev fragment size
+         "-o",  ART_OUTPUT_PREFIX  # output prefix
          ]
 
-    logfile = art_output_prefix + ".art.log"
+    logfile = ART_OUTPUT_PREFIX + ".art.log"
     with open(logfile, 'w') as fh_log:
         LOGGER.debug( "Logging to " + logfile)
         LOGGER.debug( "About to execute " + " ".join(ART_CMD))
         subprocess.check_call(ART_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
 
     # ART creates fastq files with suffix 1.fq.  We want .1.fq suffix.  Rename files.
-    shutil.move(art_output_prefix + "1.fq", art_output_prefix + ".1.fq")
-    shutil.move(art_output_prefix + "2.fq", art_output_prefix + ".2.fq")
+    shutil.move(ART_OUTPUT_PREFIX + "1.fq", ART_OUTPUT_PREFIX + ".1.fq")
+    shutil.move(ART_OUTPUT_PREFIX + "2.fq", ART_OUTPUT_PREFIX + ".2.fq")
     # ART creates error free sam with suffix "_errFree.sam".  We want .errFree.sam.  Rename files
-    shutil.move(art_output_prefix + "_errFree.sam", art_output_prefix + ".errFree.sam")
+    shutil.move(ART_OUTPUT_PREFIX + "_errFree.sam", ART_OUTPUT_PREFIX + ".errFree.sam")
 
     # ART creates an error free sam.  Generate error free fq from error free sam
     PICARD_CMD = ["java", "-jar", PICARD_BIN_DIR + os.sep + "picard.jar",
                   "SamToFastq",
-                  "INPUT=" + art_output_prefix + ".errFree.sam",
-                  "FASTQ=" + art_output_prefix + ".errFree.1.fq",
-                  "SECOND_END_FASTQ=" + art_output_prefix + ".errFree.2.fq"]
-    picard_logfile = art_output_prefix + ".picard.sam2fastq.log"
+                  "INPUT=" + ART_OUTPUT_PREFIX + ".errFree.sam",
+                  "FASTQ=" + ART_OUTPUT_PREFIX + ".errFree.1.fq",
+                  "SECOND_END_FASTQ=" + ART_OUTPUT_PREFIX + ".errFree.2.fq"]
+    picard_logfile = ART_OUTPUT_PREFIX + ".picard.sam2fastq.log"
     with open(picard_logfile, 'w') as fh_log:
         LOGGER.debug( "Logging to " + picard_logfile)
         LOGGER.debug( "About to execute " + " ".join(PICARD_CMD))
@@ -105,7 +159,7 @@ else:
 # Align reads against population consensus
 #############################################
 
-bwa_output_prefix = BWA_OUT_DIR + os.sep + os.path.basename(art_output_prefix)
+bwa_output_prefix = BWA_OUT_DIR + os.sep + os.path.basename(ART_OUTPUT_PREFIX)
 if os.path.exists(bwa_output_prefix + ".consensus.bwa.sam"):
     LOGGER.warn("Not realigning reads")
 else:
@@ -113,10 +167,10 @@ else:
         os.makedirs(BWA_OUT_DIR)
 
     bwa_log = bwa_output_prefix + ".bwa.log"
-    bwa_db_prefix = BWA_OUT_DIR + os.sep + os.path.basename(consensus_fasta).replace(".fasta", "")
+    bwa_db_prefix = BWA_OUT_DIR + os.sep + os.path.basename(CONSENSUS_FASTA).replace(".fasta", "")
     BWA_BUILD_CMD = [BWA_BIN_DIR + os.sep + "bwa", "index",
                      "-p", bwa_db_prefix, # prefix of db index
-                        consensus_fasta,  # fasta to align against
+                        CONSENSUS_FASTA,  # fasta to align against
                         ]
 
     # bwa seems to perform better than bowtie for aligning the very divergent sequences
@@ -125,8 +179,8 @@ else:
         LOGGER.debug( "About to execute " + " ".join(BWA_BUILD_CMD))
         subprocess.check_call(BWA_BUILD_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
 
-        for fq_prefix, output_sam in [(art_output_prefix, bwa_output_prefix + ".consensus.bwa.sam"),
-                               (art_output_prefix + ".errFree", bwa_output_prefix + ".errFree.consensus.bwa.sam")]:
+        for fq_prefix, output_sam in [(ART_OUTPUT_PREFIX, bwa_output_prefix + ".consensus.bwa.sam"),
+                               (ART_OUTPUT_PREFIX + ".errFree", bwa_output_prefix + ".errFree.consensus.bwa.sam")]:
             BWA_CMD = [BWA_BIN_DIR + os.sep + "bwa",
                   "mem",
                   "-t", "10", # threads
@@ -147,7 +201,7 @@ else:
 # Get Coverage Stats
 ####################################################################
 
-if os.path.exists(art_output_prefix + ".cov.tsv"):
+if os.path.exists(ART_OUTPUT_PREFIX + ".cov.tsv"):
     LOGGER.warn("Not regenerating coverage stats")
 else:
 
@@ -157,10 +211,10 @@ else:
     LOGGER.debug( "Logging to " + picard_logfile)
     if os.path.exists(picard_logfile):
         os.remove(picard_logfile)
-    for input_sam, aln_ref_fasta in [(art_output_prefix + ".sam", reference_fasta),
-                                     (art_output_prefix + ".errFree.sam", reference_fasta),
-                                     (bwa_output_prefix + ".consensus.bwa.sam", consensus_fasta),
-                                     (bwa_output_prefix + ".errFree.consensus.bwa.sam", consensus_fasta)]:
+    for input_sam, aln_ref_fasta in [(ART_OUTPUT_PREFIX + ".sam", REFERENCE_FASTA),
+                                     (ART_OUTPUT_PREFIX + ".errFree.sam", REFERENCE_FASTA),
+                                     (bwa_output_prefix + ".consensus.bwa.sam", CONSENSUS_FASTA),
+                                     (bwa_output_prefix + ".errFree.consensus.bwa.sam", CONSENSUS_FASTA)]:
 
         output_sam = input_sam.replace(".sam", ".sort.sam")
         output_query_sam = input_sam.replace(".sam", ".sort.query.sam")
@@ -194,7 +248,7 @@ else:
                       "ASSUME_SORTED=false",  # read the sam header to determine if it's been sorted or not
                       "ADAPTER_SEQUENCE=null", # the ART generated reads don't have adapters
                       "REFERENCE_SEQUENCE=" + aln_ref_fasta,  # reference fasta.  If this is empty, then it doesn't collect metrics
-                      "MAX_INSERT_SIZE=" + str(int(art_mean_insert_size) + 2 * int(art_stddev_insert_size)),   # max insert size after which pair is considered  chimeric
+                      "MAX_INSERT_SIZE=" + str(int(ART_MEAN_FRAG) + 2 * int(ART_STDEV_FRAG)),   # max insert size after which pair is considered  chimeric
                       "METRIC_ACCUMULATION_LEVEL=ALL_READS" # get metrics for all reads
                       ]
         with open(picard_logfile, 'a') as fh_log:
@@ -218,8 +272,8 @@ else:
     LOGGER.debug(  "Logging to " + samtools_logfile)
     if os.path.exists(samtools_logfile):
         os.remove(samtools_logfile)
-    for input_sam in [art_output_prefix + ".sort.sam",
-                      art_output_prefix + ".errFree.sort.sam",
+    for input_sam in [ART_OUTPUT_PREFIX + ".sort.sam",
+                      ART_OUTPUT_PREFIX + ".errFree.sort.sam",
                       bwa_output_prefix + ".consensus.bwa.sort.sam",
                       bwa_output_prefix + ".errFree.consensus.bwa.sort.sam"]:
 
@@ -243,14 +297,14 @@ else:
 # Get Conservation And Entropy Stats for Multiple Sequence Alignment
 ####################################################################
 
-if os.path.exists(art_output_prefix + ".conserve.csv"):
+if os.path.exists(ART_OUTPUT_PREFIX + ".conserve.csv"):
     LOGGER.warn("Not regenerating conservation & entropy stats for MSA")
 else:
     # Create a multiple sequence alignment for the full population and entire genome from the aligned reads.
     # We will use these for obtaining conservation and entropy at each position for the aligned reads.
-    consensus_len = Utility.get_seq2len(consensus_fasta)[CONSENSUS_NAME]
-    for sam, ref in [(art_output_prefix + ".sort.query.sam", None),
-                     (art_output_prefix + ".errFree.sort.query.sam", None),
+    consensus_len = Utility.get_seq2len(CONSENSUS_FASTA)[CONSENSUS_NAME]
+    for sam, ref in [(ART_OUTPUT_PREFIX + ".sort.query.sam", None),
+                     (ART_OUTPUT_PREFIX + ".errFree.sort.query.sam", None),
                      (bwa_output_prefix + ".consensus.bwa.sort.query.sam", CONSENSUS_NAME),
                      (bwa_output_prefix + ".errFree.consensus.bwa.sort.query.sam", CONSENSUS_NAME)]:
         msa_fasta = sam.replace(".sort.query.sam", ".msa.fasta")
@@ -262,9 +316,9 @@ else:
 
 
     # Get conservation and entropy stats at each nucleotide position for the full population, full simulated reads, aligned reads
-    for msa_fasta in [reference_fasta,      # full population, no sequencing
-                      art_output_prefix + ".msa.fasta",
-                      art_output_prefix + ".errFree.msa.fasta",
+    for msa_fasta in [REFERENCE_FASTA,      # full population, no sequencing
+                      ART_OUTPUT_PREFIX + ".msa.fasta",
+                      ART_OUTPUT_PREFIX + ".errFree.msa.fasta",
                       bwa_output_prefix + ".consensus.bwa.msa.fasta",
                       bwa_output_prefix + ".errFree.consensus.bwa.msa.fasta"]:
         nuc_conserve_csv = msa_fasta.replace(".fasta", ".conserve.csv").replace(".msa", "")
@@ -289,15 +343,15 @@ else:
                 outrow["CodonDepth"] = aln.get_codon_depth(codon_pos_0based=codon_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
                 writer.writerow(outrow)
 
-output_cmp_msa_csv  = art_output_prefix + ".cmp.msa.csv"
-output_err_msa_csv  = art_output_prefix + ".err.msa.csv"
+output_cmp_msa_csv  = ART_OUTPUT_PREFIX + ".cmp.msa.csv"
+output_err_msa_csv  = ART_OUTPUT_PREFIX + ".err.msa.csv"
 if os.path.exists(output_cmp_msa_csv) and os.path.getsize(output_cmp_msa_csv) and os.path.exists(output_err_msa_csv) and os.path.getsize(output_err_msa_csv):
     LOGGER.warn("Not regenerating error csvs {} and {}".format(output_cmp_msa_csv, output_err_msa_csv))
 else:
     # Get stats on merged read error, length, N's
-    for msa_fasta in [reference_fasta,      # full population, no sequencing
-                          art_output_prefix + ".msa.fasta",
-                          art_output_prefix + ".errFree.msa.fasta",
+    for msa_fasta in [REFERENCE_FASTA,      # full population, no sequencing
+                          ART_OUTPUT_PREFIX + ".msa.fasta",
+                          ART_OUTPUT_PREFIX + ".errFree.msa.fasta",
                           bwa_output_prefix + ".consensus.bwa.msa.fasta",
                           bwa_output_prefix + ".errFree.consensus.bwa.msa.fasta"]:
             nuc_conserve_csv = msa_fasta.replace(".fasta", ".conserve.csv").replace(".msa", "")
@@ -305,8 +359,8 @@ else:
 
     import Bio.SeqIO as SeqIO
     import re
-    full_popn_recdict = SeqIO.to_dict(SeqIO.parse(reference_fasta, "fasta"))
-    consec_rec = SeqIO.read(consensus_fasta, "fasta")
+    full_popn_recdict = SeqIO.to_dict(SeqIO.parse(REFERENCE_FASTA, "fasta"))
+    consec_rec = SeqIO.read(CONSENSUS_FASTA, "fasta")
 
 
     with open(output_cmp_msa_csv, 'w') as fh_out_cmp_msa_csv, open(output_err_msa_csv, 'w') as fh_out_err_msa_csv:
@@ -338,8 +392,8 @@ else:
                                 ])
         writer_err.writeheader()
 
-        for source, msa_fasta in [("Orig", art_output_prefix + ".msa.fasta"),
-                                  ("OrigErrFree", art_output_prefix + ".errFree.msa.fasta"),
+        for source, msa_fasta in [("Orig", ART_OUTPUT_PREFIX + ".msa.fasta"),
+                                  ("OrigErrFree", ART_OUTPUT_PREFIX + ".errFree.msa.fasta"),
                                   ("Aln", bwa_output_prefix + ".consensus.bwa.msa.fasta"),
                                   ("AlnErrFree", bwa_output_prefix + ".errFree.consensus.bwa.msa.fasta")]:
 
@@ -417,19 +471,19 @@ else:
     # Output the R config file (workaround cuz can't seem to set commandline parameters for rmd knitr scripts)
     Rcov_config_file = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + os.sep + "R" + os.sep + "small_cov.config")
     with open(Rcov_config_file, 'w') as fh_out_rconfig:
-        fh_out_rconfig.write("FULL_POPN_CONSERVE_CSV={}".format(reference_fasta.replace(".fasta", ".conserve.csv")) + "\n")
+        fh_out_rconfig.write("FULL_POPN_CONSERVE_CSV={}".format(REFERENCE_FASTA.replace(".fasta", ".conserve.csv")) + "\n")
         fh_out_rconfig.write("ART_FOLD_COVER={}".format(ART_FOLD_COVER) + "\n")
-        fh_out_rconfig.write("ORIG_ERR_FREE_COV_TSV={}".format(art_output_prefix + ".errFree.cov.tsv") + "\n")
+        fh_out_rconfig.write("ORIG_ERR_FREE_COV_TSV={}".format(ART_OUTPUT_PREFIX + ".errFree.cov.tsv") + "\n")
         fh_out_rconfig.write("ALN_ERR_FREE_COV_TSV={}".format(bwa_output_prefix + ".errFree.consensus.bwa.cov.tsv") + "\n")
-        fh_out_rconfig.write("ORIG_ERR_FREE_WGS_METRICS={}".format(art_output_prefix + ".errFree.picard.wgsmetrics") + "\n")
+        fh_out_rconfig.write("ORIG_ERR_FREE_WGS_METRICS={}".format(ART_OUTPUT_PREFIX + ".errFree.picard.wgsmetrics") + "\n")
         fh_out_rconfig.write("ALN_ERR_FREE_WGS_METRICS={}".format(bwa_output_prefix + ".errFree.consensus.bwa.picard.wgsmetrics") + "\n")
-        fh_out_rconfig.write("ORIG_ERR_FREE_CONSERVE_CSV={}".format(art_output_prefix + ".errFree.conserve.csv") + "\n")
+        fh_out_rconfig.write("ORIG_ERR_FREE_CONSERVE_CSV={}".format(ART_OUTPUT_PREFIX + ".errFree.conserve.csv") + "\n")
         fh_out_rconfig.write("ALN_ERR_FREE_CONSERVE_CSV={}".format(bwa_output_prefix + ".errFree.consensus.bwa.conserve.csv") + "\n")
-        fh_out_rconfig.write("ORIG_COV_TSV={}".format(art_output_prefix + ".cov.tsv") + "\n")
+        fh_out_rconfig.write("ORIG_COV_TSV={}".format(ART_OUTPUT_PREFIX + ".cov.tsv") + "\n")
         fh_out_rconfig.write("ALN_COV_TSV={}".format(bwa_output_prefix + ".consensus.bwa.cov.tsv") + "\n")
-        fh_out_rconfig.write("ORIG_WGS_METRICS={}".format(art_output_prefix + ".picard.wgsmetrics") + "\n")
+        fh_out_rconfig.write("ORIG_WGS_METRICS={}".format(ART_OUTPUT_PREFIX + ".picard.wgsmetrics") + "\n")
         fh_out_rconfig.write("ALN_WGS_METRICS={}".format(bwa_output_prefix + ".consensus.bwa.picard.wgsmetrics") + "\n")
-        fh_out_rconfig.write("ORIG_CONSERVE_CSV={}".format(art_output_prefix + ".conserve.csv") + "\n")
+        fh_out_rconfig.write("ORIG_CONSERVE_CSV={}".format(ART_OUTPUT_PREFIX + ".conserve.csv") + "\n")
         fh_out_rconfig.write("ALN_CONSERVE_CSV={}".format(bwa_output_prefix + ".consensus.bwa.conserve.csv") + "\n")
         fh_out_rconfig.write("INDELIBLE_RATES_CSV={}".format(INDELIBLE_RATES_CSV) + "\n")
         fh_out_rconfig.write("CMP_READ_ERR_CSV={}".format(output_cmp_msa_csv) + "\n")

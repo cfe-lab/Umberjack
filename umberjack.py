@@ -152,9 +152,8 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
     msa_window_filename_prefix = out_dir + os.sep + sam_filename_prefix + "." + str(start_window_nucpos) + "_" + str(end_window_nucpos)
     msa_window_fasta_filename = msa_window_filename_prefix + ".fasta"
 
-    total_slice_seq = 0
-    if mode == MODE_COUNT_SUBS:
-        total_slice_seq = sam_handler.create_msa_slice_from_sam(sam_filename=sam_filename, ref=ref,
+
+    total_slice_seq = sam_handler.create_msa_slice_from_sam(sam_filename=sam_filename, ref=ref,
                                                             out_fasta_filename=msa_window_fasta_filename,
                                                             mapping_cutoff=map_qual_cutoff,
                                                             read_qual_cutoff=read_qual_cutoff, max_prop_N=max_prop_N,
@@ -163,13 +162,6 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
                                                             do_insert_wrt_ref=insert,
                                                             do_mask_stop_codon=mask_stop_codon,
                                                             do_remove_dup=remove_duplicates)
-
-    else:
-        # TODO:  hack - assuming that both patient sample fastas have been concatenated already
-        if os.path.exists(msa_window_fasta_filename) and os.path.getsize(msa_window_fasta_filename):
-            LOGGER.warn("Found existing Sliced MSA-Fasta " + msa_window_fasta_filename + ". Not regenerating.")
-            total_slice_seq = Utility.get_total_seq_from_fasta(msa_window_fasta_filename)
-
 
 
     # Check whether the msa sliced fasta has enough reads to make a good tree
