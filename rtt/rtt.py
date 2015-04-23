@@ -37,7 +37,7 @@ def make_rooted_tree(unrooted_treefile, threads=1):
     rooted_treefile = unrooted_treefile.replace(".nwk", ".rooted.nxs")
     time_rooted_treefile = unrooted_treefile.replace(".nwk", ".rooted.time.nxs")
     node_dates_csv = unrooted_treefile.replace(".nwk", ".nodedates.csv")
-
+    root_results_csv = unrooted_treefile.replace(".nwk", ".root.result.csv")
     LOGGER.debug("Rooting tree to " + rooted_treefile + " and " + time_rooted_treefile)
     if os.path.exists(rooted_treefile) and os.path.getsize(rooted_treefile) and os.path.exists(time_rooted_treefile) and os.path.getsize(time_rooted_treefile):
         LOGGER.warn("Not regenerating rooted trees " + rooted_treefile + " and " + time_rooted_treefile)
@@ -47,7 +47,8 @@ def make_rooted_tree(unrooted_treefile, threads=1):
                                "-timetree", time_rooted_treefile,
                                "-nodedates", node_dates_csv,
                                "-newick",
-                               bifurc_treefile],
+                               bifurc_treefile,
+                               root_results_csv],
                               env=os.environ)
         LOGGER.debug("Done rooting tree " + rooted_treefile)
 
@@ -75,17 +76,37 @@ def make_rooted_tree(unrooted_treefile, threads=1):
                 clade.name = "Clade" + str(cladenum)
 
         # Keep track of which clades we delete in nuc sub tree, since the timed tree can have zero-length branches where nuc tree doesn't
-        # del_clades = list(rooted_tree.find_clades(lambda c: c.branch_length  == 0, terminal=False))
-        # del_tips = []
-        rooted_tree.collapse_all(lambda c: c.branch_length  == 0)  # Collapse all zero-length branches into polytomies
-        for del_tip in rooted_tree.find_clades(lambda c: c.branch_length  == 0, terminal=True):
+        del_clades = list(rooted_tree.find_clades(lambda c: c.branch_length  == 0, terminal=False))
+        del_tips = []
+        rooted_tree.collapse_all(lambda c: c.branch_length  == 0)  # Collapse all zero-length inner node branches into polytomies
+
+
+        # collapse all zero-length terminal branches into polytomies
+        for del_tip in list(rooted_tree.find_clades(lambda c: c.branch_length  == 0, terminal=True)):
             if del_tip.branch_length == 0:
                 parent_path = rooted_tree.get_path(del_tip)
                 if len(parent_path) >=2:  # tip is not child of root
                     parent = parent_path[-2]
                     rooted_tree.collapse(parent)
-                    # del_tips.extend([del_tip])
+                    del_tips.extend([del_tip])
 
+        # Don't call rooted_time_tree.collapse_all() because the timed tree can have different number of zero-length branches than nuc sub tree
+        for del_clade in del_clades:
+            time_del_clades = list(rooted_time_tree.find_clades(name=del_clade.name, terminal=False))
+            if len(time_del_clades) > 1:
+                raise ValueError("Timed tree has multiple nodes with name " + del_clade.name)
+
+            if time_del_clades[0] != rooted_time_tree.root:  # collapse_all() never collapses root.  Since rooted_tree has its root intact, so should rooted_time_tree.
+                rooted_time_tree.collapse(time_del_clades[0])
+
+        for del_tip in del_tips:
+            time_del_tips = list(rooted_time_tree.find_clades(name=del_tip.name, terminal=True))
+            if len(time_del_tips) > 1:
+                raise ValueError("Timed tree has multiple tips with name " + del_tip.name)
+            parent_path = rooted_time_tree.get_path(time_del_tips[0])
+            if len(parent_path) >=2:  # tip is not child of root
+                parent = parent_path[-2]
+                rooted_time_tree.collapse(parent)
 
         Phylo.write(rooted_tree, named_rooted_treefile, "newick")
         Phylo.write(rooted_time_tree, named_rooted_time_treefile, "newick")
