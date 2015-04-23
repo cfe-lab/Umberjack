@@ -506,7 +506,7 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
                                                                        mpi_rcv_request=rcv_request)
 
                     start_window_nucpos += window_slide
-                    LOGGER.debug(str(start_window_nucpos))
+
 
                 # Check on replicas
                 if busy_replica_2_request:
