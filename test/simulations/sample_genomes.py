@@ -57,7 +57,7 @@ for scaling_factor in scaling_factors:
 
     # read INDELible ancestor  FASTA
     # <output_filename_prefix>_<scaling_factor>_ANCESTRAL.fasta are fastas containing the INDELible inner node sequences of a phylogenetic tree
-    fh_in_anc_fasta_ = open(indelible_output_dir+ os.sep + scaling_factor + os.sep + indelible_filename_prefix + "." +scaling_factor+'_TRUE.fasta', 'rU')
+    fh_in_anc_fasta_ = open(indelible_output_dir+ os.sep + scaling_factor + os.sep + indelible_filename_prefix + "." +scaling_factor+'_ANCESTRAL.fasta', 'rU')
     indelible_anc_fasta = Utility.convert_fasta(fh_in_anc_fasta_.readlines())  # returns a List of (header, sequence) tuples
     fh_in_anc_fasta_.close()
 
