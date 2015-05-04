@@ -166,9 +166,9 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
 
     # Check whether the msa sliced fasta has enough reads to make a good tree
     if total_slice_seq < window_depth_cutoff:
-        LOGGER.warn("MSA Window " + msa_window_fasta_filename + " does not satisfy window depth constraints")
+        LOGGER.warn("MSA Window " + msa_window_fasta_filename + " does not satisfy window depth constraints  with " + str(total_slice_seq) + " seq")
     else:
-        LOGGER.debug("MSA Window " + msa_window_fasta_filename + " satisfies window depth constraints")
+        LOGGER.debug("MSA Window " + msa_window_fasta_filename + " satisfies window depth constraints with " + str(total_slice_seq) + " seq")
 
         fastree_treefilename = fasttree.make_tree(fasta_fname=msa_window_fasta_filename, threads=threads_per_window, fastree_exe=fastree_exe)
 
