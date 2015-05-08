@@ -81,7 +81,7 @@ class SiteDnDsInfo:
         # Poor accuracy when site has ambiguous codons and all of its unambiguous codons are fully conserved.
         # Hyphy averages substitutions over ambiguous codons.  If there are no or very few true substitutions,
         # any fluctation will greatly impact accuracy.
-        if syn_subs == 0 or syn_subs >= 1:
+        if syn_subs >= 1 and nonsyn_subs >= 1:
             if dn_minus_ds is not None:
                 self.total_reads_nolowsub_for_dnminusds += reads
                 self.accum_win_dn_minus_ds_weightby_reads_nolowsub += (reads*dn_minus_ds)
