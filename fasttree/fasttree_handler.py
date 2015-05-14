@@ -33,38 +33,30 @@ def make_tree(fasta_fname, threads=1, fastree_exe=settings.DEFAULT_FASTTREEMP_EX
 
     if not os.path.exists(fastree_treefilename) or os.path.getsize(fastree_treefilename) <= 0:
         os.environ[ENV_OMP_NUM_THREADS] = str(threads)
-        if debug:
-            with open(fasttree_stdouterr_filename, 'w') as fasttree_stdouterr_fh:
-
-                if custom_flags:
-                    fasttree_debug_cmd = [fastree_exe] + custom_flags + [
+        fasttree_cmd = [fastree_exe,
+                        '-gtr',  # general time reversible nucleotide substitution model
+                        '-nt',   # nucleotides
+                        '-gamma',  # sites vary with 20 category gamma distro
+                        '-nosupport',  # do not output support values in tree
                         '-log', fastree_logfilename,  # fast tree log
                         '-out', fastree_treefilename,  # tree
-                        fasta_fname]  # multiple sequence aligned fasta
-                else:
-                    fasttree_debug_cmd = [fastree_exe,
-                                          '-gtr',  # general time reversible nucleotide substitution model
-                                          '-nt',   # nucleotides
-                                          '-gamma',  # sites vary with 20 category gamma distro
-                                          '-nosupport',  # do not output support values in tree
-                                          '-log', fastree_logfilename,  # fast tree log
-                                          '-out', fastree_treefilename,  # tree
-                                          fasta_fname]  # multiple sequence aligned fasta
-                subprocess.check_call(fasttree_debug_cmd,
+        ]
+
+        if custom_flags:
+            fasttree_cmd = fasttree_cmd + custom_flags
+
+        if debug:
+            with open(fasttree_stdouterr_filename, 'w') as fasttree_stdouterr_fh:
+                fasttree_cmd = fasttree_cmd + [fasta_fname]  # multiple sequence aligned fasta
+                subprocess.check_call(fasttree_cmd,
                                   stdout=fasttree_stdouterr_fh, stderr=fasttree_stdouterr_fh, shell=False,
                                   env=os.environ)
         else:
             with open(os.devnull, 'wb') as fh_devnull:
-                fasttree_cmd = [fastree_exe,
-                                '-gtr',  # general time reversible nucleotide substitution model
-                                '-nt',   # nucleotides
-                                '-gamma',  # sites vary with 20 category gamma distro
-                                '-nosupport',  # do not output support values in tree
-                                '-quiet',  # suppress reporting information
-                                '-nopr',  # suppress progress indicator
-                                '-log', fastree_logfilename,  # fast tree log
-                                '-out', fastree_treefilename,  # tree
-                                fasta_fname]  # multiple sequence aligned fasta
+                fasttree_cmd = fasttree_cmd + [
+                    '-quiet',  # suppress reporting information
+                    '-nopr',  # suppress progress indicator
+                    fasta_fname]  # multiple sequence aligned fasta
                 subprocess.check_call(fasttree_cmd,  # multiple sequence aligned fasta
                                       stdout=fh_devnull, stderr=fh_devnull, shell=False,
                                       env=os.environ)
