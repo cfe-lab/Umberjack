@@ -350,7 +350,7 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
     LOGGER.debug("Done tabulating results")
 
     LOGGER.debug("About to plot results")
-    plot_results(output_csv=output_csv_filename)
+    plot_results(output_csv=output_csv_filename, mode=mode)
     LOGGER.debug("Done plot results")
 
 

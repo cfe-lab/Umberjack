@@ -422,6 +422,8 @@ class Consensus:
                 if max_base_count < count and base not in Consensus.NON_BASES:
                     max_base = base
                     max_base_count = count
+            if not max_base:
+                max_base = Consensus.GAP_CHAR
             consensus += max_base
         return consensus
 
