@@ -60,16 +60,11 @@ function	PrintTableToFile (dataMatrix, outSubstTsvFile)
 	return totalLinesWritten;
 }
 
-// Converts numerical codon code to string
-function codonString (ccode)
-{
-	nucCharacters="ACGT";
-	return nucCharacters[ccode$16]+nucCharacters[(ccode%16)$4]+nucCharacters[ccode%4];
-}
+
 
 // Gets comma delimited list of codons from sparse column vector
 // siteInfo:  1 if the codon coded by the element index exists
-function commaCodonList(siteInfo)
+function commaCodonList(siteInfo, codonCodeToStrMap)
 {
 	sList = "";
 	for (codonCode=0; codonCode<Rows(siteInfo); codonCode=codonCode+1)
@@ -80,7 +75,7 @@ function commaCodonList(siteInfo)
 			{
 				sList = sList + ",";
 			}
-			sList = sList + codonString(codonCode);
+			sList = sList + codonCodeToStrMap[codonCode];
 		}
 	}
 	return sList;
@@ -251,6 +246,9 @@ fprintf (stdout, "\t[WRITING site-branch substitutions TO ",outSubstTsvFile,"]\n
 // Write header
 PrintTableToFile  (labelMatrix, outSubstTsvFile);
 
+// Converts numerical codon code to string, defined in chooseGeneticCode.def
+codonCodeToStrMap = ComputeCodonCodeToStringMap (genCode);
+
 // For each site, traverse each branch.  
 // Count substitutions at each site-branch.
 for (iSite=0; iSite<filteredDataJoint.sites;iSite=iSite+1)
@@ -302,8 +300,8 @@ for (iSite=0; iSite<filteredDataJoint.sites;iSite=iSite+1)
 			totalPossParCodons = (matrixTrickSummer*parAmbInfo)[0];
 			totalPossPairs = totalPossParCodons * totalPossChildCodons;
 			
-			sChildCdn = commaCodonList(childAmbInfo);
-			sParCdn = commaCodonList(parAmbInfo);
+			sChildCdn = commaCodonList(childAmbInfo, codonCodeToStrMap);
+			sParCdn = commaCodonList(parAmbInfo, codonCodeToStrMap);
 			
 			if ( totalPossParCodons<stateCharCount && totalPossChildCodons<stateCharCount)  // Ignore sites where parent or child has completely ambiguous codon ?????
 			{
