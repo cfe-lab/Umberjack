@@ -409,21 +409,34 @@ class Consensus:
 
 
 
-    def get_consensus(self):
+    def get_consensus(self, is_allow_int_gaps=False):
         """
         Return the consensus for the entire sequence
+        :param bool is_allow_int_gaps:  if True, then allows internal gaps as consensus char.
+        If False, then uses the most frequent non-gap, non-pad character as the consensus char.
+        If False and there are only internal gaps at the position, then uses internal gap as the consensus char.
+        Whether True or False, if there is no coverage at the position (ie only external gaps aka pads
+        at the position), then uses ? character to indicate that there is no coverage.
         :rtype : str
         """
         consensus = ""
-        for base_count in self.seq:
+        for i, base_count in enumerate(self.seq):
             max_base_count = 0
             max_base = None
             for base, count in base_count.iteritems():
-                if max_base_count < count and base not in Consensus.NON_BASES:
+                if ((base in Consensus.TRUE_BASES or (is_allow_int_gaps and base == Consensus.GAP_CHAR)) and
+                        max_base_count < count):
                     max_base = base
                     max_base_count = count
             if not max_base:
-                max_base = Consensus.GAP_CHAR
+                if base_count[Consensus.GAP_CHAR] == 0 and base_count[Consensus.AMBIG_NUC_CHAR] == 0:
+                    max_base = "?"  # This means that there is no coverage here other than external gaps
+                elif ((is_allow_int_gaps and base_count[Consensus.AMBIG_NUC_CHAR] > base_count[Consensus.GAP_CHAR]) or
+                          (not is_allow_int_gaps and base_count[Consensus.AMBIG_NUC_CHAR])):
+                    max_base = Consensus.AMBIG_NUC_CHAR
+                else:
+                    max_base = Consensus.GAP_CHAR
+
             consensus += max_base
         return consensus
 
