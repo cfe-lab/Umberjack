@@ -92,7 +92,7 @@ function makeNucTransMatrixFromCodonPosFreqMatrix(_rNuc_cPos_2fObsFreq)
 
 	for (iNuc=0; iNuc<4; iNuc=iNuc+1)
 	{
-		_pooledFreqs[k] = (_rNuc_cPos_2fObsFreq[iNuc][0]+_rNuc_cPos_2fObsFreq[iNuc][1]+_rNuc_cPos_2fObsFreq[iNuc][2])/3;  // observedFreq from fit_codon_model.ibf
+		_pooledFreqs[iNuc] = (_rNuc_cPos_2fObsFreq[iNuc][0]+_rNuc_cPos_2fObsFreq[iNuc][1]+_rNuc_cPos_2fObsFreq[iNuc][2])/3;  // observedFreq from fit_codon_model.ibf
 	}
 	
 	_matNucTrans = {{1,AC__*_pooledFreqs[1],_pooledFreqs[2],AT__*_pooledFreqs[3]}
