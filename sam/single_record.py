@@ -440,7 +440,7 @@ class SamRecord(SamSequence):
                 self.ref_align_len += length
             # Insertion relative to reference: skip it (excise it)
             elif token[-1] == 'I':
-                self.ref_pos_to_insert_seq_qual.update({pos_wrt_ref_1based-1:
+                self.ref_pos_to_insert_seq_qual.update({pos_wrt_ref_1based:
                                                             (self.seq[pos_wrt_seq_0based:(pos_wrt_seq_0based+length)],
                                                              self.qual[pos_wrt_seq_0based:(pos_wrt_seq_0based+length)])})
                 pos_wrt_seq_0based += length
