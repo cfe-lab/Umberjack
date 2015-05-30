@@ -17,7 +17,7 @@ __RESULT_COLS_OS = "ObservedSynSubst";
 __RESULT_COLS_ON = "ObservedNonsynSubst";
 __RESULT_COLS_ES = "ExpectedSynSubst";
 __RESULT_COLS_EN = "ExpectedNonsynSubst";
-__RESULT_COLS_BRANCHLEN = "BranchLen";
+__RESULT_COLS_BRANCHFACTOR = "BranchLen";
 __RESULT_COLS_PARSEQ = "ParentCodon";
 __RESULT_COLS_CHILDSEQ = "ChildCodon";
 
@@ -30,7 +30,7 @@ __RESULT_COLI_OS = 5;
 __RESULT_COLI_ON = 6;
 __RESULT_COLI_ES = 7;
 __RESULT_COLI_EN = 8;
-__RESULT_COLI_BRANCHLEN = 9;
+__RESULT_COLI_BRANCHFACTOR = 9;
 __RESULT_COLI_PARSEQ = 10;
 __RESULT_COLI_CHILDSEQ = 11;
 
@@ -231,7 +231,7 @@ labelMatrix[__RESULT_COLI_OS] = __RESULT_COLS_OS;
 labelMatrix[__RESULT_COLI_ON] = __RESULT_COLS_ON;
 labelMatrix[__RESULT_COLI_ES] = __RESULT_COLS_ES;
 labelMatrix[__RESULT_COLI_EN] = __RESULT_COLS_EN;
-labelMatrix[__RESULT_COLI_BRANCHLEN] = __RESULT_COLS_BRANCHLEN;
+labelMatrix[__RESULT_COLI_BRANCHFACTOR] = __RESULT_COLS_BRANCHFACTOR;
 labelMatrix[__RESULT_COLI_PARSEQ] = __RESULT_COLS_PARSEQ;
 labelMatrix[__RESULT_COLI_CHILDSEQ] = __RESULT_COLS_CHILDSEQ;
 
@@ -396,7 +396,7 @@ for (iSite=0; iSite<filteredDataJoint.sites;iSite=iSite+1)
 		resultMatrix[__RESULT_COLI_ON] = "" + totalSiteON[0];
 		resultMatrix[__RESULT_COLI_ES] = "" + totalSiteES[0];
 		resultMatrix[__RESULT_COLI_EN] = "" + totalSiteEN[0];
-		resultMatrix[__RESULT_COLI_BRANCHLEN] = "" + branchLengths[iChildPostOrder];
+		resultMatrix[__RESULT_COLI_BRANCHFACTOR] = "" + branchLengths[iChildPostOrder];
 
 	
 
