@@ -1,4 +1,4 @@
-
+COUNT_GAPS_IN_FREQUENCIES = 0;  // Do not include gaps (-) in the codon, nucleotide frequencies.  Gaps will not get resolved.  N's still get resolved though.
 
 
 fscanf  (stdin,  "String", fastaFile);

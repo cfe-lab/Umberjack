@@ -249,6 +249,16 @@ PrintTableToFile  (labelMatrix, outSubstTsvFile);
 // Converts numerical codon code to string, defined in chooseGeneticCode.def
 codonCodeToStrMap = ComputeCodonCodeToStringMap (genCode);
 
+
+// TODO:  delete me i'm only for debugging
+fprintf(stdout, "\n _Genetic_Code= ", _Genetic_Code, "\n");
+fprintf(stdout, "\n_EFV_MATRIX0_=", _EFV_MATRIX0_, "\n");
+fprintf(stdout, "\n_S_NS_POSITIONS_=", _S_NS_POSITIONS_, "\n");
+
+
+test = _PAIRWISE_S_+_PAIRWISE_NS_;
+fprintf(stdout, "\nTotal expected s + ns matrixs=", test, "\n");
+
 // For each site, traverse each branch.  
 // Count substitutions at each site-branch.
 for (iSite=0; iSite<filteredDataJoint.sites;iSite=iSite+1)
@@ -303,7 +313,10 @@ for (iSite=0; iSite<filteredDataJoint.sites;iSite=iSite+1)
 			sChildCdn = commaCodonList(childAmbInfo, codonCodeToStrMap);
 			sParCdn = commaCodonList(parAmbInfo, codonCodeToStrMap);
 			
-			if ( totalPossParCodons<stateCharCount && totalPossChildCodons<stateCharCount)  // Ignore sites where parent or child has completely ambiguous codon ?????
+			// ??? We aren't outputting the site-substitutions for NNN codons, but NNN still affect the codon resolution frequency across the phylo for 2-N or 1-N ambiguous codons.
+			// Ignore site-branches where parent or child has completely ambiguous codons.
+			// This is because every substitution is possible and will pollute any inference we make at this site.
+			if ( totalPossParCodons<stateCharCount && totalPossChildCodons<stateCharCount)  
 			{
 				// Count codon frequencies for this site only
 				siteFilter = ""+(iSite*3)+"-"+(iSite*3+2);
@@ -334,8 +347,10 @@ for (iSite=0; iSite<filteredDataJoint.sites;iSite=iSite+1)
 				childAmbCodon_phyloFreqs = childAmbInfo$observedCEFV;  //For each possible codons at this site, we get the frequency of its occurences across the phylo
 				parAmbCodon_phyloFreqs = parAmbInfo$observedCEFV;  //For each possible codons at this site, we get the frequency of its occurences across the phylo
 				
-				totalFreqChildPossCodons = (matrixTrickSummer*childAmbCodon_phyloFreqs)[0];    // sum frequency of unambiguous occurences across phylo for possible child codons at this site
-				totalFreqParPossCodons = (matrixTrickSummer*parAmbCodon_phyloFreqs)[0];    // sum frequency of unambiguous occurences across phylo for possible parent codons at this site
+				// sum frequency of occurences across phylo for possible child codons at this site, including occurences from resolution of ambiguous codons
+				totalFreqChildPossCodons = (matrixTrickSummer*childAmbCodon_phyloFreqs)[0];
+				// sum frequency of occurences across phylo for possible parent codons at this site, including occurences from resolution of ambiguous codons    
+				totalFreqParPossCodons = (matrixTrickSummer*parAmbCodon_phyloFreqs)[0];    
 				
 				for (iPossParCdn=0; iPossParCdn<stateCharCount; iPossParCdn=iPossParCdn+1)
 				{
@@ -381,7 +396,7 @@ for (iSite=0; iSite<filteredDataJoint.sites;iSite=iSite+1)
 		resultMatrix[__RESULT_COLI_ON] = "" + totalSiteON[0];
 		resultMatrix[__RESULT_COLI_ES] = "" + totalSiteES[0];
 		resultMatrix[__RESULT_COLI_EN] = "" + totalSiteEN[0];
-		resultMatrix[__RESULT_COLI_BRANCHLEN] = "" + branchFactor;
+		resultMatrix[__RESULT_COLI_BRANCHLEN] = "" + branchLengths[iChildPostOrder];
 
 	
 
