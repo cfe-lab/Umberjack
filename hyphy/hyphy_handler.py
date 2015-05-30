@@ -128,7 +128,8 @@ def count_site_branch_subs(codon_fasta_filename, rooted_treefile, hyphy_exe=sett
     LOGGER.debug("Counting site-branch subs for " + rooted_treefile)
     if (os.path.exists(leaf_anc_fasta) and os.path.getsize(leaf_anc_fasta) and
             os.path.exists(codon_treefile) and os.path.getsize(codon_treefile) and
-            os.path.exists(codontree_branchlen_csv) and os.path.getsize(codontree_branchlen_csv)):
+            os.path.exists(codontree_branchlen_csv) and os.path.getsize(codontree_branchlen_csv) and
+            os.path.exists(subst_tsv) and os.path.getsize(subst_tsv)):
         LOGGER.warn("Not regenerating {} , {} , {}".format(leaf_anc_fasta,codon_treefile,  codontree_branchlen_csv))
     else:
         hyphy_input_str = "\n".join([codon_fasta_filename,  # msa aligned fasta of both samples
