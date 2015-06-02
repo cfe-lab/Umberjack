@@ -59,10 +59,8 @@ SetDialogPrompt ("Please select a file containing a tree with branch lengths: ")
 fscanf(PROMPT_FOR_FILE, "String", tree_string);
 fprintf(stdout, "Tree File=", LAST_FILE_PATH, "\n");
 
-/* generate nucleotide model (GTR) */
-#include "fit_nuc_model.ibf";
 
-/* generate codon model (MG94customModel) */
+/* generate codon model (MG94customModel) + GTR */
 #include "fit_codon_model.ibf";
 
 Tree	codon_tree = tree_string;	// NB:  Model must be defined before the Tree
@@ -85,15 +83,6 @@ SetDialogPrompt ("Please specify a file to export likelihood function: ");
 fprintf (PROMPT_FOR_FILE, CLEAR_FILE);
 fprintf(LAST_FILE_PATH, codon_lf);
 
-//branchNames 	= BranchName (codon_tree, -1);
-//branchLengths	= BranchLength (codon_tree, -1);
-
-// Write out codon tree scaled into units of syn subst/site
-SetDialogPrompt ("Please specify a file to export codon tree: ");
-fprintf (PROMPT_FOR_FILE, CLEAR_FILE);
-outCodonTreeFile = LAST_FILE_PATH;
-fprintf(stdout, "\tWriting Codon Tree to ", outCodonTreeFile, "\n");
-fprintf(outCodonTreeFile, codon_tree);
 
 // Write out codon tree branch lengths
 SetDialogPrompt ("Please specify a csv file to export codon tree branch lengths: ");

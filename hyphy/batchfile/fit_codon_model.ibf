@@ -27,6 +27,13 @@ STOP = 10;
 
 ModelMatrixDimension = 0;
 
+// global model parameters  (have the same value across entire tree)
+global   dNdS = 1;
+global     AC = 1;
+global 	   AT = 1;
+global     CG = 1;
+global	   CT = 1;
+global     GT = 1;
 
 
 /*---------------------------------------------------------------------------------------------------------------------------------------------*/
@@ -45,7 +52,7 @@ function PopulateModelMatrix (ModelMatrixName&, EFV)
 		}
 	}
 	
-	R  = R;
+	dNdS  = dNdS;
 	AT = AT;
 	CG = CG;
 	CT = CT;
@@ -120,8 +127,8 @@ function PopulateModelMatrix (ModelMatrixName&, EFV)
 						}
 						else
 						{	
-							ModelMatrixName[h-hshift][v-vshift] := AC*R*synRate*EFV__[transition__][nucPosInCodon__];
-							ModelMatrixName[v-vshift][h-hshift] := AC*R*synRate*EFV__[transition2__][nucPosInCodon__];
+							ModelMatrixName[h-hshift][v-vshift] := AC*dNdS*synRate*EFV__[transition__][nucPosInCodon__];
+							ModelMatrixName[v-vshift][h-hshift] := AC*dNdS*synRate*EFV__[transition2__][nucPosInCodon__];
 						}
 					}
 					else
@@ -135,8 +142,8 @@ function PopulateModelMatrix (ModelMatrixName&, EFV)
 							}
 							else
 							{								
-								ModelMatrixName[h-hshift][v-vshift] := R*synRate*EFV__[transition__][nucPosInCodon__];
-								ModelMatrixName[v-vshift][h-hshift] := R*synRate*EFV__[transition2__][nucPosInCodon__];
+								ModelMatrixName[h-hshift][v-vshift] := dNdS*synRate*EFV__[transition__][nucPosInCodon__];
+								ModelMatrixName[v-vshift][h-hshift] := dNdS*synRate*EFV__[transition2__][nucPosInCodon__];
 							}							
 						}
 						else
@@ -149,8 +156,8 @@ function PopulateModelMatrix (ModelMatrixName&, EFV)
 							else
 							{
 								
-								ModelMatrixName[h-hshift][v-vshift] := AT*R*synRate*EFV__[transition__][nucPosInCodon__];
-								ModelMatrixName[v-vshift][h-hshift] := AT*R*synRate*EFV__[transition2__][nucPosInCodon__];
+								ModelMatrixName[h-hshift][v-vshift] := AT*dNdS*synRate*EFV__[transition__][nucPosInCodon__];
+								ModelMatrixName[v-vshift][h-hshift] := AT*dNdS*synRate*EFV__[transition2__][nucPosInCodon__];
 							}							
 						}
 					}
@@ -168,8 +175,8 @@ function PopulateModelMatrix (ModelMatrixName&, EFV)
 							}
 							else
 							{
-								ModelMatrixName[h-hshift][v-vshift] := CG*R*synRate*EFV__[transition__][nucPosInCodon__];
-								ModelMatrixName[v-vshift][h-hshift] := CG*R*synRate*EFV__[transition2__][nucPosInCodon__];
+								ModelMatrixName[h-hshift][v-vshift] := CG*dNdS*synRate*EFV__[transition__][nucPosInCodon__];
+								ModelMatrixName[v-vshift][h-hshift] := CG*dNdS*synRate*EFV__[transition2__][nucPosInCodon__];
 							}
 						}
 						else
@@ -181,8 +188,8 @@ function PopulateModelMatrix (ModelMatrixName&, EFV)
 							}
 							else
 							{
-								ModelMatrixName[h-hshift][v-vshift] := CT*R*synRate*EFV__[transition__][nucPosInCodon__];
-								ModelMatrixName[v-vshift][h-hshift] := CT*R*synRate*EFV__[transition2__][nucPosInCodon__];
+								ModelMatrixName[h-hshift][v-vshift] := CT*dNdS*synRate*EFV__[transition__][nucPosInCodon__];
+								ModelMatrixName[v-vshift][h-hshift] := CT*dNdS*synRate*EFV__[transition2__][nucPosInCodon__];
 							}							
 						}
 					}
@@ -195,8 +202,8 @@ function PopulateModelMatrix (ModelMatrixName&, EFV)
 						}
 						else
 						{
-							ModelMatrixName[h-hshift][v-vshift] := GT*R*synRate*EFV__[transition__][nucPosInCodon__];
-							ModelMatrixName[v-vshift][h-hshift] := GT*R*synRate*EFV__[transition2__][nucPosInCodon__];
+							ModelMatrixName[h-hshift][v-vshift] := GT*dNdS*synRate*EFV__[transition__][nucPosInCodon__];
+							ModelMatrixName[v-vshift][h-hshift] := GT*dNdS*synRate*EFV__[transition2__][nucPosInCodon__];
 						}							
 					}
 				}
@@ -204,7 +211,6 @@ function PopulateModelMatrix (ModelMatrixName&, EFV)
 	   }
     }		
 
-	fprintf(stdout, "\nModelMatrixName=", ModelMatrixName, "\n");	
 	return 0;
 
 }
