@@ -489,7 +489,5 @@ function printSubTSV(outPerSiteBrSubFile, outPerSiteDnDsFile)
 	{
 		fprintf (outPerSiteDnDsFile, CLOSE_FILE);  // close file
 	}
-	
-	fprintf(stdout, "_OBSERVED_NS_=", _OBSERVED_NS_, "\n");
 
 }
