@@ -36,7 +36,7 @@ __RESULT_SITEBR_COLS_OS = "ObservedSynSubst";
 __RESULT_SITEBR_COLS_ON = "ObservedNonsynSubst";
 __RESULT_SITEBR_COLS_ES = "ExpectedSynSubst";
 __RESULT_SITEBR_COLS_EN = "ExpectedNonsynSubst";
-__RESULT_SITEBR_COLS_BRANCHFACTOR = "BranchFactor";
+__RESULT_SITEBR_COLS_BRANCHLEN = "BranchLen";
 __RESULT_SITEBR_COLS_PARSEQ = "ParentCodon";
 __RESULT_SITEBR_COLS_CHILDSEQ = "ChildCodon";
 
@@ -49,7 +49,7 @@ __RESULT_SITEBR_COLI_OS = 5;
 __RESULT_SITEBR_COLI_ON = 6;
 __RESULT_SITEBR_COLI_ES = 7;
 __RESULT_SITEBR_COLI_EN = 8;
-__RESULT_SITEBR_COLI_BRANCHFACTOR = 9;
+__RESULT_SITEBR_COLI_BRANCHLEN = 9;
 __RESULT_SITEBR_COLI_PARSEQ = 10;
 __RESULT_SITEBR_COLI_CHILDSEQ = 11;
 
@@ -173,7 +173,7 @@ function printSubTSV(outPerSiteBrSubFile, outPerSiteDnDsFile)
 		labelMatrixSiteBr[__RESULT_SITEBR_COLI_ON] = __RESULT_SITEBR_COLS_ON;
 		labelMatrixSiteBr[__RESULT_SITEBR_COLI_ES] = __RESULT_SITEBR_COLS_ES;
 		labelMatrixSiteBr[__RESULT_SITEBR_COLI_EN] = __RESULT_SITEBR_COLS_EN;
-		labelMatrixSiteBr[__RESULT_SITEBR_COLI_BRANCHFACTOR] = __RESULT_SITEBR_COLS_BRANCHFACTOR;
+		labelMatrixSiteBr[__RESULT_SITEBR_COLI_BRANCHLEN] = __RESULT_SITEBR_COLS_BRANCHLEN;
 		labelMatrixSiteBr[__RESULT_SITEBR_COLI_PARSEQ] = __RESULT_SITEBR_COLS_PARSEQ;
 		labelMatrixSiteBr[__RESULT_SITEBR_COLI_CHILDSEQ] = __RESULT_SITEBR_COLS_CHILDSEQ;
 
@@ -447,7 +447,7 @@ function printSubTSV(outPerSiteBrSubFile, outPerSiteDnDsFile)
 				resultMatrixSiteBr[__RESULT_SITEBR_COLI_ON] = "" + totalSiteBrON;
 				resultMatrixSiteBr[__RESULT_SITEBR_COLI_ES] = "" + totalSiteBrES;
 				resultMatrixSiteBr[__RESULT_SITEBR_COLI_EN] = "" + totalSiteBrEN;
-				resultMatrixSiteBr[__RESULT_SITEBR_COLI_BRANCHFACTOR] = "" + branchLengths[iChildPostOrder];
+				resultMatrixSiteBr[__RESULT_SITEBR_COLI_BRANCHLEN] = "" + branchLengths[iChildPostOrder];
 
 	
 				//Print to CSV: Per-Site-Branch substitutions
