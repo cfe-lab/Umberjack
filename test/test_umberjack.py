@@ -340,6 +340,37 @@ class TestUmberjack(unittest.TestCase):
         self._is_good_concordance(concord_csv=concord_csv)
 
 
+    # TODO:  check the output
+    def test_count_subs(self):
+        """
+        Tests that umberjack runs properly from commandline.  Also tests no debug option.
+        """
+        OUT_DIR =   SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + "Window" + str(WINDOW_SIZE) + ".checksubs"
+        SAM_FILENAME = SIM_DATA_DIR + os.sep + "mixed" + os.sep + "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".mixed.reads.consensus.bwa.sort.query.sam"
+        OUT_CSV_FILENAME = OUT_DIR + os.sep + 'site_branch_sub.csv'
+        cmd = ["python", UMBERJACK_PY,
+               "--sam_filename", SAM_FILENAME,
+               "--ref", REF,
+               "--out_dir", OUT_DIR,
+               "--map_qual_cutoff", str(MAPQ_CUTOFF),
+               "--read_qual_cutoff", str(READ_QUAL_CUTOFF),
+               "--max_prop_n", str(MAX_PROP_N),
+               "--window_size", str(WINDOW_SIZE),
+               "--window_slide", str(WINDOW_SLIDE),
+               "--window_breadth_cutoff", str(MIN_WINDOW_BREADTH_COV_FRACTION),
+               "--window_depth_cutoff", str(MIN_WINDOW_DEPTH_COV),
+               "--threads_per_window", str(THREADS_PER_WINDOW),
+               "--concurrent_windows", str(WINDOW_PROCS),
+               "--output_csv_filename", OUT_CSV_FILENAME,
+               "--hyphy_exe", HYPHY_EXE,
+               "--hyphy_basedir", HYPHY_BASEDIR,
+               "--fastree_exe", FASTTREE_EXE,
+               "--mode", umberjack.MODE_COUNT_SUBS]
+        subprocess.check_call(cmd, env=os.environ)
+
+
+
+
 if __name__ == '__main__':
     settings.setup_logging()
     unittest.main()
