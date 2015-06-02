@@ -112,6 +112,7 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
                 end_window_nucpos, map_qual_cutoff, read_qual_cutoff, max_prop_N, insert, mask_stop_codon, remove_duplicates,
                 threads_per_window=settings.DEFAULT_THREADS_PER_WINDOW, mode=settings.DEFAULT_MODE,
                 hyphy_exe=settings.DEFAULT_HYPHY_EXE, hyphy_basedir=settings.DEFAULT_HYPHY_BASEDIR,
+                hyphy_libdir=settings.DEFAULT_HYPHY_LIBDIR,
                 fastree_exe=settings.DEFAULT_FASTTREEMP_EXE):
     """
     Handles the processing for a single window along the genome.
@@ -137,7 +138,8 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
     :param int threads_per_window: number of threads allotted to processing this window  (only FastTree and HyPhy will be multithreaded)
     :param str mode: one of [DNDS, GTR_RATE].  Calculate codon site dN/dS or window-specific nucleotide substitution rates.
     :param str hyphy_exe: full filepath to HYPHYMP executable
-    :param str hyphy_basedir:  full filepath to HyPhy base directory containing the template batch files
+    :param str hyphy_basedir:  full filepath to directory containing the custom HyPhy template batch files
+    :param str hyphy_libdir:  full filepath to directory containing the out of box HyPhy template batch files
     :param str fastree_exe: full filepath to FastTreeMP or FastTree executable
     """
 
@@ -178,10 +180,12 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
 
         if mode == MODE_DNDS:
             hyphy.calc_dnds(codon_fasta_filename=msa_window_fasta_filename, tree_filename=fastree_treefilename,
-                            hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, threads=threads_per_window)
+                            hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, hyphy_libdir=hyphy_libdir,
+                            threads=threads_per_window)
         elif mode == MODE_COUNT_SUBS:
             hyphy.count_site_branch_subs(codon_fasta_filename=msa_window_fasta_filename, rooted_treefile=rooted_treefile,
-                            hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, threads=threads_per_window)
+                            hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, hyphy_libdir=hyphy_libdir,
+                            threads=threads_per_window)
         elif mode == MODE_GTR_CMP:
             hyphy.calc_nuc_subst(hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, threads=threads_per_window,
                                  codon_fasta_filename=msa_window_fasta_filename, tree_filename=fastree_treefilename)
@@ -245,7 +249,9 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
                        insert, mask_stop_codon, remove_duplicates,
                        output_csv_filename, mode=settings.DEFAULT_MODE,
                        threads_per_window=1, concurrent_windows=1,
-                       hyphy_exe=settings.DEFAULT_HYPHY_EXE, hyphy_basedir=settings.DEFAULT_HYPHY_BASEDIR, fastree_exe=settings.DEFAULT_FASTTREEMP_EXE,
+                       hyphy_exe=settings.DEFAULT_HYPHY_EXE, hyphy_basedir=settings.DEFAULT_HYPHY_BASEDIR,
+                       hyphy_libdir=settings.DEFAULT_HYPHY_LIBDIR,
+                       fastree_exe=settings.DEFAULT_FASTTREEMP_EXE,
                        debug=False):
     """
     Launch a separate process to analyze each window.
@@ -274,7 +280,8 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
     :param str output_csv_filename:  name of output comma separated file containing per-site results averaged across overlapping windows .  Will be created under out_dir.
     :param str mode:  one of [DNDS, GTR_RATE] for calculating codon-site specific dN/dS, or window-specific general time reversible nucleotide substitution rates
     :param str hyphy_exe:  full filepath to HYPHYMP executable
-    :param str hyphy_basedir:  full filepath to HyPhy base directory containing the template batch files
+    :param str hyphy_basedir:  full filepath to HyPhy base directory containing the out-of-box template batch files
+    :param str hyphy_libdir:  full filepath to containing the custom HyPhy template batch files
     :param str fastree_exe:  full filepath to FastTreeMP executable
     :param bool debug:  if True, outputs full genome multiple sequence alignment
     """
@@ -326,6 +333,7 @@ def eval_windows_async(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cu
                        "mode": mode,
                        "hyphy_exe": hyphy_exe,
                        "hyphy_basedir": hyphy_basedir,
+                       "hyphy_libdir": hyphy_libdir,
                        "fastree_exe": fastree_exe}
 
 
@@ -376,7 +384,7 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
                      end_nucpos, window_size, window_depth_cutoff, window_breadth_cutoff, window_slide,
                      insert, mask_stop_codon, remove_duplicates,
                      output_csv_filename, mode, threads_per_window,
-                     hyphy_exe, hyphy_basedir,
+                     hyphy_exe, hyphy_basedir,  hyphy_libdir,
                      fastree_exe, debug):
     """
     Launch a separate process to analyze each window via MPI.  Similar to eval_windows_async, but uses MPI.
@@ -402,7 +410,8 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
     :param str output_csv_filename:  name of output comma separated file containing per-site results averaged across overlapping windows .  Will be created under out_dir.
     :param str mode:  one of [DNDS, GTR_RATE] for calculating codon-site specific dN/dS, or window-specific general time reversible nucleotide substitution rates.
     :param str hyphy_exe:  full filepath to HYPHYMP executable
-    :param str hyphy_basedir:  full filepath to HyPhy base directory containing the template batch files
+    :param str hyphy_basedir:  full filepath to directory containing the custom template batch files
+    :param str hyphy_libdir:  full filepath to HyPhy directory containing the out of box template batch files
     :param str fastree_exe:  full filepath to FastTreeMP executable
     :param bool debug:  if True, outputs full genome multiple sequence alignment
     """
@@ -473,6 +482,7 @@ def eval_windows_mpi(ref, sam_filename, out_dir, map_qual_cutoff, read_qual_cuto
                                    "mode": mode,
                                    "hyphy_exe": hyphy_exe,
                                    "hyphy_basedir": hyphy_basedir,
+                                   "hyphy_libdir": hyphy_libdir,
                                    "fastree_exe": fastree_exe}
                     replica_rank = available_replicas.pop(0)
 
@@ -613,7 +623,9 @@ def main():
     parser.add_argument("--hyphy_exe", default=settings.DEFAULT_HYPHY_EXE,
                         help="full filepath of HYPHYMP executable.  Default: taken from PATH")
     parser.add_argument("--hyphy_basedir", default=settings.DEFAULT_HYPHY_BASEDIR,
-                        help="full filepath of HyPhy base directory containing template batch files.")
+                        help="full filepath of custom HyPhy template batch files.")
+    parser.add_argument("--hyphy_libdir", default=settings.DEFAULT_HYPHY_LIBDIR,
+                        help="full filepath of HyPhy base directory of out-of-box template batch files.")
     parser.add_argument("--fastree_exe", default=settings.DEFAULT_FASTTREEMP_EXE,
                         help="full filepath of FastTreeMP or FastTree executable.  Default: taken from PATH")
     parser.add_argument("--mode", default=settings.DEFAULT_MODE, choices=[MODE_DNDS, MODE_GTR_RATE, MODE_COUNT_SUBS],

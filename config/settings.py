@@ -63,7 +63,8 @@ DEFAULT_THREADS_PER_WINDOW = 1
 DEFAULT_CONCURRENT_WINDOWS = 1
 DEFAULT_OUTPUT_CSV_FILENAME = "umberjack.out.csv"
 DEFAULT_HYPHY_EXE = "HYPHYMP"
-DEFAULT_HYPHY_BASEDIR = "/usr/local/lib/hyphy/TemplateBatchFiles/"
+DEFAULT_HYPHY_BASEDIR = os.path.abspath(os.path.realpath(__file__) + os.sep + os.pardir + os.sep + os.pardir + os.sep + "hyphy" + os.sep + "batchfile")
+DEFAULT_HYPHY_LIBDIR = os.path.abspath(os.path.realpath(__file__) + os.sep + os.pardir + os.sep + os.pardir + os.sep + "test" + os.sep + "simulations" + os.sep + "bin" + os.sep + "hyphy" + os.sep + "hyphy_2.2.3" + os.sep + "res")
 DEFAULT_FASTREE_EXE = "FastTree"
 DEFAULT_FASTTREEMP_EXE = "FastTreeMP"
 DEFAULT_MODE =  "DNDS"
@@ -114,6 +115,7 @@ def setup_umberjack_config(config_file=DEFAULT_UMBERJACK_CONFIG_FILE, argname_pr
         "mode": DEFAULT_MODE,
         "hyphy_exe": DEFAULT_HYPHY_EXE,
         "hyphy_basedir": DEFAULT_HYPHY_BASEDIR,
+        "hyphy_libdir": DEFAULT_HYPHY_LIBDIR,
         "fastree_exe": DEFAULT_FASTREE_EXE,
         "output_csv_filename": DEFAULT_OUTPUT_CSV_FILENAME,
         "mpi":  DEFAULT_MPI,

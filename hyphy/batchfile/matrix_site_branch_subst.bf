@@ -4,6 +4,11 @@ Spits out a tab-separated file containing substitutions for each site at each br
 Columns:
 Site, ParentNode, ChildNode,  Nonsynonymous Substitutions, Synonymous Substitutions, Expected nonsynonymous Substitutions, Expected synonymous substitutions
 
+and/or 
+
+Spits out a tab-separate file containing site substituions and site dn-ds.
+Columns:
+Site, Observed S Changes, Observed NS Changes,  E[S Sites], E[NS Sites], dN, dS, dN-dS, Scaled dN-dS
 
 
 Tries to duplicate the behaviour QuickSelectonDetection.bf and SGEmulator.bf as much as possible.

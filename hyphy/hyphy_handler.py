@@ -6,6 +6,7 @@ import config.settings as settings
 LOGGER = logging.getLogger(__name__)
 
 SELECTION_BF = "QuickSelectionDetection.bf"
+COUNT_SUBS_BF = "CountSubs.bf"
 NUC_MODEL_CMP_BS = "GTRrate.bf"
 
 
@@ -22,6 +23,7 @@ HYPHY_TSV_EXP_N_COL = 'E[NS Sites]'
 
 
 def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=settings.DEFAULT_HYPHY_EXE, hyphy_basedir=settings.DEFAULT_HYPHY_BASEDIR,
+              hyphy_libdir=settings.DEFAULT_HYPHY_LIBDIR,
               threads=1, debug=False):
     """
     Calculates sitewise dN/dS using Single-most Likely Ancestor Counting with branch corrections.
@@ -38,6 +40,7 @@ def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=settings.DEFAULT_HY
     :param str tree_filename: path to phylogenetic tree for sequences in fasta.
     :param str hyphy_exe:  path to multithreaded (but not MPI enabled) hyphy executable HYPHYMP.  If empty, uses HYPHYMP from PATH.
     :param str hyphy_basedir:  path to HyPhy TemplateBatchFiles directory.  If empty, uses /usr/local/lib/hyphy/TemplateBatchFiles
+    :param str hyphy_libdir:  path to HyPhy Custom LIBDIR containing the out of box hyphy batch files.
     :param int threads:  HyPhy threads.  Note that HyPhy won't use more than 4 CPU for nucleotide model fitting and dN/dS calculations even if you give it more.
             Default 1.
     :param bool debug:  If True, then outputs hyphy stdout to log.
@@ -46,34 +49,34 @@ def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=settings.DEFAULT_HY
     :rtype: str
     """
     hyphy_filename_prefix = os.path.splitext(codon_fasta_filename)[0]  # Remove .fasta suffix
-    hyphy_modelfit_filename = hyphy_filename_prefix + ".nucmodelfit"
+    hyphy_modelfit_filename = hyphy_filename_prefix + ".codonmodelfit"
     hyphy_dnds_tsv_filename = hyphy_filename_prefix + ".dnds.tsv"
+    hyphy_codon_br_len_tsv_filename = hyphy_filename_prefix + ".codon.brlen.csv"
+    hyphy_anc_fasta = hyphy_filename_prefix + ".anc.fasta"
+
     if debug:
         hyphy_log = hyphy_filename_prefix + ".hyphy.log"
     else:
         hyphy_log = os.devnull
     LOGGER.debug("Start HyPhy dN/dS " + hyphy_dnds_tsv_filename)
     if not os.path.exists(hyphy_dnds_tsv_filename) or os.path.getsize(hyphy_dnds_tsv_filename) <= 0:
-        hyphy_input_str = "\n".join(["1",  # Universal
-                                     "1",  # New analysis
+        hyphy_input_str = "\n".join([ "-1",  # No per-site-branch substitution TSV file
+                                     os.path.abspath(hyphy_dnds_tsv_filename),  # dN/dS tsv output file
+                                    "1",  # Universal Genetic Code
                                      os.path.abspath(codon_fasta_filename),  # codon fasta
-                                     "2",  #(2):[Custom] Use any reversible nucleotide model crossed with MG94.
-                                     "012345",  # GTR
                                      os.path.abspath(tree_filename),  # tree file
                                      os.path.abspath(hyphy_modelfit_filename),  # model fit output file
-                                     "3",  #(3):[Estimate] Estimate from data with branch corrections(slower).
-                                     "1",  # Single Ancestor Counting
-                                     "1",  # Full tree
-                                     "1",  # Averaged
-                                     "1",  # Approximate extended binomial distro
-                                     "0.05",  # pvalue threshold for determining statistically significant dN/dS > 1 or dN/dS < 1.
-                                     "2",  # Export to file
-                                     os.path.abspath(hyphy_dnds_tsv_filename),  # dN/dS tsv output file
-                                     "1\n"])  # Do not count approximate numbers of dN, dS rate classes supported by data
+                                     os.path.abspath(hyphy_codon_br_len_tsv_filename), # codon tree branch length csv
+                                     os.path.abspath(hyphy_anc_fasta),  # reconstructed ancestor + tips fasta
+                                     "\n"])
 
         # Feed window tree into hyphy to find dnds for the window
         with open(hyphy_log, 'w') as hyphy_log_fh:
-            hyphy_cmd = [hyphy_exe, "BASEPATH=" + hyphy_basedir, "CPU=" + str(threads), SELECTION_BF]
+            hyphy_cmd = [hyphy_exe,
+                         "BASEPATH=" + hyphy_basedir,
+                         "LIBPATH=" + hyphy_libdir,
+                         "CPU=" + str(threads),
+                         COUNT_SUBS_BF]
             hyphy_proc = subprocess.Popen(hyphy_cmd, stdin=subprocess.PIPE, stdout=hyphy_log_fh,
                                           stderr=hyphy_log_fh,
                                           shell=False, env=os.environ)
@@ -89,8 +92,10 @@ def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=settings.DEFAULT_HY
     return hyphy_dnds_tsv_filename
 
 
-def count_site_branch_subs(codon_fasta_filename, rooted_treefile, hyphy_exe=settings.DEFAULT_HYPHY_EXE, hyphy_basedir=settings.DEFAULT_HYPHY_BASEDIR,
-              threads=1, debug=False):
+def count_site_branch_subs(codon_fasta_filename, rooted_treefile,
+                           hyphy_exe=settings.DEFAULT_HYPHY_EXE, hyphy_basedir=settings.DEFAULT_HYPHY_BASEDIR,
+                           hyphy_libdir=settings.DEFAULT_HYPHY_LIBDIR,
+                           threads=1, debug=False):
     """
     Calculates sitewise dN/dS using Single-most Likely Ancestor Counting with branch corrections.
     Averages substitutions across all possible codons for ambiguous codons.
@@ -106,6 +111,7 @@ def count_site_branch_subs(codon_fasta_filename, rooted_treefile, hyphy_exe=sett
     :param str rooted_treefile: path to phylogenetic tree for sequences in fasta.
     :param str hyphy_exe:  path to multithreaded (but not MPI enabled) hyphy executable HYPHYMP.  If empty, uses HYPHYMP from PATH.
     :param str hyphy_basedir:  path to HyPhy Custom Batchfile Dir.
+    :param str hyphy_libdir:  path to HyPhy Custom LIBDIR containing the out of box hyphy batch files.
     :param int threads:  HyPhy threads.  Note that HyPhy won't use more than 4 CPU for nucleotide model fitting and dN/dS calculations even if you give it more.
             Default 1.
     :param bool debug:  If True, then outputs hyphy stdout to log.
@@ -114,7 +120,6 @@ def count_site_branch_subs(codon_fasta_filename, rooted_treefile, hyphy_exe=sett
     :rtype: str
     """
     rooted_treefile_suffix = os.path.splitext(rooted_treefile)[1]
-    nucmodelfit = rooted_treefile.replace(rooted_treefile_suffix, ".nucmodelfit")
     codonmodelfit = rooted_treefile.replace(rooted_treefile_suffix, ".codonmodelfit")
     leaf_anc_fasta = rooted_treefile.replace(rooted_treefile_suffix, ".anc.fasta")
     subst_tsv = rooted_treefile.replace(rooted_treefile_suffix, ".subst.tsv")
@@ -122,33 +127,38 @@ def count_site_branch_subs(codon_fasta_filename, rooted_treefile, hyphy_exe=sett
     # The hyphy alignment nexus file seems to always use the original tree instead of the whatever modifications by hyphy
     # Unfortunately, hyphy doesn't output branch lengths into the newick.  Instead, we have to get branch lengths from separate csvs
     # Check if branch lengths are actually constrained by hyphy's updated tree
-    codon_treefile = leaf_anc_fasta.replace(".anc.fasta", ".codon.nwk")
-    codontree_branchlen_csv = codon_treefile.replace(".nwk", ".branchlen.csv")
+    codontree_branchlen_csv = rooted_treefile_suffix.replace(rooted_treefile_suffix, ".codon.brlen.csv")
 
     LOGGER.debug("Counting site-branch subs for " + rooted_treefile)
     if (os.path.exists(leaf_anc_fasta) and os.path.getsize(leaf_anc_fasta) and
-            os.path.exists(codon_treefile) and os.path.getsize(codon_treefile) and
             os.path.exists(codontree_branchlen_csv) and os.path.getsize(codontree_branchlen_csv) and
             os.path.exists(subst_tsv) and os.path.getsize(subst_tsv)):
-        LOGGER.warn("Not regenerating {} , {} , {}".format(leaf_anc_fasta,codon_treefile,  codontree_branchlen_csv))
+        LOGGER.warn("Not regenerating {} , {} , {}".format(leaf_anc_fasta, codontree_branchlen_csv, subst_tsv))
     else:
-        hyphy_input_str = "\n".join([codon_fasta_filename,  # msa aligned fasta of both samples
-                                     rooted_treefile ,  # richard's root to tip rooted tree file.  length in nucleotide substitutions/site
-                                     nucmodelfit,  # nucleotide model fit
-                                     codonmodelfit, # codon model fit
-                                     leaf_anc_fasta,  #  leaf and ancestor fasta
-                                     subst_tsv,  # substitutions at each site-branch in tsv format
-                                     codon_treefile,  # output tree in scaled to codon substitution/site lengths
-                                     codontree_branchlen_csv  # csv for codon tree branch name and lengths
+        if debug:
+            hyphy_log = rooted_treefile.replace(rooted_treefile_suffix, ".hyphy.log")
+        else:
+            hyphy_log = os.devnull
 
-        ]) + "\n"
+        LOGGER.debug("Start HyPhy Site-Branch Sub Count " + subst_tsv)
 
-        # Feed window tree into hyphy to find ancestor sequences for the window
-        hyphy_log = nucmodelfit.replace(".nucmodelfit", ".hyphy.log")
+        hyphy_input_str = "\n".join([ subst_tsv,  # Per-site-branch substitution TSV file
+                                      "-1",  # No dN/dS tsv output file
+                                      "1",  # Universal Genetic Code
+                                      os.path.abspath(codon_fasta_filename),  # codon fasta
+                                      os.path.abspath(rooted_treefile),  # tree file
+                                      os.path.abspath(codonmodelfit),  # model fit output file
+                                      os.path.abspath(codontree_branchlen_csv), # codon tree branch length csv
+                                      os.path.abspath(leaf_anc_fasta),  # reconstructed ancestor + tips fasta
+                                      "\n"])
+
+        # Feed window tree into hyphy to find dnds for the window
         with open(hyphy_log, 'w') as hyphy_log_fh:
-            hyphy_cmd = [hyphy_exe, "CPU={}".format(threads),
+            hyphy_cmd = [hyphy_exe,
                          "BASEPATH=" + hyphy_basedir,
-                         "ReconstructAncestorSeq.bf"]
+                         "LIBPATH=" + hyphy_libdir,
+                         "CPU=" + str(threads),
+                         COUNT_SUBS_BF]
             hyphy_proc = subprocess.Popen(hyphy_cmd, stdin=subprocess.PIPE, stdout=hyphy_log_fh,
                                           stderr=hyphy_log_fh,
                                           shell=False, env=os.environ)
