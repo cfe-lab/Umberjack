@@ -48,7 +48,7 @@ class TestHyphyHandler(unittest.TestCase):
         Test that the output does not get overwritten.
         :return:
         """
-        dnds = hyphy.calc_dnds(codon_fasta_filename=self.tmpfasta.name, tree_filename=self.tmptree.name, threads=2)
+        dnds = hyphy.calc_dnds(codon_fasta_filename=self.tmpfasta.name, tree_filename=self.tmptree.name, threads=2, debug=True)
         self.assertTrue(dnds and os.path.exists(dnds), "HyPhy sitewise dN/dS file was not created")
 
         # Check number of lines in file = total sites + 1 (header)
