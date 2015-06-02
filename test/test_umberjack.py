@@ -20,7 +20,8 @@ R_DIR = SIM_DIR + os.sep + "R"
 SIM_PIPELINE_PY = os.path.dirname(os.path.realpath(__file__)) + os.sep + "simulations" + os.sep + "sim_pipeline.py"
 UMBERJACK_PY = os.path.dirname(os.path.realpath(__file__)) + os.sep + os.pardir + os.sep + "umberjack.py"
 HYPHY_EXE = SIM_BIN_DIR + os.sep + "hyphy" + os.sep + "hyphy_2.2.3" + os.sep + "linux_x64" + os.sep + "HYPHYMP"
-HYPHY_BASEDIR = SIM_BIN_DIR + os.sep + "hyphy" + os.sep + "hyphy_2.2.3" + os.sep + "res" + os.sep + "TemplateBatchFiles"
+HYPHY_LIBDIR = SIM_BIN_DIR + os.sep + "hyphy" + os.sep + "hyphy_2.2.3" + os.sep + "res" + os.sep + "TemplateBatchFiles"
+HYPHY_BASEDIR = os.path.abspath(os.path.realpath(__file__) + os.sep + os.pardir + os.sep + os.pardir + "hyphy" + os.sep + "batchfile")
 FASTTREE_EXE = SIM_BIN_DIR + os.sep + "fasttree" + os.sep + "fasttree_2.1.7" + os.sep + "linux_x64" + os.sep + "FastTree"
 
 # INDELible dN/dS values that INDELible is aiming to simulate
@@ -118,8 +119,8 @@ class TestUmberjack(unittest.TestCase):
             fh_config.write("--threads_per_window  {}\n".format(THREADS_PER_WINDOW))
             fh_config.write("--concurrent_windows  {}\n".format(WINDOW_PROCS))
             fh_config.write("--output_csv_filename  {}\n".format(ACTUAL_DNDS_FILENAME))
-            fh_config.write("--hyphy_exe  {}\n".format(HYPHY_EXE))
-            fh_config.write("--hyphy_basedir  {}\n".format(HYPHY_BASEDIR))
+            #fh_config.write("--hyphy_exe  {}\n".format(HYPHY_EXE))
+            #fh_config.write("--hyphy_basedir  {}\n".format(HYPHY_BASEDIR))
             fh_config.write("--fastree_exe  {}\n".format(FASTTREE_EXE))
             fh_config.write("--mode  {}\n".format(MODE))
             fh_config.write("--debug  \n")
