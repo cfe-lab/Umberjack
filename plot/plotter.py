@@ -22,6 +22,7 @@ def plot_dnds(dnds_csv, dnds_img=None, Rscript_exe=RSCRIPT_EXE):
     :param str Rscript_exe:  path to Rscript executable.  If empty, takes Rscript from PATH environment variable.
     :return:
     """
+    LOGGER.debug("Plotting Ave dN/dS results for " + dnds_csv)
     if not dnds_img:
         if dnds_csv.endswith(".csv"):
             dnds_img = dnds_csv.replace(".csv", ".pdf")
@@ -32,3 +33,4 @@ def plot_dnds(dnds_csv, dnds_img=None, Rscript_exe=RSCRIPT_EXE):
             dnds_csv,
             dnds_img]
     subprocess.check_call(rcmd, env=os.environ)
+    LOGGER.debug("Done Plotting Ave dN/dS results for " + dnds_csv)

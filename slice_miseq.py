@@ -296,7 +296,7 @@ def get_seq_dnds_info(dnds_tsv_dir, ref_codon_len):
 
 
 
-def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, output_csv_filename, comments):
+def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, output_csv_filename, comments=""):
     """
     Aggregate selection information from multiple windows for each codon site.
     Output selection information into a tab separated file with the following columns:
@@ -328,6 +328,8 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, output_csv_filename, comments)
     :param str output_csv_filename: full filepath of aggregated selection tsv to write to
     :param str comments: any comments to add at the top of the aggregated selection tsv
     """
+    LOGGER.debug("Start Ave Dn/DS for all windows for dir=" + dnds_tsv_dir + " ref=" + ref + " " + output_csv_filename)
+
     seq_dnds_info = get_seq_dnds_info(dnds_tsv_dir=dnds_tsv_dir,
                                       ref_codon_len=ref_nuc_len / Utility.NUC_PER_CODON)
 
@@ -362,6 +364,7 @@ def tabulate_dnds(dnds_tsv_dir, ref, ref_nuc_len, output_csv_filename, comments)
             outrow["dnMinusDsWeightBySubsNoLowSubs"] = site_dnds_info.get_ave_dn_minus_ds_weightby_subs(is_exclude_low_sub=True)
             writer.writerow(outrow)
 
+    LOGGER.debug("Done Ave Dn/DS for all windows  for dir=" + dnds_tsv_dir + " ref=" + ref + ".  Wrote to " + output_csv_filename)
     return seq_dnds_info
 
 
@@ -415,7 +418,7 @@ def tabulate_nuc_subst(nucmodelfit_dir, output_csv_filename, comments):
                                                                            init_base, end_base, mutation, nonsym_rate]) + "\n")
 
 
-def tabulate_rates(fasttree_output_dir, output_csv_filename, comments):
+def tabulate_rates(fasttree_output_dir, output_csv_filename, comments=""):
     """
     Collects all the GTR model rates from all the fasttree logs in a directory and puts them into output_csv_filename.
     ASSUME that multiple sequence aligned file is in the same folder
@@ -423,9 +426,8 @@ def tabulate_rates(fasttree_output_dir, output_csv_filename, comments):
     :return:
     """
     import fnmatch
-    # .../out/RunABC/HIV1B-nef/ABC_S89.HIV1B-nef.msa.1_300.fasttree.log
+    LOGGER.debug("Start Tabulate GTR Rates for All Windows For dir " + fasttree_output_dir + " " + output_csv_filename)
     with  open(output_csv_filename,'w') as fh_out:
-
         fh_out.write("#" + comments + "\n")
         #writer = csv.DictWriter(fh_out, fieldnames=["ID","Ref","Window_Start","Window_End","Window_Reads","Non_Gap_Window_Start","Mutation,Rate"])
         fh_out.write("ID,Ref,Window_Start,Window_End,Window_Reads,Non_Gap_Window_Start,Mutation,Rate\n")
@@ -455,3 +457,4 @@ def tabulate_rates(fasttree_output_dir, output_csv_filename, comments):
                                   str(nongap_window_start),
                                   mutation,
                                   str(rate)]) + "\n")
+    LOGGER.debug("Done Tabulate GTR Rates for all windows for dir " + fasttree_output_dir + " " + output_csv_filename)

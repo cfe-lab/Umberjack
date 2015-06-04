@@ -5,6 +5,7 @@ from itertools import chain
 import os
 import logging
 import logging.config
+import sys
 
 VERSION = "1.0.0"
 
@@ -12,31 +13,46 @@ VERSION = "1.0.0"
 ###########################################
 DEFAULT_LOG_CONFIG_FILE = os.path.dirname(os.path.realpath(__file__)) + os.sep + "logging.conf"
 
+
+
 DEFAULT_LOG_CONFIG_DICT =  {
     "version": 1,
     "disable_existing_loggers": False,
-    "loggers":{
-        "root":{
-            "handlers":["rotatingfile"],
-            "level":"DEBUG",
+    "filters": {
+        "hostnamefilter": {
+            "()": "config.filters.HostnameFilter"
+        }
+    },
+    "formatters":{
+        "full":{
+            "format":"%(asctime)s - [%(levelname)s] [%(name)s] [%(hostname)s] [%(process)d] %(message)s",
+            # "format":"%(asctime)s - [%(levelname)s] [%(name)s] [%(process)d] %(message)s",
+            "datefmt": ""  # leave datefmt emtpy to use default ISO8601 format %Y-%m-%d %H:%M:%S,%s
         }
     },
     "handlers":{
         "rotatingfile": {
-            "class": "logging.handlers.RotatingFileHandler",
             "formatter": "full",
+            "filters": ["hostnamefilter"],
+            "class": "logging.handlers.RotatingFileHandler",
             "filename": "umberjack.log",
             "maxBytes": 1000000000,  # 1 GB
             "backupCount": 20,
             "mode": "a",
             "encoding": "utf8"
+        },
+        "console": {
+            "formatter": "full",
+            "filters": ["hostnamefilter"],
+            "class": "logging.StreamHandler",
+            "stream": sys.stdout,
         }
     },
-    "formatters":{
-        "full":{
-            "format":"%(asctime)s - [%(levelname)s] [%(name)s] [%(process)d] %(message)s",
-            "datefmt": ""  # leave datefmt emtpy to use default ISO8601 format %Y-%m-%d %H:%M:%S,%s
-        }
+    # In dictConfig, the root logger must be specified parallel to handlers, formatters, filters.
+    # If the root logger config is inside the "loggers" tag, it will not apply to the root logger.
+    "root":{
+        "handlers":["rotatingfile", "console"],
+        "level":"DEBUG"
     }
 }
 
@@ -81,10 +97,16 @@ def setup_logging(config_file=DEFAULT_LOG_CONFIG_FILE):
     :param str config_file:  file path to logging configuration file.
     """
     # if the logging.conf file doesn't exist, then use settings.DEFAULT_LOG_CONFIG_DICT configurations (DEBUG logging to RotatingFile)
-    if not os.path.exists(config_file):
-        logging.config.dictConfig(DEFAULT_LOG_CONFIG_DICT)
-    else:
-        logging.config.fileConfig(config_file, disable_existing_loggers=False)
+    logging.config.dictConfig(DEFAULT_LOG_CONFIG_DICT)
+
+    # NB:  fileconfig does not handle filters - how do we output IP without it???
+
+    # if not os.path.exists(config_file):
+    #     logging.config.dictConfig(DEFAULT_LOG_CONFIG_DICT)
+    # else:
+    #     logging.config.fileConfig(config_file, disable_existing_loggers=False)
+
+
 
 def setup_umberjack_config(config_file=DEFAULT_UMBERJACK_CONFIG_FILE, argname_prefix=""):
     """

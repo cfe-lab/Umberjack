@@ -1,10 +1,12 @@
 import unittest
 import umberjack
+import pool.UmberjackPool
 import os
 import subprocess
 import Utility
 import shutil
 import csv
+import logging
 import config.settings as settings
 
 # Simulation Configs
@@ -34,7 +36,7 @@ EXPECTED_DNDS_FILENAME = SIM_DATA_DIR + os.sep + "mixed" + os.sep + SIM_DATA_FIL
 POPN_CONSENSUS_FASTA =  SIM_DATA_DIR + os.sep + "mixed" + os.sep + SIM_DATA_FILENAME_PREFIX + ".mixed.consensus.fasta"
 REF = "consensus"
 
-MODE = umberjack.MODE_DNDS
+MODE = pool.UmberjackPool.MODE_DNDS
 INSERT = False
 MASK_STOP_CODON = True
 REMOVE_DUPLICATES  = True
@@ -53,7 +55,7 @@ WINDOW_PROCS = 3
 
 
 MIN_CONCORD = 0.8
-
+LOGGER = logging.getLogger(__name__)
 
 class TestUmberjack(unittest.TestCase):
 
@@ -75,23 +77,24 @@ class TestUmberjack(unittest.TestCase):
         """
         Generate simulated data for unit tests
         """
-        if os.path.exists(SIM_DATA_DIR):  # Clean the simulated data, except for the config file
-            dirpar, dirnames, files =  os.walk(SIM_DATA_DIR).next()
-            for dirname in dirnames:
-                full_dirpath = dirpar + os.sep + dirname
-                shutil.rmtree(full_dirpath)
-                print ("Removed " + full_dirpath)
-            for file in files:
-                full_filepath = dirpar + os.sep + file
-                if full_filepath != SIM_DATA_CONFIG_FILE:
-                    os.remove(full_filepath)
-                    print ("Removed " + full_filepath)
-
-        if os.path.exists(SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX):
-            print ("Removed " + SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX)
-            shutil.rmtree(SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX)
-
-        subprocess.check_call(["python", SIM_PIPELINE_PY, SIM_DATA_CONFIG_FILE])
+        settings.setup_logging()
+        # if os.path.exists(SIM_DATA_DIR):  # Clean the simulated data, except for the config file
+        #     dirpar, dirnames, files =  os.walk(SIM_DATA_DIR).next()
+        #     for dirname in dirnames:
+        #         full_dirpath = dirpar + os.sep + dirname
+        #         shutil.rmtree(full_dirpath)
+        #         print ("Removed " + full_dirpath)
+        #     for file in files:
+        #         full_filepath = dirpar + os.sep + file
+        #         if full_filepath != SIM_DATA_CONFIG_FILE:
+        #             os.remove(full_filepath)
+        #             print ("Removed " + full_filepath)
+        #
+        # if os.path.exists(SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX):
+        #     print ("Removed " + SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX)
+        #     shutil.rmtree(SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX)
+        #
+        # subprocess.check_call(["python", SIM_PIPELINE_PY, SIM_DATA_CONFIG_FILE])
 
 
 
@@ -150,6 +153,7 @@ class TestUmberjack(unittest.TestCase):
         """
         Tests that umberjack runs properly from commandline.  Also tests no debug option.
         """
+
         OUT_DIR =   SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + "Window" + str(WINDOW_SIZE) + ".fromcmd"
         SAM_FILENAME = SIM_DATA_DIR + os.sep + "mixed" + os.sep + "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".mixed.reads.consensus.bwa.sort.query.sam"
         ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + 'actual_dnds_by_site.csv'
@@ -202,21 +206,25 @@ class TestUmberjack(unittest.TestCase):
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
 
         # i.e.  it's up to you to open up ./simulations/R/umberjack_unit_test.html and inspect the graphs/contents.
-        umberjack.eval_windows_async(ref=REF, sam_filename=SAM_FILENAME,
-                                               out_dir=OUT_DIR, map_qual_cutoff=MAPQ_CUTOFF,
-                                               read_qual_cutoff=READ_QUAL_CUTOFF, max_prop_n=MAX_PROP_N,
-                                               start_nucpos=START_NUCPOS, end_nucpos=END_NUCPOS,
-                                               window_size=WINDOW_SIZE,
-                                               window_depth_cutoff=MIN_WINDOW_DEPTH_COV,
-                                               window_breadth_cutoff=MIN_WINDOW_BREADTH_COV_FRACTION,
-                                               threads_per_window=THREADS_PER_WINDOW,
-                                               concurrent_windows=WINDOW_PROCS,
-                                               output_csv_filename=ACTUAL_DNDS_FILENAME,
-                                               window_slide=WINDOW_SLIDE,
-                                               insert=INSERT,
-                                               mask_stop_codon=MASK_STOP_CODON,
-                                               remove_duplicates=REMOVE_DUPLICATES,
-                                               debug=True)
+        from pool.OneNodeUmberjackPool import OneNodeUmberjackPool
+        kwargs = dict(ref=REF,
+                                         sam_filename=SAM_FILENAME,
+                                         out_dir=OUT_DIR, map_qual_cutoff=MAPQ_CUTOFF,
+                                         read_qual_cutoff=READ_QUAL_CUTOFF, max_prop_n=MAX_PROP_N,
+                                         start_nucpos=START_NUCPOS, end_nucpos=END_NUCPOS,
+                                         window_size=WINDOW_SIZE,
+                                         window_depth_cutoff=MIN_WINDOW_DEPTH_COV,
+                                         window_breadth_cutoff=MIN_WINDOW_BREADTH_COV_FRACTION,
+                                         threads_per_window=THREADS_PER_WINDOW,
+                                         concurrent_windows=WINDOW_PROCS,
+                                         output_csv_filename=ACTUAL_DNDS_FILENAME,
+                                         window_slide=WINDOW_SLIDE,
+                                         insert=INSERT,
+                                         mask_stop_codon=MASK_STOP_CODON,
+                                         remove_duplicates=REMOVE_DUPLICATES,
+                                         debug=True)
+        pool = OneNodeUmberjackPool(**kwargs)
+        pool.start()
 
         rconfig_file = R_DIR + os.sep + "umberjack_unit_test.config"
         with open(rconfig_file, 'w') as fh_out_config:
@@ -244,7 +252,8 @@ class TestUmberjack(unittest.TestCase):
         ERR_FREE_ACTUAL_DNDS_CSV = ERR_FREE_OUT_DIR + os.sep + 'actual_dnds_by_site.csv'
         START_NUCPOS = 1
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
-        umberjack.eval_windows_async(ref=REF,
+        from pool.OneNodeUmberjackPool import OneNodeUmberjackPool
+        kwargs = dict(ref=REF,
                                                sam_filename=ERR_FREE_SAM_FILENAME,
                                                out_dir=ERR_FREE_OUT_DIR,
                                                map_qual_cutoff=MAPQ_CUTOFF,
@@ -258,12 +267,14 @@ class TestUmberjack(unittest.TestCase):
                                                threads_per_window=THREADS_PER_WINDOW,
                                                concurrent_windows=WINDOW_PROCS,
                                                output_csv_filename=ERR_FREE_ACTUAL_DNDS_CSV,
-                                               mode=umberjack.MODE_DNDS,
+                                               mode=pool.UmberjackPool.MODE_DNDS,
                                                window_slide=WINDOW_SLIDE,
                                                insert=INSERT,
                                                mask_stop_codon=MASK_STOP_CODON,
                                                remove_duplicates=REMOVE_DUPLICATES,
                                                debug=True)
+        pool = OneNodeUmberjackPool(**kwargs)
+        pool.start()
 
         rconfig_file = R_DIR + os.sep + "umberjack_unit_test.config"
         with open(rconfig_file, 'w') as fh_out_config:
@@ -341,10 +352,46 @@ class TestUmberjack(unittest.TestCase):
 
 
     # TODO:  check the output
+    def test_count_subs_multi(self):
+        """
+        Tests that umberjack runs properly from commandline.  Also tests no debug option.
+        """
+        OUT_DIR =   SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + "Window" + str(WINDOW_SIZE) + ".checksubsmulti"
+        SAM_FILENAME = SIM_DATA_DIR + os.sep + "mixed" + os.sep + "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".mixed.reads.consensus.bwa.sort.query.sam"
+        ERR_FREE_SAM_FILENAME = SIM_DATA_DIR + os.sep + "mixed" + os.sep + "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".mixed.reads.errFree.consensus.bwa.sort.query.sam"
+
+        SAMFILE_LIST = SAM_FILENAME.replace(".sam", ".samlist.txt")
+        with open(SAMFILE_LIST, "w") as fh_list:
+            fh_list.write(SAM_FILENAME + "\n")
+            fh_list.write(ERR_FREE_SAM_FILENAME + "\n")
+        START_NUCPOS = 0
+        END_NUCPOS = 0
+
+        cmd = ["python", UMBERJACK_PY,
+               "--sam_filename_list", SAMFILE_LIST,
+               "--out_dir", OUT_DIR,
+               "--map_qual_cutoff", str(MAPQ_CUTOFF),
+               "--read_qual_cutoff", str(READ_QUAL_CUTOFF),
+               "--max_prop_n", str(MAX_PROP_N),
+               "--window_size", str(WINDOW_SIZE),
+               "--window_slide", str(WINDOW_SLIDE),
+               "--window_breadth_cutoff", str(MIN_WINDOW_BREADTH_COV_FRACTION),
+               "--window_depth_cutoff", str(MIN_WINDOW_DEPTH_COV),
+               "--threads_per_window", str(THREADS_PER_WINDOW),
+               "--concurrent_windows", str(WINDOW_PROCS),
+               "--hyphy_exe", HYPHY_EXE,
+               "--hyphy_basedir", HYPHY_BASEDIR,
+               "--fastree_exe", FASTTREE_EXE,
+               "--mode", pool.UmberjackPool.MODE_COUNT_SUBS]
+        subprocess.check_call(cmd, env=os.environ)
+
+
+
     def test_count_subs(self):
         """
         Tests that umberjack runs properly from commandline.  Also tests no debug option.
         """
+
         OUT_DIR =   SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + "Window" + str(WINDOW_SIZE) + ".checksubs"
         SAM_FILENAME = SIM_DATA_DIR + os.sep + "mixed" + os.sep + "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".mixed.reads.consensus.bwa.sort.query.sam"
         OUT_CSV_FILENAME = OUT_DIR + os.sep + 'site_branch_sub.csv'
@@ -365,8 +412,9 @@ class TestUmberjack(unittest.TestCase):
                "--hyphy_exe", HYPHY_EXE,
                "--hyphy_basedir", HYPHY_BASEDIR,
                "--fastree_exe", FASTTREE_EXE,
-               "--mode", umberjack.MODE_COUNT_SUBS]
+               "--mode", pool.UmberjackPool.MODE_COUNT_SUBS]
         subprocess.check_call(cmd, env=os.environ)
+
 
 
 

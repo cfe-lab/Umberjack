@@ -273,6 +273,27 @@ def get_reflen(sam_filename, ref):
     return None
 
 
+def get_refs(sam_filename):
+    """
+    :param str sam_filename:  path to sam file
+    :return list: reference names from sam header
+    """
+    refs = []
+    with open(sam_filename, 'rU') as fh_in:
+
+        for line in fh_in:
+            if not line.startswith(SamHeader.TAG_HEADER_PREFIX):
+                break
+            if line.startswith(SamHeader.TAG_REFSEQ_START):
+                line = line.rstrip()
+                for tag in line.split(SamHeader.TAG_SEP)[1:]:
+                    key, val = tag.split(SamHeader.TAG_KEY_VAL_SEP)
+                    if key == SamHeader.TAG_REFSEQ_NAME_KEY:
+                        refs.extend([val])
+
+    return refs
+
+
 def __make_uniq_sam_seq_dict(sam_filename, ref, mapping_cutoff, read_qual_cutoff, is_insert=False):
     """
     Goes through the sam, merges paired records, and finds merged sequences that are exact duplicates of other merged sequences.
