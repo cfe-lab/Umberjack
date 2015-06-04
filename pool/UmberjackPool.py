@@ -5,7 +5,7 @@ Defines worker class that should be subclassed
 import logging
 import os
 import config.settings
-import sam_handler
+import sam.sam_handler as sam_handler
 import math
 import fasttree.fasttree_handler as fasttree
 import hyphy.hyphy_handler as hyphy
