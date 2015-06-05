@@ -29,7 +29,8 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
             threads_per_window=config.settings.DEFAULT_THREADS_PER_WINDOW, mode=config.settings.DEFAULT_MODE,
             hyphy_exe=config.settings.DEFAULT_HYPHY_EXE, hyphy_basedir=config.settings.DEFAULT_HYPHY_BASEDIR,
             hyphy_libdir=config.settings.DEFAULT_HYPHY_LIBDIR,
-            fastree_exe=config.settings.DEFAULT_FASTTREEMP_EXE):
+            fastree_exe=config.settings.DEFAULT_FASTTREEMP_EXE,
+            debug=False):
     """
     Handles the processing for a single window along the genome.
     Creates the multiple sequence aligned fasta file for the window.
@@ -59,10 +60,6 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
     :param str fastree_exe: full filepath to FastTreeMP or FastTree executable
     """
     LOGGER.debug("Eval window {}-{}".format(start_window_nucpos, end_window_nucpos) + " for sam=" + sam_filename + " ref=" + ref)
-    LOGGER.debug("sam_filename=" + str(sam_filename) + "\n" +
-                 "ref=" + ref +
-                 "start_nucpos=" + str(start_window_nucpos) + "\n" +
-                 "end_nucpos=" + str(end_window_nucpos) )
 
     sam_filename_nopath = os.path.split(sam_filename)[1]
     sam_filename_prefix = os.path.splitext(sam_filename_nopath)[0]
@@ -97,11 +94,11 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
         if mode == MODE_DNDS:
             hyphy.calc_dnds(codon_fasta_filename=msa_window_fasta_filename, tree_filename=fastree_treefilename,
                             hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, hyphy_libdir=hyphy_libdir,
-                            threads=threads_per_window)
+                            threads=threads_per_window, debug=debug)
         elif mode == MODE_COUNT_SUBS:
             hyphy.count_site_branch_subs(codon_fasta_filename=msa_window_fasta_filename, rooted_treefile=rooted_treefile,
                             hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, hyphy_libdir=hyphy_libdir,
-                            threads=threads_per_window)
+                            threads=threads_per_window, debug=debug)
         elif mode == MODE_GTR_CMP:
             hyphy.calc_nuc_subst(hyphy_exe=hyphy_exe, hyphy_basedir=hyphy_basedir, threads=threads_per_window,
                                  codon_fasta_filename=msa_window_fasta_filename, tree_filename=fastree_treefilename)
@@ -345,11 +342,8 @@ class UmberjackPool(object):
         if not samfilelist and ref:
             return pardir
         sam_basename = os.path.basename(samfilename)
-        # TODO:  it makes more sense for <sam>/<ref>.  This is a hack for quick testing
-        #sam_ref_outdir = self.out_dir + os.sep + sam_basename + os.sep + ref
-
-        sam_prefix = sam_basename.split(".")[0]
-        sam_ref_outdir = pardir + os.sep + ref + os.sep + sam_prefix
+        sam_prefix = os.path.splitext(sam_basename)[0]
+        sam_ref_outdir = pardir + os.sep + sam_prefix + os.sep + ref
 
         return sam_ref_outdir
 
@@ -422,7 +416,8 @@ class UmberjackPool(object):
                                    "hyphy_exe": self.hyphy_exe,
                                    "hyphy_basedir": self.hyphy_basedir,
                                    "hyphy_libdir": self.hyphy_libdir,
-                                   "fastree_exe": self.fastree_exe}
+                                   "fastree_exe": self.fastree_exe,
+                                   "debug": self.debug}
                     yield window_args
 
 

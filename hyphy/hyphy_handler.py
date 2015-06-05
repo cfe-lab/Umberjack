@@ -50,6 +50,7 @@ def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=settings.DEFAULT_HY
     """
     hyphy_filename_prefix = os.path.splitext(codon_fasta_filename)[0]  # Remove .fasta suffix
     hyphy_modelfit_filename = hyphy_filename_prefix + ".codonmodelfit"
+    hyphy_site_br_subs_tsv_filename = hyphy_filename_prefix + ".subst.tsv"  # TODO:  don't always output per-site-branch subs - get user input
     hyphy_dnds_tsv_filename = hyphy_filename_prefix + ".dnds.tsv"
     hyphy_codon_br_len_tsv_filename = hyphy_filename_prefix + ".codon.brlen.csv"
     hyphy_anc_fasta = hyphy_filename_prefix + ".anc.fasta"
@@ -60,7 +61,7 @@ def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=settings.DEFAULT_HY
         hyphy_log = os.devnull
     LOGGER.debug("Start HyPhy dN/dS " + hyphy_dnds_tsv_filename)
     if not os.path.exists(hyphy_dnds_tsv_filename) or os.path.getsize(hyphy_dnds_tsv_filename) <= 0:
-        hyphy_input_str = "\n".join([ "-1",  # No per-site-branch substitution TSV file
+        hyphy_input_str = "\n".join([ os.path.abspath(hyphy_site_br_subs_tsv_filename),  # per-site-branch substitution TSV file
                                      os.path.abspath(hyphy_dnds_tsv_filename),  # dN/dS tsv output file
                                     "1",  # Universal Genetic Code
                                      os.path.abspath(codon_fasta_filename),  # codon fasta
@@ -70,6 +71,7 @@ def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=settings.DEFAULT_HY
                                      os.path.abspath(hyphy_anc_fasta),  # reconstructed ancestor + tips fasta
                                      "\n"])
 
+
         # Feed window tree into hyphy to find dnds for the window
         with open(hyphy_log, 'w') as hyphy_log_fh:
             hyphy_cmd = [hyphy_exe,
@@ -77,6 +79,9 @@ def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=settings.DEFAULT_HY
                          "LIBPATH=" + hyphy_libdir,
                          "CPU=" + str(threads),
                          COUNT_SUBS_BF]
+
+            LOGGER.debug("HyPhy cmd=" + " ".join(hyphy_cmd) + " log=" + str(hyphy_log)  + " input=" + hyphy_input_str)
+
             hyphy_proc = subprocess.Popen(hyphy_cmd, stdin=subprocess.PIPE, stdout=hyphy_log_fh,
                                           stderr=hyphy_log_fh,
                                           shell=False, env=os.environ)
@@ -159,6 +164,9 @@ def count_site_branch_subs(codon_fasta_filename, rooted_treefile,
                          "LIBPATH=" + hyphy_libdir,
                          "CPU=" + str(threads),
                          COUNT_SUBS_BF]
+
+            LOGGER.debug("HyPhy cmd=" + " ".join(hyphy_cmd) + " log=" + str(hyphy_log)  + " input=" + hyphy_input_str)
+
             hyphy_proc = subprocess.Popen(hyphy_cmd, stdin=subprocess.PIPE, stdout=hyphy_log_fh,
                                           stderr=hyphy_log_fh,
                                           shell=False, env=os.environ)
