@@ -312,7 +312,6 @@ class UmberjackPool(object):
         items = []
         with open(listfile, 'r') as fh_in:
             for line in fh_in:
-                LOGGER.debug("line=" + line)
                 line = line.rstrip()
                 items.extend([line])
         return items
@@ -434,14 +433,13 @@ class UmberjackPool(object):
         if self.mode == MODE_DNDS:
             kwds_list = []
             for samfile, ref in self.sam_ref_iter():
-                sam_prefix = os.path.basename(samfile).split(".")[0]
                 # TODO:  unhackl
                 ref_len = sam_handler.get_reflen(sam_filename=samfile, ref=ref)
                 sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref, samfilelist=self.sam_filename_list)
                 if sam_ref_outdir == self.out_dir:
                     output_csv_filename = self.output_csv_filename
                 else:
-                    output_csv_filename = sam_ref_outdir + os.sep + sam_prefix + "." + ref + ".dnds.csv"
+                    output_csv_filename = sam_ref_outdir + os.sep +os.path.basename(samfile).replace(".sam", ".dnds.csv")
                 # TODO:  hack to check if m
                 kwds_list.append({"dnds_tsv_dir": sam_ref_outdir,
                                   "ref": ref,
@@ -452,13 +450,12 @@ class UmberjackPool(object):
 
             plot_kws_list = []
             for samfile, ref in self.sam_ref_iter():
-                sam_prefix = os.path.basename(samfile).split(".")[0]
                 # TODO:  unhackl
                 sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref, samfilelist=self.sam_filename_list)
                 if sam_ref_outdir == self.out_dir:
                     output_csv_filename = self.output_csv_filename
                 else:
-                    output_csv_filename = sam_ref_outdir + os.sep + sam_prefix + "." + ref + ".dnds.csv"
+                    output_csv_filename = sam_ref_outdir + os.sep +os.path.basename(samfile).replace(".sam", ".dnds.csv")
                 plot_kws_list.append({"dnds_csv": output_csv_filename})
 
             self.spread_work(func=plotter.plot_dnds, work_args_iter=plot_kws_list)
@@ -466,13 +463,12 @@ class UmberjackPool(object):
         elif self.mode == MODE_GTR_RATE:
             kwds_list = []
             for samfile, ref in self.sam_ref_iter():
-                sam_prefix = os.path.basename(samfile).split(".")[0]
                 # TODO:  unhackl
                 sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref, samfilelist=self.sam_filename_list)
                 if sam_ref_outdir == self.out_dir:
                     output_csv_filename = self.output_csv_filename
                 else:
-                    output_csv_filename = sam_ref_outdir + os.sep + sam_prefix + "." + ref + ".gtr.csv"
+                    output_csv_filename = sam_ref_outdir + os.sep +os.path.basename(samfile).replace(".sam", ".gtr.csv")
                 kwds_list.append({"fasttree_output_dir": sam_ref_outdir,
                                   "output_csv_filename": output_csv_filename
                 })
@@ -486,8 +482,9 @@ class UmberjackPool(object):
         spread_work window processes asynchronously.
         :return:
         """
+        LOGGER.debug("About to spread window work")
         self.spread_work(func=eval_window, work_args_iter=self.window_iter())
-
+        LOGGER.debug("Done spread window work")
 
     def start(self):
         """
