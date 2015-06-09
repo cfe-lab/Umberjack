@@ -261,7 +261,7 @@ class UmberjackPool(object):
                                                   mapping_cutoff=mapping_cutoff, read_qual_cutoff=read_qual_cutoff,
                                                   max_prop_N=1.0, breadth_thresh=0.0, start_pos=0, end_pos=0,
                                                   do_insert_wrt_ref=is_insert, do_mask_stop_codon=is_mask_stop_codon,
-                                                  ref_len=0)
+                                                  ref_len=0, do_remove_dup=False)
 
             LOGGER.debug("Done Full MSA-Fasta from SAM for ref " + ref)
         else:
