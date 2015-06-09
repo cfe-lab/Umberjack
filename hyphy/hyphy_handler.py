@@ -132,7 +132,7 @@ def count_site_branch_subs(codon_fasta_filename, rooted_treefile,
     # The hyphy alignment nexus file seems to always use the original tree instead of the whatever modifications by hyphy
     # Unfortunately, hyphy doesn't output branch lengths into the newick.  Instead, we have to get branch lengths from separate csvs
     # Check if branch lengths are actually constrained by hyphy's updated tree
-    codontree_branchlen_csv = rooted_treefile_suffix.replace(rooted_treefile_suffix, ".codon.brlen.csv")
+    codontree_branchlen_csv = rooted_treefile.replace(rooted_treefile_suffix, ".codon.brlen.csv")
 
     LOGGER.debug("Counting site-branch subs for " + rooted_treefile)
     if (os.path.exists(leaf_anc_fasta) and os.path.getsize(leaf_anc_fasta) and
