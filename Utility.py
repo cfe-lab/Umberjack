@@ -633,7 +633,7 @@ class Consensus:
             metric_entropy = 0
         else:
             shannon_entropy = self.get_shannon_entropy(pos_0based, is_count_ambig, is_count_gaps, is_count_pad)
-            metric_entropy = shannon_entropy/math.log(total_seqs)
+            metric_entropy = shannon_entropy/math.log(total_seqs, 2)  # shannon entropy is wrt log2, make sure metric entropy also wrt log2
         return metric_entropy
 
 
