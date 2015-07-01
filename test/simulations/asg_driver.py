@@ -11,7 +11,7 @@ root = sys.argv[1]
 num_leafs = int(sys.argv[2])
 seed = int(sys.argv[3])
 
-whens = [5000];
+whens = [365];  # 1 HIV generation = 1 day.  5000 = 13 years
 how_manys = [num_leafs];
 
 # first 3 parameters are: resample_rate, selection_rate, mutation_rate

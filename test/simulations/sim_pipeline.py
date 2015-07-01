@@ -131,6 +131,6 @@ PROCS = config.getint(SECTION, "PROCS")
 HYPHY_EXE = get_path_str(config.get(SECTION, "HYPHY_EXE"), OUTDIR)
 HYPHY_BASEPATH = get_path_str(config.get(SECTION, "HYPHY_BASEPATH"), OUTDIR)
 hyphy_handler.calc_dnds(codon_fasta_filename=sample_genomes_fasta, tree_filename=sample_genomes_tree_fname,
-                        hyphy_exe=HYPHY_EXE, hyphy_basedir=HYPHY_BASEPATH, threads=PROCS)
+                        threads=PROCS)
 
 
