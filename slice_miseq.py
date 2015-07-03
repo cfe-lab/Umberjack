@@ -278,6 +278,11 @@ def get_seq_dnds_info(dnds_tsv_dir, ref_codon_len):
                 ref_codon_0based = win_start_codon_1based_wrt_ref + offset - 1
                 codons = aln.get_codon_depth(codon_pos_0based=offset, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
 
+                # TODO:  remove me -- hack to get past bug
+                if ref_codon_0based > len(seq_dnds_info):
+                    LOGGER.error("Invalid codon - past reference length")
+                    break
+
                 if dS == 0:
                     dnds = None
                 else:
