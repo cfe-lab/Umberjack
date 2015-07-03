@@ -390,11 +390,15 @@ class UmberjackPool(object):
 
 
                 if not self.start_nucpos:
-                    self.start_nucpos = 1
+                    queue_ref_start_nucpos = 1
+                else:
+                    queue_ref_start_nucpos = self.start_nucpos
                 if not self.end_nucpos:
-                    self.end_nucpos = sam_handler.get_reflen(queue_next_samfile, queue_next_ref)
+                    queue_ref_end_nucpos = sam_handler.get_reflen(queue_next_samfile, queue_next_ref)
+                else:
+                    queue_ref_end_nucpos =  self.end_nucpos
 
-                for start_window_nucpos in range(self.start_nucpos, self.end_nucpos-self.window_size-1, self.window_slide):
+                for start_window_nucpos in range(queue_ref_start_nucpos, queue_ref_end_nucpos-self.window_size-1, self.window_slide):
                     end_window_nucpos = start_window_nucpos + self.window_size - 1
                     LOGGER.debug("start_window_nucpos=" + str(start_window_nucpos))
                     window_args = {"window_depth_cutoff": self.window_depth_cutoff,
