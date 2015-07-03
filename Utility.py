@@ -313,6 +313,10 @@ class Consensus:
     AMBIG_NUC_CHAR = "N"
 
     TRUE_BASES = ["A", "C", "G", "T"]
+    MIX_BASES = ["R", "Y", "S", "W", "K", "M", "B", "D", "H", "V"]
+
+
+
     NON_BASES = [PAD_CHAR, GAP_CHAR, AMBIG_NUC_CHAR]
 
 
@@ -379,11 +383,46 @@ class Consensus:
         codon = ""
         pos_0based = 0
         for pos_0based, base in enumerate(seq):
-            if base not in Consensus.TRUE_BASES +  Consensus.NON_BASES:
+            if base not in Consensus.TRUE_BASES + Consensus.MIX_BASES + Consensus.NON_BASES:
                 raise ValueError("Unsupported nucleotide " + base + " at 1-based position " + str(pos_0based + 1))
 
             if truebase_start <= pos_0based <= truebase_end:
-                self.seq[pos_0based][base] += 1  # Inner gap, or ACGT
+                if base == "R":
+                    self.seq[pos_0based]["A"] += 0.5  # Inner gap, or ACGT
+                    self.seq[pos_0based]["G"] += 0.5  # Inner gap, or ACGT
+                elif base == "Y":
+                    self.seq[pos_0based]["C"] += 0.5  # Inner gap, or ACGT
+                    self.seq[pos_0based]["T"] += 0.5  # Inner gap, or ACGT
+                elif base == "S":
+                    self.seq[pos_0based]["C"] += 0.5  # Inner gap, or ACGT
+                    self.seq[pos_0based]["G"] += 0.5  # Inner gap, or ACGT
+                elif base == "W":
+                    self.seq[pos_0based]["A"] += 0.5  # Inner gap, or ACGT
+                    self.seq[pos_0based]["T"] += 0.5  # Inner gap, or ACGT
+                elif base == "K":
+                    self.seq[pos_0based]["G"] += 0.5  # Inner gap, or ACGT
+                    self.seq[pos_0based]["T"] += 0.5  # Inner gap, or ACGT
+                elif base == "M":
+                    self.seq[pos_0based]["C"] += 0.5  # Inner gap, or ACGT
+                    self.seq[pos_0based]["A"] += 0.5  # Inner gap, or ACGT
+                elif base == "B":
+                    self.seq[pos_0based]["C"] += 1.0/3  # Inner gap, or ACGT
+                    self.seq[pos_0based]["T"] += 1.0/3  # Inner gap, or ACGT
+                    self.seq[pos_0based]["G"] += 1.0/3  # Inner gap, or ACGT
+                elif base == "D":
+                    self.seq[pos_0based]["A"] += 1.0/3  # Inner gap, or ACGT
+                    self.seq[pos_0based]["T"] += 1.0/3  # Inner gap, or ACGT
+                    self.seq[pos_0based]["G"] += 1.0/3  # Inner gap, or ACGT
+                elif base == "H":
+                    self.seq[pos_0based]["C"] += 1.0/3  # Inner gap, or ACGT
+                    self.seq[pos_0based]["T"] += 1.0/3  # Inner gap, or ACGT
+                    self.seq[pos_0based]["A"] += 1.0/3  # Inner gap, or ACGT
+                elif base == "V":
+                    self.seq[pos_0based]["C"] += 1.0/3  # Inner gap, or ACGT
+                    self.seq[pos_0based]["G"] += 1.0/3  # Inner gap, or ACGT
+                    self.seq[pos_0based]["A"] += 1.0/3  # Inner gap, or ACGT
+                else:
+                    self.seq[pos_0based][base] += 1  # Inner gap, or ACGT
                 codon += base
             else:
                 self.seq[pos_0based][Consensus.PAD_CHAR] += 1 # left or right pad gap
