@@ -331,7 +331,7 @@ class Consensus:
         :param str msa_fasta_filename:  filepath to multiple sequence aligned fasta
         :raises ValueError:  if sequences are not all the same length
         """
-        with open(msa_fasta_filename, 'r') as in_fh:
+        with open(msa_fasta_filename, 'rU') as in_fh:
             last_width = None
             seq = ""
             for line in in_fh:
@@ -362,89 +362,104 @@ class Consensus:
         """
 
         # initialize the internal lists of counts
-        old_width = len(self.seq)
-        new_width = len(seq)
-        if not old_width:
-            for i in range(new_width):
+        if not self.seq:
+            for i in range(len(seq)):
                 self.seq.append(defaultdict(int))
-            new_codon_width = int(math.ceil(new_width/float(NUC_PER_CODON)))
+            new_codon_width = int(math.ceil(len(seq)/float(NUC_PER_CODON)))
             for i in range(new_codon_width):
                 self.codon_seq.append(defaultdict(int))
-        elif old_width != new_width:
-            raise ValueError("Expect all sequences to be same length = " + str(old_width))
 
 
-        # Find the position of the first non-gap char.  Anything before this is a left-pad gap.
-        truebase_start = re.search(r"[^X\-]", seq).start()
-        # Find the position of the last non-gap char.  Anything after this is a right-pad gap.
-        truebase_end = re.search(r"[^X\-][X\-]*$", seq).start()
+        # # Find the position of the first non-gap char.  Anything before this is a left-pad gap.
+        # truebase_start = re.search(r"[^X\-]", seq).start()
+        # # Find the position of the last non-gap char.  Anything after this is a right-pad gap.
+        # truebase_end = re.search(r"[^X\-][X\-]*$", seq).start()
 
         seq = seq.upper()
-        codon = ""
-        pos_0based = 0
-        for pos_0based, base in enumerate(seq):
-            if base not in Consensus.TRUE_BASES + Consensus.MIX_BASES + Consensus.NON_BASES:
-                raise ValueError("Unsupported nucleotide " + base + " at 1-based position " + str(pos_0based + 1))
-
-            if truebase_start <= pos_0based <= truebase_end:
-                if base == "R":
-                    self.seq[pos_0based]["A"] += 0.5  # Inner gap, or ACGT
-                    self.seq[pos_0based]["G"] += 0.5  # Inner gap, or ACGT
-                elif base == "Y":
-                    self.seq[pos_0based]["C"] += 0.5  # Inner gap, or ACGT
-                    self.seq[pos_0based]["T"] += 0.5  # Inner gap, or ACGT
-                elif base == "S":
-                    self.seq[pos_0based]["C"] += 0.5  # Inner gap, or ACGT
-                    self.seq[pos_0based]["G"] += 0.5  # Inner gap, or ACGT
-                elif base == "W":
-                    self.seq[pos_0based]["A"] += 0.5  # Inner gap, or ACGT
-                    self.seq[pos_0based]["T"] += 0.5  # Inner gap, or ACGT
-                elif base == "K":
-                    self.seq[pos_0based]["G"] += 0.5  # Inner gap, or ACGT
-                    self.seq[pos_0based]["T"] += 0.5  # Inner gap, or ACGT
-                elif base == "M":
-                    self.seq[pos_0based]["C"] += 0.5  # Inner gap, or ACGT
-                    self.seq[pos_0based]["A"] += 0.5  # Inner gap, or ACGT
-                elif base == "B":
-                    self.seq[pos_0based]["C"] += 1.0/3  # Inner gap, or ACGT
-                    self.seq[pos_0based]["T"] += 1.0/3  # Inner gap, or ACGT
-                    self.seq[pos_0based]["G"] += 1.0/3  # Inner gap, or ACGT
-                elif base == "D":
-                    self.seq[pos_0based]["A"] += 1.0/3  # Inner gap, or ACGT
-                    self.seq[pos_0based]["T"] += 1.0/3  # Inner gap, or ACGT
-                    self.seq[pos_0based]["G"] += 1.0/3  # Inner gap, or ACGT
-                elif base == "H":
-                    self.seq[pos_0based]["C"] += 1.0/3  # Inner gap, or ACGT
-                    self.seq[pos_0based]["T"] += 1.0/3  # Inner gap, or ACGT
-                    self.seq[pos_0based]["A"] += 1.0/3  # Inner gap, or ACGT
-                elif base == "V":
-                    self.seq[pos_0based]["C"] += 1.0/3  # Inner gap, or ACGT
-                    self.seq[pos_0based]["G"] += 1.0/3  # Inner gap, or ACGT
-                    self.seq[pos_0based]["A"] += 1.0/3  # Inner gap, or ACGT
-                else:
-                    self.seq[pos_0based][base] += 1  # Inner gap, or ACGT
-                codon += base
+        truebase_end = len(seq) - 1
+        codon =  Consensus.PAD_CHAR *  (NUC_PER_CODON - (len(seq) % NUC_PER_CODON))
+        # go backwards to count right pads.  Avoid regex because slow.
+        for nucpos_0based in range(len(seq)-1, 0, -1):
+            if seq[nucpos_0based] != Consensus.PAD_CHAR and seq[nucpos_0based] != Consensus.GAP_CHAR:
+                truebase_end = nucpos_0based
+                break
             else:
-                self.seq[pos_0based][Consensus.PAD_CHAR] += 1 # left or right pad gap
-                codon += Consensus.PAD_CHAR
+                self.seq[nucpos_0based][Consensus.PAD_CHAR] += 1 # right pad gap
+                codon = Consensus.PAD_CHAR + codon
 
-            if (pos_0based+1) % NUC_PER_CODON == 0:  # last base of codon
-                codon_pos_0based = pos_0based / NUC_PER_CODON
+            if nucpos_0based % 3 == 0:
+                codonpos_0based = nucpos_0based / NUC_PER_CODON
+                self.codon_seq[codonpos_0based][codon] += 1
+                codon = ""
+
+        # Now go forwards
+        codon = ""
+        nucpos_0based = 0
+        is_left_pad = True
+        for nucpos_0based in range(0, truebase_end+1):
+            base = seq[nucpos_0based]
+
+            if base == Consensus.PAD_CHAR or base == Consensus.GAP_CHAR:
+                if is_left_pad:
+                    self.seq[nucpos_0based][Consensus.PAD_CHAR] += 1
+                    codon += Consensus.PAD_CHAR
+                else:
+                    self.seq[nucpos_0based][Consensus.GAP_CHAR] += 1
+                    codon += Consensus.GAP_CHAR
+            else:
+                is_left_pad = False
+                if base == "R":
+                    self.seq[nucpos_0based]["A"] += 0.5  
+                    self.seq[nucpos_0based]["G"] += 0.5  
+                elif base == "Y":
+                    self.seq[nucpos_0based]["C"] += 0.5  
+                    self.seq[nucpos_0based]["T"] += 0.5  
+                elif base == "S":
+                    self.seq[nucpos_0based]["C"] += 0.5  
+                    self.seq[nucpos_0based]["G"] += 0.5  
+                elif base == "W":
+                    self.seq[nucpos_0based]["A"] += 0.5  
+                    self.seq[nucpos_0based]["T"] += 0.5  
+                elif base == "K":
+                    self.seq[nucpos_0based]["G"] += 0.5  
+                    self.seq[nucpos_0based]["T"] += 0.5  
+                elif base == "M":
+                    self.seq[nucpos_0based]["C"] += 0.5  
+                    self.seq[nucpos_0based]["A"] += 0.5  
+                elif base == "B":
+                    self.seq[nucpos_0based]["C"] += 1.0/3  
+                    self.seq[nucpos_0based]["T"] += 1.0/3  
+                    self.seq[nucpos_0based]["G"] += 1.0/3  
+                elif base == "D":
+                    self.seq[nucpos_0based]["A"] += 1.0/3  
+                    self.seq[nucpos_0based]["T"] += 1.0/3  
+                    self.seq[nucpos_0based]["G"] += 1.0/3  
+                elif base == "H":
+                    self.seq[nucpos_0based]["C"] += 1.0/3  
+                    self.seq[nucpos_0based]["T"] += 1.0/3  
+                    self.seq[nucpos_0based]["A"] += 1.0/3  
+                elif base == "V":
+                    self.seq[nucpos_0based]["C"] += 1.0/3  
+                    self.seq[nucpos_0based]["G"] += 1.0/3  
+                    self.seq[nucpos_0based]["A"] += 1.0/3  
+                elif base in Consensus.TRUE_BASES or base == Consensus.AMBIG_NUC_CHAR:
+                    self.seq[nucpos_0based][base] += 1  # ACGTN
+                else:
+                    raise ValueError("Unsupported base " + base + " at " + str(nucpos_0based))
+                codon += base
+
+            if nucpos_0based % NUC_PER_CODON == 2:  # last base of codon
+                codon_pos_0based = nucpos_0based / NUC_PER_CODON
                 self.codon_seq[codon_pos_0based][codon] += 1
                 codon = ""
 
         if codon != "":   # incomplete codon at end of nucleotide sequence.
-            codon += "X"*(NUC_PER_CODON - len(codon))  # right pad so that the codon is 3 characters long
-            codon_pos_0based = pos_0based / NUC_PER_CODON
+            codon += Consensus.PAD_CHAR*(NUC_PER_CODON - len(codon))  # right pad so that the codon is 3 characters long
+            codon_pos_0based = nucpos_0based / NUC_PER_CODON
             self.codon_seq[codon_pos_0based][codon] += 1
 
-        # do a quick sanity check
-        if sum(self.seq[0].values()) != sum(self.seq[-1].values()):
-            raise ValueError("Internal cache for nucleotide letter counts corrupted")
-        elif sum(self.codon_seq[-1].values()) != sum(self.codon_seq[-1].values()):
-            raise ValueError("Internal cache for codon counts corrupted")
-        elif len(self.codon_seq) != math.ceil(len(self.seq)/float(NUC_PER_CODON)):
-            raise ValueError("Internal cache for codon counts no longer in sync with nucleotide counts")
+
+
 
 
 
@@ -458,6 +473,14 @@ class Consensus:
         at the position), then uses ? character to indicate that there is no coverage.
         :rtype : str
         """
+        # do a quick sanity check
+        if sum(self.seq[0].values()) != sum(self.seq[-1].values()):
+            raise ValueError("Internal cache for nucleotide letter counts corrupted")
+        elif sum(self.codon_seq[-1].values()) != sum(self.codon_seq[-1].values()):
+            raise ValueError("Internal cache for codon counts corrupted")
+        elif len(self.codon_seq) != math.ceil(len(self.seq)/float(NUC_PER_CODON)):
+            raise ValueError("Internal cache for codon counts no longer in sync with nucleotide counts")
+
         consensus = ""
         for i, base_count in enumerate(self.seq):
             max_base_count = 0
@@ -762,6 +785,26 @@ class Consensus:
 
             if CODON2AA.get(codon):
                 depth += count
+        return depth
+
+
+    def get_aa_freq(self, codon_pos_0based):
+        """
+        Returns the depth of each AA at the codon position.
+        Mixtures are allowed as long as the resulting amino acid is unambiguous.
+        NB:  N's are the only allowed mixture code right now.
+
+        :param codon_pos_0based: 0-based codon position in the multiple sequence alignment.  Assumes sequences start on ORF.
+        :return float:  total codons at the codon position
+        """
+        depth = 0
+        aa_to_count = defaultdict(int)
+        for codon, count in self.codon_seq[codon_pos_0based].iteritems():
+            codon = codon.replace("X", "N").replace("-", "N")
+
+            aa = CODON2AA.get(codon)
+            if aa:
+                aa_to_count[aa]
         return depth
 
 
