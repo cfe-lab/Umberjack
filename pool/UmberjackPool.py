@@ -367,9 +367,13 @@ class UmberjackPool(object):
 
             for queue_next_ref in queue_refs:
                 if not self.start_nucpos:
-                    self.start_nucpos = 1
+                    queue_ref_start_nucpos = 1
+                else:
+                    queue_ref_start_nucpos = self.start_nucpos
                 if not self.end_nucpos:
-                    self.end_nucpos = sam_handler.get_reflen(queue_next_samfile, queue_next_ref)
+                    queue_ref_end_nucpos = sam_handler.get_reflen(queue_next_samfile, queue_next_ref)
+                else:
+                    queue_ref_end_nucpos =  self.end_nucpos
 
                 sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=queue_next_samfile, ref=queue_next_ref, samfilelist=self.sam_filename_list)
 
@@ -385,18 +389,11 @@ class UmberjackPool(object):
                                    is_insert=self.insert)
 
                 # All nucleotide positions are 1-based
-                total_windows = int(math.ceil(((self.end_nucpos-self.window_size-1) - self.start_nucpos + 1)/self.window_slide))
+                total_windows = int(math.ceil(((queue_ref_end_nucpos - queue_ref_start_nucpos - 1) - queue_ref_start_nucpos + 1)/self.window_slide))
                 LOGGER.debug("Queuing " + str(total_windows) + " total windows for sam=" + queue_next_samfile + " ref=" + queue_next_ref)
 
 
-                if not self.start_nucpos:
-                    queue_ref_start_nucpos = 1
-                else:
-                    queue_ref_start_nucpos = self.start_nucpos
-                if not self.end_nucpos:
-                    queue_ref_end_nucpos = sam_handler.get_reflen(queue_next_samfile, queue_next_ref)
-                else:
-                    queue_ref_end_nucpos =  self.end_nucpos
+
 
                 for start_window_nucpos in range(queue_ref_start_nucpos, queue_ref_end_nucpos-self.window_size-1, self.window_slide):
                     end_window_nucpos = start_window_nucpos + self.window_size - 1
