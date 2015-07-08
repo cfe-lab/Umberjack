@@ -26,7 +26,7 @@ ReadScore = namedtuple("ReadScore", ["sam_seq", "score"], verbose=(LOGGER.level 
 
 
 
-NEWICK_NAME_RE = re.compile('[:;\-\(\)\[\]]')
+NEWICK_NAME_RE = re.compile('[:;\.\-\(\)\[\]]')
 
 
 
