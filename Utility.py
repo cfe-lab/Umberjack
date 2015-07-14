@@ -7,6 +7,7 @@ from collections import defaultdict
 
 NUC_PER_CODON = 3
 STOP_AA = "*"
+AA  = ["A", "C", "D", "E", "F", "G", "H", "I", "K", "L", "M", "N", "P", "Q", "R", "S", "T", "V", "W", "Y", "*"]
 CODON2AA = {
     'TTT' : 'F', 'TCT' : 'S', 'TAT' : 'Y', 'TGT' : 'C',
     'TTC' : 'F', 'TCC' : 'S', 'TAC' : 'Y', 'TGC' : 'C',
@@ -302,6 +303,32 @@ def get_sitelist_unambig_aa(msa_fasta_filename):
                 total_unambig_codon_by_pos[codon_pos] += 1
 
     return total_unambig_codon_by_pos
+
+
+def  calc_metric_entropy(symbol_to_count):
+    """
+    calculates metric entropy for dict of symbols to count
+    :param dict symbol_to_count:  str ==> float
+    :return:
+    """
+
+    total_seqs = float(sum(symbol_to_count.values()))
+
+    total_entropy = 0.0
+    for symbol, count in symbol_to_count.iteritems():
+        if count:
+            p_symbol = count / total_seqs  # probability of this symbol
+            log_p_symbol = math.log(p_symbol, 2)  # Log2  probability of letter
+            total_entropy -= (p_symbol * log_p_symbol)
+
+
+    if total_seqs > 1:
+        metric_entropy = total_entropy / math.log(total_seqs, 2)
+    else:
+        metric_entropy = None
+
+    return metric_entropy
+
 
 
 class Consensus:
@@ -797,15 +824,27 @@ class Consensus:
         :param codon_pos_0based: 0-based codon position in the multiple sequence alignment.  Assumes sequences start on ORF.
         :return float:  total codons at the codon position
         """
-        depth = 0
         aa_to_count = defaultdict(int)
         for codon, count in self.codon_seq[codon_pos_0based].iteritems():
             codon = codon.replace("X", "N").replace("-", "N")
 
             aa = CODON2AA.get(codon)
             if aa:
-                aa_to_count[aa]
-        return depth
+                aa_to_count[aa] += count
+        return aa_to_count
+
+
+    def get_codon_freq(self, codon_pos_0based):
+        """
+        Returns the depth of each AA at the codon position.
+        Mixtures are allowed as long as the resulting amino acid is unambiguous.
+        NB:  N's are the only allowed mixture code right now.
+
+        :param codon_pos_0based: 0-based codon position in the multiple sequence alignment.  Assumes sequences start on ORF.
+        :return float:  total codons at the codon position
+        """
+        return self.codon_seq[codon_pos_0based]
+
 
 
 def write_consensus_from_msa(msa_fasta_filename, consensus_fasta_filename):
