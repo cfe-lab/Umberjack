@@ -61,3 +61,9 @@ class LoggingPool(Pool):
         Override multiprocessing.Pool.imap_unordered() method such that it logs full exception stack trace from child process.
         """
         return Pool.imap_unordered(self, LogExceptions(func), iterable, chunksize)
+
+    def imap(self, func, iterable, chunksize=1):
+        """
+        Override multiprocessing.Pool.imap() method such that it logs full exception stack trace from child process.
+        """
+        return Pool.imap(self, LogExceptions(func), iterable, chunksize)
