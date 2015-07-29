@@ -251,7 +251,7 @@ def get_seq_dnds_info(dnds_tsv_dir, ref_codon_len):
     seq_dnds_info =  [SiteDnDsInfo() for i in range(ref_codon_len)]
 
     for dnds_tsv_filename in glob.glob(dnds_tsv_dir + os.sep + "*.dnds.tsv"):
-        with open(dnds_tsv_filename, 'r') as dnds_fh:
+        with open(dnds_tsv_filename, 'rU') as dnds_fh:
             # *.{start bp}_{end bp}.dnds.tsv filenames use 1-based nucleotide position numbering
             dnds_tsv_fileprefix = dnds_tsv_filename.split('.dnds.tsv')[0]
             win_nuc_range = dnds_tsv_fileprefix.split('.')[-1]
