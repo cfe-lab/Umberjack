@@ -111,6 +111,19 @@ class MPIUmberjackPool(UmberjackPool):
                                                                          mpi_send_request=send_request,
                                                                          mpi_rcv_request=rcv_request)
 
+            # Sent out all work requests.  Wait until all work is done
+            while busy_replica_2_request:
+                requests = [window_replica_info.mpi_rcv_request for window_replica_info in busy_replica_2_request.values()]
+                mpi_status = MPI.Status()
+                idx, err_msg = MPI.Request.waitany(requests, mpi_status)
+                done_replica_rank = mpi_status.Get_source()
+                available_replicas.append(done_replica_rank)
+                del busy_replica_2_request[done_replica_rank]
+                if err_msg:
+                    LOGGER.error("Received error from replica=" + str(done_replica_rank) + " err_msg=" + str(err_msg))
+                else:
+                    LOGGER.debug("Received success from replica=" + str(done_replica_rank))
+                
 
             # All the work is done.
             LOGGER.debug("Terminating replicas...")
