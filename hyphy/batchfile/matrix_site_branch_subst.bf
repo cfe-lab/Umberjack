@@ -362,7 +362,7 @@ function printSubTSV(outPerSiteBrSubFile, outPerSiteDnDsFile)
 				// ??? We aren't outputting the site-substitutions for NNN codons, but NNN still affect the codon resolution frequency across the phylo for 2-N or 1-N ambiguous codons.
 				// Ignore site-branches where parent or child has completely ambiguous codons.
 				// This is because every substitution is possible and will pollute any inference we make at this site.
-				if ( totalPossParCodons<stateCharCount && totalPossChildCodons<stateCharCount)  
+				if ( totalPossParCodons < stateCharCount && totalPossChildCodons < stateCharCount)  
 				{
 					// Count codon frequencies for this site only
 					siteFilter = ""+(iSite*3)+"-"+(iSite*3+2);
@@ -398,6 +398,15 @@ function printSubTSV(outPerSiteBrSubFile, outPerSiteDnDsFile)
 					// sum frequency of occurences across phylo for possible parent codons at this site, including occurences from resolution of ambiguous codons    
 					totalFreqParPossCodons = (matrixTrickSummer*parAmbCodon_phyloFreqs)[0];    
 				
+				
+					// NB:  If COUNT_GAPS_IN_FREQUENCIES = 0, then HarvestFrequencies does not resolve codons with gaps before counting frequencies.
+					// BUT even if COUNT_GAPS_IN_FREQUENCIES = 0, GetDataInfo() will resolve codons with gaps!!!
+					// Thus it is possible to get possible codons at zero frequency.  Ignore these site-branches.
+					if (totalFreqChildPossCodons == 0 || totalFreqParPossCodons == 0)
+					{
+						continue;
+					}
+					
 					for (iPossParCdn=0; iPossParCdn<stateCharCount; iPossParCdn=iPossParCdn+1)
 					{
 						if (parAmbInfo[iPossParCdn]>0)
