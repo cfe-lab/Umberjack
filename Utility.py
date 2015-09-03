@@ -378,13 +378,14 @@ class Consensus:
                 self.add_seq(seq)
 
 
-    def add_seq(self, seq):
+    def add_seq(self, seq, occur=1):
         """
         Add a nucleotide sequence to the consensus.  Assumes internal gaps are represented by "-".
         External gaps can be represented by either "-" or "X".
         Assumes that sequence starts on ORF.
         NB:  Does not handle mixtures other than N
         :param str seq:  Nucleotide Sequence as String.  Should be multiple sequence aligned with all other sequences in the consensus.
+        :param int occur:  total occurences of the sequence
         :raises ValueError:  if seq is not the same length as existing sequences
         """
 
@@ -436,54 +437,54 @@ class Consensus:
             else:
                 is_left_pad = False
                 if base == "R":
-                    self.seq[nucpos_0based]["A"] += 0.5  
-                    self.seq[nucpos_0based]["G"] += 0.5  
+                    self.seq[nucpos_0based]["A"] += (0.5 * occur)
+                    self.seq[nucpos_0based]["G"] += (0.5 * occur)
                 elif base == "Y":
-                    self.seq[nucpos_0based]["C"] += 0.5  
-                    self.seq[nucpos_0based]["T"] += 0.5  
+                    self.seq[nucpos_0based]["C"] += (0.5 * occur)
+                    self.seq[nucpos_0based]["T"] += (0.5 * occur)
                 elif base == "S":
-                    self.seq[nucpos_0based]["C"] += 0.5  
-                    self.seq[nucpos_0based]["G"] += 0.5  
+                    self.seq[nucpos_0based]["C"] += (0.5 * occur)
+                    self.seq[nucpos_0based]["G"] += (0.5 * occur)
                 elif base == "W":
-                    self.seq[nucpos_0based]["A"] += 0.5  
-                    self.seq[nucpos_0based]["T"] += 0.5  
+                    self.seq[nucpos_0based]["A"] += (0.5 * occur)
+                    self.seq[nucpos_0based]["T"] += (0.5 * occur)
                 elif base == "K":
-                    self.seq[nucpos_0based]["G"] += 0.5  
-                    self.seq[nucpos_0based]["T"] += 0.5  
+                    self.seq[nucpos_0based]["G"] += (0.5 * occur)
+                    self.seq[nucpos_0based]["T"] += (0.5 * occur)
                 elif base == "M":
-                    self.seq[nucpos_0based]["C"] += 0.5  
-                    self.seq[nucpos_0based]["A"] += 0.5  
+                    self.seq[nucpos_0based]["C"] += (0.5 * occur)
+                    self.seq[nucpos_0based]["A"] += (0.5 * occur)
                 elif base == "B":
-                    self.seq[nucpos_0based]["C"] += 1.0/3  
-                    self.seq[nucpos_0based]["T"] += 1.0/3  
-                    self.seq[nucpos_0based]["G"] += 1.0/3  
+                    self.seq[nucpos_0based]["C"] += (occur * 1.0/3)
+                    self.seq[nucpos_0based]["T"] += (occur * 1.0/3)
+                    self.seq[nucpos_0based]["G"] += (occur * 1.0/3)
                 elif base == "D":
-                    self.seq[nucpos_0based]["A"] += 1.0/3  
-                    self.seq[nucpos_0based]["T"] += 1.0/3  
-                    self.seq[nucpos_0based]["G"] += 1.0/3  
+                    self.seq[nucpos_0based]["A"] += (occur * 1.0/3)
+                    self.seq[nucpos_0based]["T"] += (occur * 1.0/3)
+                    self.seq[nucpos_0based]["G"] += (occur * 1.0/3)
                 elif base == "H":
-                    self.seq[nucpos_0based]["C"] += 1.0/3  
-                    self.seq[nucpos_0based]["T"] += 1.0/3  
-                    self.seq[nucpos_0based]["A"] += 1.0/3  
+                    self.seq[nucpos_0based]["C"] += (occur * 1.0/3)
+                    self.seq[nucpos_0based]["T"] += (occur * 1.0/3)
+                    self.seq[nucpos_0based]["A"] += (occur * 1.0/3)
                 elif base == "V":
-                    self.seq[nucpos_0based]["C"] += 1.0/3  
-                    self.seq[nucpos_0based]["G"] += 1.0/3  
-                    self.seq[nucpos_0based]["A"] += 1.0/3  
+                    self.seq[nucpos_0based]["C"] += (occur * 1.0/3)
+                    self.seq[nucpos_0based]["G"] += (occur * 1.0/3)
+                    self.seq[nucpos_0based]["A"] += (occur * 1.0/3)
                 elif base in Consensus.TRUE_BASES or base == Consensus.AMBIG_NUC_CHAR:
-                    self.seq[nucpos_0based][base] += 1  # ACGTN
+                    self.seq[nucpos_0based][base] += occur  # ACGTN
                 else:
                     raise ValueError("Unsupported base " + base + " at " + str(nucpos_0based))
                 codon += base
 
             if nucpos_0based % NUC_PER_CODON == 2:  # last base of codon
                 codon_pos_0based = nucpos_0based / NUC_PER_CODON
-                self.codon_seq[codon_pos_0based][codon] += 1
+                self.codon_seq[codon_pos_0based][codon] += occur
                 codon = ""
 
         if codon != "":   # incomplete codon at end of nucleotide sequence.
             codon += Consensus.PAD_CHAR*(NUC_PER_CODON - len(codon))  # right pad so that the codon is 3 characters long
             codon_pos_0based = nucpos_0based / NUC_PER_CODON
-            self.codon_seq[codon_pos_0based][codon] += 1
+            self.codon_seq[codon_pos_0based][codon] += occur
 
 
 
