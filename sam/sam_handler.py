@@ -1,7 +1,7 @@
 """
 Handles sam parsing.
 """
-import re
+
 import os
 import logging
 from sam_constants import  SamHeader as SamHeader
@@ -13,7 +13,7 @@ import Utility
 from collections import namedtuple
 import csv
 from collections import OrderedDict
-
+import slice_miseq
 
 LOGGER = logging.getLogger(__name__)
 
@@ -26,32 +26,10 @@ ReadScore = namedtuple("ReadScore", ["sam_seq", "score"], verbose=(LOGGER.level 
 
 
 
-NEWICK_NAME_RE = re.compile('[:;\.\-\(\)\[\]]')
 
 
 
 
-def __write_seq(fh_out, name, seq, max_prop_N=1.0, breadth_thresh=0.0):
-    """
-    Helper function to write out sequence to fasta file handle if has sufficient bases.
-    Renames the sequence name so that it is newick compatible.
-    :param FileIO fh_out:  python file handle
-    :param str name: Sequence Name
-    :param str seq:  Sequence
-    :param float max_prop_N: maximum fraction allowed N.  Doesn't care about gaps.
-            Setting this to less than 1 only makes sense when a read has not been sliced prior to passing into this function,
-            since the fraction of N's is only calculated on the sequence passed in.
-    :param float breadth_thresh:  minimum fraction of true bases (ACGT) required.  Only calculated on the sequence passed in.
-    :return bool:  True if sequence written out
-    """
-
-    if seq.count('N') / float(len(seq)) <= max_prop_N and (seq.count("N") + seq.count("-"))/float(len(seq)) <= (1.0-breadth_thresh):
-        # Newick tree formats don't like special characters.  Convert them to underscores.
-        newick_nice_qname = re.sub(pattern=NEWICK_NAME_RE, repl='_', string=name)
-        fh_out.write(">" + newick_nice_qname + "\n")
-        fh_out.write(seq + "\n")
-        return True
-    return False
 
 
 def record_iter(sam_filename, ref, mapping_cutoff, ref_len=0):
@@ -216,7 +194,7 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
                                                    slice_end_wrt_ref_1based=end_pos,
                                                    do_insert_wrt_ref=do_insert_wrt_ref,
                                                    do_mask_stop_codon=do_mask_stop_codon)
-            is_written = __write_seq(out_fasta_fh, pair.get_name(), mseq, max_prop_N, breadth_thresh)
+            is_written = Utility.write_seq(out_fasta_fh, pair.get_name(), mseq, max_prop_N, breadth_thresh)
             total_written += 1 if is_written else 0
 
     LOGGER.debug("Done slice fasta " + out_fasta_filename)

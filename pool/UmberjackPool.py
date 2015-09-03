@@ -12,7 +12,7 @@ import hyphy.hyphy_handler as hyphy
 import rtt.rtt as rtt
 import slice_miseq
 import plot.plotter as plotter
-
+import Utility
 
 config.settings.setup_logging()
 LOGGER = logging.getLogger(__name__)
@@ -24,13 +24,17 @@ MODE_COUNT_SUBS = "COUNT_SUBS"
 
 
 
-def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_cutoff, start_window_nucpos,
-            end_window_nucpos, map_qual_cutoff, read_qual_cutoff, max_prop_N, insert, mask_stop_codon, remove_duplicates,
-            threads_per_window=config.settings.DEFAULT_THREADS_PER_WINDOW, mode=config.settings.DEFAULT_MODE,
-            hyphy_exe=config.settings.DEFAULT_HYPHY_EXE, hyphy_basedir=config.settings.DEFAULT_HYPHY_BASEDIR,
-            hyphy_libdir=config.settings.DEFAULT_HYPHY_LIBDIR,
-            fastree_exe=config.settings.DEFAULT_FASTTREEMP_EXE,
-            debug=False):
+
+
+
+# Function needs to be at level of module to be called via multiprocessing.  Can't be defined in class inside module.
+def eval_window(out_dir, window_depth_cutoff, window_breadth_cutoff, start_window_nucpos, end_window_nucpos,
+                map_qual_cutoff, read_qual_cutoff, max_prop_N, insert, mask_stop_codon, remove_duplicates,
+                sam_filename=None, ref=None, msa_fasta=None,
+                threads_per_window=config.settings.DEFAULT_THREADS_PER_WINDOW, mode=config.settings.DEFAULT_MODE,
+                hyphy_exe=config.settings.DEFAULT_HYPHY_EXE, hyphy_basedir=config.settings.DEFAULT_HYPHY_BASEDIR,
+                hyphy_libdir=config.settings.DEFAULT_HYPHY_LIBDIR, fastree_exe=config.settings.DEFAULT_FASTTREEMP_EXE,
+                debug=False):
     """
     Handles the processing for a single window along the genome.
     Creates the multiple sequence aligned fasta file for the window.
@@ -39,6 +43,8 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
 
     :param str sam_filename: full file path to sam file
     :param str ref: reference name
+    :param str msa_fasta:  full filepath to multiple sequence aligned fasta file.
+            Must specify either [sam_filename & ref] or msa_fasta
     :param str out_dir: full path to directory that will hold the results and intermediate files
     :param int window_depth_cutoff:  the minimum number of required reads that meet the breadth threshold below which the window is thrown out
     :param float window_breadth_cutoff: the minimum fraction of a window that merged paired-end read must cover to be included in the window.
@@ -60,23 +66,45 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
     :param str fastree_exe: full filepath to FastTreeMP or FastTree executable
     """
     LOGGER.debug("Eval window {}-{}".format(start_window_nucpos, end_window_nucpos) + " for sam=" + sam_filename + " ref=" + ref)
+    if ((sam_filename and ref and msa_fasta) or
+        (not msa_fasta and (not sam_filename or not ref))):
+        raise ValueError("Must specify just msa_fasta or (sam_filename and ref)")
+    elif sam_filename and ref:
+        sam_filename_nopath = os.path.split(sam_filename)[1]
+        sam_filename_prefix = os.path.splitext(sam_filename_nopath)[0]
 
-    sam_filename_nopath = os.path.split(sam_filename)[1]
-    sam_filename_prefix = os.path.splitext(sam_filename_nopath)[0]
-
-    msa_window_filename_prefix = out_dir + os.sep + sam_filename_prefix + "." + str(start_window_nucpos) + "_" + str(end_window_nucpos)
-    msa_window_fasta_filename = msa_window_filename_prefix + ".fasta"
+        msa_window_filename_prefix = out_dir + os.sep + sam_filename_prefix + "." + str(start_window_nucpos) + "_" + str(end_window_nucpos)
+        msa_window_fasta_filename = msa_window_filename_prefix + ".fasta"
 
 
-    total_slice_seq = sam_handler.create_msa_slice_from_sam(sam_filename=sam_filename, ref=ref,
-                                                            out_fasta_filename=msa_window_fasta_filename,
-                                                            mapping_cutoff=map_qual_cutoff,
-                                                            read_qual_cutoff=read_qual_cutoff, max_prop_N=max_prop_N,
-                                                            breadth_thresh=window_breadth_cutoff,
-                                                            start_pos=start_window_nucpos, end_pos=end_window_nucpos,
-                                                            do_insert_wrt_ref=insert,
-                                                            do_mask_stop_codon=mask_stop_codon,
-                                                            do_remove_dup=remove_duplicates)
+        total_slice_seq = sam_handler.create_msa_slice_from_sam(sam_filename=sam_filename, ref=ref,
+                                                                out_fasta_filename=msa_window_fasta_filename,
+                                                                mapping_cutoff=map_qual_cutoff,
+                                                                read_qual_cutoff=read_qual_cutoff, max_prop_N=max_prop_N,
+                                                                breadth_thresh=window_breadth_cutoff,
+                                                                start_pos=start_window_nucpos, end_pos=end_window_nucpos,
+                                                                do_insert_wrt_ref=insert,
+                                                                do_mask_stop_codon=mask_stop_codon,
+                                                                do_remove_dup=remove_duplicates)
+
+    else:
+        # TODO:  do not use this hack  to avoid pudding "msa" into every slice name.  Instead ask user what prefix the files should take.
+        if msa_fasta.endswith(".msa.fasta"):
+            msa_window_filename_prefix = os.path.basename(msa_fasta).split(".msa.fasta")[0]
+        else:
+            msa_window_filename_prefix = os.path.splitext( os.path.basename(msa_fasta))[0]
+
+        msa_window_filename_prefix = out_dir + os.sep + msa_window_filename_prefix + "." + str(start_window_nucpos) + "_" + str(end_window_nucpos)
+        msa_window_fasta_filename = msa_window_filename_prefix + ".fasta"
+
+        # TODO:  handle duplicates, mask_stop_codon
+        total_slice_seq = Utility.create_slice_msa_fasta(fasta_filename=msa_fasta,
+                                                         out_fasta_filename=msa_window_fasta_filename,
+                                                         start_pos=start_window_nucpos,
+                                                         end_pos=end_window_nucpos,
+                                                         max_prop_N=max_prop_N,
+                                                         breadth_thresh=window_breadth_cutoff,
+                                                         do_mask_stop_codon=mask_stop_codon)
 
 
     # Check whether the msa sliced fasta has enough reads to make a good tree
@@ -108,6 +136,9 @@ def eval_window(sam_filename, ref, out_dir, window_depth_cutoff, window_breadth_
     LOGGER.debug("Done Eval window {}-{}".format(start_window_nucpos, end_window_nucpos) + " for sam=" + sam_filename + " ref=" + ref)
 
 
+
+
+
 class UmberjackPool(object):
     """
     Does the pipeline work.
@@ -118,6 +149,7 @@ class UmberjackPool(object):
 
     def __init__(self, **kwargs):
         self.out_dir = config.settings.DEFAULT_OUT_DIR
+        self.out_dir_list = None
         self.map_qual_cutoff = config.settings.DEFAULT_MAP_QUAL_CUTOFF
         self.read_qual_cutoff = config.settings.DEFAULT_READ_QUAL_CUTOFF
         self.max_prop_n = config.settings.DEFAULT_MAX_PROP_N
@@ -142,6 +174,7 @@ class UmberjackPool(object):
         self.ref = None
         self.sam_filename = None
         self.sam_filename_list = None
+        self.msa_fasta_list = None
         self.mpi = False
         self.__dict__.update(kwargs)
 
@@ -163,23 +196,26 @@ class UmberjackPool(object):
         Stuff that only the parent should do before child processes work.
         :return
         """
-        self.check_sams()
-        self.make_sam_ref_outdir()
+        self.check_input()
+        self.make_outdir()
 
 
 
-
-    def make_sam_ref_outdir(self):
+    def make_outdir(self):
         """
-        Makes the output dir or outputdir/sam/ref nested dirs.
+        Makes the output dir or outputdir/sam/ref nested dirs or output_dir_list dirs.
         In order to avoid race conditions, make these output directories before spread_working child processes.
         """
-        if not os.path.exists(self.out_dir):
+        if self.out_dir_list:
+            for outdir in UmberjackPool.list_from_file(self.out_dir_list):
+                if not os.path.exists(outdir):
+                    os.makedirs(outdir)
+        elif not os.path.exists(self.out_dir):
             os.makedirs(self.out_dir)
 
-        if self.sam_filename_list or not self.ref:  # multiple sam, ref combos
+        if self.sam_filename_list or (self.sam_filename and not self.ref):  # multiple sam, ref combos
             for samfile, ref in self.sam_ref_iter():
-                sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref, samfilelist=self.sam_filename_list)
+                sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
 
                 if not os.path.exists(sam_ref_outdir):
                     os.makedirs(sam_ref_outdir)
@@ -195,6 +231,9 @@ class UmberjackPool(object):
         :return bool:  True if everything passes
         :raises ValueError:  if there are issues
         """
+        if not os.path.exists(sam_filename) or not os.path.getsize(sam_filename):
+            raise ValueError("SAM file " + sam_filename + " does not exist or is empty")
+
         if not sam_handler.is_query_sort(sam_filename):
             LOGGER.fatal("SAM file " + sam_filename + " is not queryname sorted")
             raise ValueError("SAM file " + sam_filename + " is not queryname sorted")
@@ -210,26 +249,81 @@ class UmberjackPool(object):
         return True
 
 
-    def check_sams(self):
+    @staticmethod
+    def check_msa_fasta(msa_fasta):
         """
-        Checks that either sam_filename_list or sam_filename specified
+        Checks that msa_fasta exists and is multiple sequence aligned.
+        Checks that all sam file has header and is queryname sorted.
+        Checks that if ref isn't specified, then there are refs in the sam header.
+
+        :return bool:  True if everything passes
+        :raises ValueError:  if there are issues
+        """
+        if not os.path.exists(msa_fasta) or not os.path.getsize(msa_fasta):
+            raise ValueError("Multiple Sequence Aligned fasta file " + msa_fasta + " does not exist or is empty")
+
+        name = None
+        seq = None
+        last_seq_len = None
+        names = set([])
+        with open(msa_fasta, 'rU') as fh_in:
+            for line in fh_in:
+                if line.startswith(">"):
+                    name = line[1:].split()[0]  # Get the read ID and ignore the description
+                    formatted_name = Utility.newick_nice_name(name)
+                    if formatted_name in names:
+                        raise ValueError("Sequences with duplicate names after replacing periods, semicolons, colons, brackets with underscore")
+                    names.add(formatted_name)
+
+                    if seq is not None:
+                        if last_seq_len is not None and last_seq_len != len(seq):
+                            raise ValueError("Fasta is not multiple sequence aligned. Every sequence should be same length")
+                        last_seq_len = len(seq)
+
+                    seq = ""
+
+                elif name is None:
+                    raise ValueError("Comments and other non-sequence related lines are not allowed in multiple sequence aligned fasta")
+                else:
+                    seq += line.rstrip()
+
+            # handle last line
+            if seq == "":
+                raise ValueError("Missing sequence for last entry")
+            elif last_seq_len is not None and last_seq_len != len(seq):
+                raise ValueError("Fasta is not multiple sequence aligned. Every sequence should be same length")
+
+        return True
+
+
+    def check_input(self):
+        """
+        Checks that one of sam_filename_list or sam_filename or msa_fasta or msa_fasta_list is specified.
         Checks that all sam files specified have headers and are queryname sorted.
         Checks that if ref isn't specified, then ref is stored in each specified sam file.
 
         :return bool:  True if everything passes
         :raises ValueError:  if there are issues
         """
-        if not self.sam_filename and not self.sam_filename_list:
-            LOGGER.fatal("Must specify either sam_filename or sam_filename_list")
-            raise ValueError("Must specify either sam_filename or sam_filename_list")
+        if not self.sam_filename and not self.sam_filename_list and not self.msa_fasta_list:
+            LOGGER.fatal("Must specify one of sam_filename, sam_filename_list, or msa_fasta_list")
+            raise ValueError("Must specify one of sam_filename, sam_filename_list, or msa_fasta_list")
         elif self.sam_filename:
             UmberjackPool.check_sam(self.sam_filename, self.ref)
-        else:
+        elif self.sam_filename_list:
             for sam in UmberjackPool.list_from_file(self.sam_filename_list):
                 UmberjackPool.check_sam(sam, self.ref)
-
+        elif self.msa_fasta_list:
+            msa_fasta_list = UmberjackPool.list_from_file(self.msa_fasta_list)
+            if self.out_dir_list:
+                out_dir_list = UmberjackPool.list_from_file(self.out_dir_list)
+                if len(out_dir_list) != msa_fasta_list:
+                    raise ValueError("There should be the same number of output directories in out_dir_list as msa fastas in msa_fasta_list")
+            for msa_fasta in msa_fasta_list:
+                UmberjackPool.check_msa_fasta(msa_fasta)
 
         return True
+
 
     @staticmethod
     def create_full_msa_fasta(sam_filename, out_dir, ref, mapping_cutoff, read_qual_cutoff,
@@ -336,27 +430,32 @@ class UmberjackPool(object):
                 yield queue_next_samfile, queue_next_ref
 
     @staticmethod
-    def get_sam_ref_outdir(pardir, samfilename, ref, samfilelist=None):
-        # TODO:  hack if there is only 1 sam and ref, then just spit out the pardir
-        if not samfilelist and ref:
-            return pardir
+    def get_sam_ref_outdir(pardir, samfilename, ref):
+        """
+        Returns the nested directory structor of pardir/samfile basename/ref
+        :param str pardir: filepath to parent dir
+        :param str samfilename:  filepath to sam file
+        :param str ref:  name of reference in samfile
+        :return str: filepath in which Umberjack will spit out all the intermediary and end results for that sam and ref
+        """
         sam_basename = os.path.basename(samfilename)
         sam_prefix = os.path.splitext(sam_basename)[0]
         sam_ref_outdir = pardir + os.sep + sam_prefix + os.sep + ref
 
         return sam_ref_outdir
 
-    def window_iter(self):
-        """
-        Yields an iterator for each samfile-ref-window.
 
-        Creates the full MSA fasta and duplicates file for every sam-file-ref.
-        :return:
+    def sam_ref_window_iter(self):
+        """
+        Yields an iterator over windows generated from sam & ref input.
+        :return iterator:
         """
         if self.sam_filename:
             queue_samfiles = [self.sam_filename]
-        else:
+        elif self.sam_filename_list:
             queue_samfiles = UmberjackPool.list_from_file(self.sam_filename_list)
+        else:
+            queue_samfiles = []
 
         for queue_next_samfile in queue_samfiles:
 
@@ -375,7 +474,8 @@ class UmberjackPool(object):
                 else:
                     queue_ref_end_nucpos =  self.end_nucpos
 
-                sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=queue_next_samfile, ref=queue_next_ref, samfilelist=self.sam_filename_list)
+                sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=queue_next_samfile,
+                                                                  ref=queue_next_ref)
 
                 if self.debug:
                     UmberjackPool.create_full_msa_fasta(sam_filename=queue_next_samfile, out_dir=sam_ref_outdir, ref=queue_next_ref,
@@ -393,11 +493,9 @@ class UmberjackPool(object):
                 LOGGER.debug("Queuing " + str(total_windows) + " total windows for sam=" + queue_next_samfile + " ref=" + queue_next_ref)
 
 
-
-
                 for start_window_nucpos in range(queue_ref_start_nucpos, queue_ref_end_nucpos-self.window_size-1, self.window_slide):
                     end_window_nucpos = start_window_nucpos + self.window_size - 1
-                    LOGGER.debug("start_window_nucpos=" + str(start_window_nucpos))
+
                     window_args = {"window_depth_cutoff": self.window_depth_cutoff,
                                    "window_breadth_cutoff": self.window_breadth_cutoff,
                                    "start_window_nucpos": start_window_nucpos,
@@ -421,6 +519,78 @@ class UmberjackPool(object):
                     yield window_args
 
 
+    def msa_fasta_window_iter(self):
+        """
+        Yields an iterator of window_args dict generated from msa fasta input.
+        :return iterator of dict:
+        """
+        if self.out_dir_list:
+            queue_out_dirs =  UmberjackPool.list_from_file(self.out_dir_list)
+        else:
+            queue_out_dirs = []
+
+        for i, queue_msa_fasta in enumerate(UmberjackPool.list_from_file(self.msa_fasta_list)):
+            if not self.start_nucpos:
+                queue_ref_start_nucpos = 1
+            else:
+                queue_ref_start_nucpos = self.start_nucpos
+            if not self.end_nucpos:
+                queue_ref_end_nucpos = Utility.get_len_1st_seq(queue_msa_fasta)
+            else:
+                queue_ref_end_nucpos =  self.end_nucpos
+
+            if self.out_dir_list:
+                out_dir = queue_out_dirs[i]
+            elif self.out_dir:
+                out_dir = self.out_dir
+            else:
+                raise ValueError("Must define either out_dir_list or out_dir when msa_fasta_list specified")
+
+            # TODO:  remove duplicates from msa fasta
+
+
+            # All nucleotide positions are 1-based
+            total_windows = int(math.ceil(((queue_ref_end_nucpos - queue_ref_start_nucpos - 1) - queue_ref_start_nucpos + 1)/self.window_slide))
+            LOGGER.debug("Queuing " + str(total_windows) + " total windows for msa fasta=" + queue_msa_fasta)
+
+
+            for start_window_nucpos in range(queue_ref_start_nucpos, queue_ref_end_nucpos-self.window_size-1, self.window_slide):
+                end_window_nucpos = start_window_nucpos + self.window_size - 1
+                window_args = {"window_depth_cutoff": self.window_depth_cutoff,
+                               "window_breadth_cutoff": self.window_breadth_cutoff,
+                               "start_window_nucpos": start_window_nucpos,
+                               "end_window_nucpos": end_window_nucpos,
+                               "out_dir": out_dir,
+                               "msa_fasta": queue_msa_fasta,
+                               "map_qual_cutoff": self.map_qual_cutoff,
+                               "read_qual_cutoff": self.read_qual_cutoff,
+                               "max_prop_N": self.max_prop_n,
+                               "insert": self.insert,
+                               "mask_stop_codon": self.mask_stop_codon,
+                               "remove_duplicates": self.remove_duplicates,
+                               "threads_per_window": self.threads_per_window,
+                               "mode": self.mode,
+                               "hyphy_exe": self.hyphy_exe,
+                               "hyphy_basedir": self.hyphy_basedir,
+                               "hyphy_libdir": self.hyphy_libdir,
+                               "fastree_exe": self.fastree_exe,
+                               "debug": self.debug}
+                yield window_args
+
+
+    def window_iter(self):
+        """
+        Yields an iterator for each samfile-ref-window, or msa_fasta window.
+
+        Creates the full MSA fasta and duplicates file for every sam-file-ref.
+        :return:
+        """
+        if self.sam_filename or self.sam_filename_list:
+            return self.sam_ref_window_iter()
+        elif self.msa_fasta_list:
+            return self.msa_fasta_window_iter()
+        else:
+            raise ValueError("Nothing to iterate over.  Must define sam_filename, sam_filename_list, or msa_fasta_list")
 
 
 
@@ -436,7 +606,7 @@ class UmberjackPool(object):
             for samfile, ref in self.sam_ref_iter():
                 # TODO:  unhackl
                 ref_len = sam_handler.get_reflen(sam_filename=samfile, ref=ref)
-                sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref, samfilelist=self.sam_filename_list)
+                sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
                 if sam_ref_outdir == self.out_dir:
                     output_csv_filename = self.output_csv_filename
                 else:
@@ -452,7 +622,7 @@ class UmberjackPool(object):
             plot_kws_list = []
             for samfile, ref in self.sam_ref_iter():
                 # TODO:  unhackl
-                sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref, samfilelist=self.sam_filename_list)
+                sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
                 if sam_ref_outdir == self.out_dir:
                     output_csv_filename = self.output_csv_filename
                 else:
@@ -465,7 +635,7 @@ class UmberjackPool(object):
             kwds_list = []
             for samfile, ref in self.sam_ref_iter():
                 # TODO:  unhackl
-                sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref, samfilelist=self.sam_filename_list)
+                sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
                 if sam_ref_outdir == self.out_dir:
                     output_csv_filename = self.output_csv_filename
                 else:

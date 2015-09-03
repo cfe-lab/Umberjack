@@ -555,16 +555,22 @@ def main():
     parser.add_argument("-f", help="Full filepath to config file.  If defined, then ignores all other commandline arguments.")
     parser.add_argument("--sam_filename", default="",
                         help=("Full filepath to SAM alignment file.  Must be queryname sorted and must have header." +
-                              "Either --sam_filename or --sam_filename_list must be specified."))
+                              "One of --sam_filename, --sam_filename_list, --msa_fasta_list must be specified."))
     parser.add_argument("--sam_filename_list", default="",
                         help=("Full filepath to newline separated list of SAM alignment files.  "
                               "Each SAM file must have a header and must be queryname sorted." +
-                              "Either --sam_filename or --sam_filename_list must be specified."))
+                              "One of --sam_filename, --sam_filename_list, --msa_fasta_list must be specified."))
+    parser.add_argument("--msa_fasta_list", default="",
+                        help=("Full filepath to newline separated list of Multiple-Sequence-Aligned fasta from which windows will be sliced.  " +
+                              "One of --sam_filename, --sam_filename_list, --msa_fasta_list must be specified."))
     parser.add_argument("--ref", default="",
                         help=("Name of reference contig.  Must be one of references in SAM file.  "  +
                               "If not supplied, then uses every reference specified in the SAM file header."))
-    parser.add_argument("--out_dir", default='./',
-                        help="Output directory in which the pipeline will write all its results and intermediate files")
+    parser.add_argument("--out_dir", default="./",
+                        help="Output directory in which the pipeline will write all its results and intermediate files.  ")
+    parser.add_argument("--out_dir_list", default="",
+                        help="Filepath to newline separated list of output directories in which the pipeline will write all its results and intermediate files. " +
+                             "There should be a separate output directory entry in the list for every msa fasta specified in --msa_fasta_list.  ")
     parser.add_argument("--map_qual_cutoff", type=int, default=settings.DEFAULT_MAP_QUAL_CUTOFF,
                         help="Mapping quality threshold below which alignments are ignored.")
     parser.add_argument("--read_qual_cutoff", type=int, default=settings.DEFAULT_READ_QUAL_CUTOFF,
@@ -644,9 +650,13 @@ def main():
             LOGGER.warn("Using config file " + args.f + ".  Ignoring all other commandline arguments.")
         args = parser.parse_args([parser.fromfile_prefix_chars +  args.f])
 
-    if not args.sam_filename and not args.sam_filename_list:
+    if not args.sam_filename and not args.sam_filename_list and not args.msa_fasta and not args.msa_fasta_list:
         parser.print_help()
-        LOGGER.error("Must specify either --sam_filename or --sam_filename_list arguments")
+        LOGGER.error("Must specify one of --sam_filename or --sam_filename_list --msa_fasta or --msa_fasta_list arguments")
+        sys.exit()
+    elif sum([x is not None for x in [args.sam_filename, args.sam_filename_list, args.msa_fasta, args.msa_fasta_list]]) > 1:
+        parser.print_help()
+        LOGGER.error("Must specify ONLY ONE of --sam_filename or --sam_filename_list --msa_fasta or msa_fasta_list arguments")
         sys.exit()
 
     # deep copy of arguments excluding empty values
@@ -674,7 +684,7 @@ def main():
             # Ignore the concurrent_windows commandline arg and uses the number of processors indicated by mpirun command
             eval_windows_args.pop("concurrent_windows", None)
             LOGGER.debug("Running MPI Version. Ignoring --concurrent_windows flag.  Using mpirun node arguments.")
-            umberjackworker = MPIUmberjackPool(**eval_windows_args)
+            umberjackworker = pool.MPIUmberjackPool.MPIUmberjackPool(**eval_windows_args)
 
         except ImportError:
             LOGGER.warn("You must install mpi4py module in order to leverage multiple nodes.  Running on single node.")
