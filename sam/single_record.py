@@ -129,7 +129,10 @@ class SamRecord(SamSequence):
         if "pnext" in kwargs:
             self.pnext = int(kwargs["pnext"])
 
-        if self.seq is not None and self.qual is not None and len(self.seq) != len(self.qual):
+        if self.seq == sam_constants.SAM_UNSPECIFIED:
+            raise ValueError("Sam must specify sequences")
+
+        if self.seq is not None and self.qual is not None and self.qual != sam_constants.SAM_UNSPECIFIED and len(self.seq) != len(self.qual):
             raise ValueError("Expect sequence and quality same length " + str(kwargs) )
 
         # TODO:  fill in other optional keywords
@@ -195,6 +198,7 @@ class SamRecord(SamSequence):
                      do_mask_stop_codon=False, stats=None, pad_space_btn_segments="N"):
         """
         Gets the sequence for the sam record.
+        If the quality is unspecified in the sam file "*", then returns a string of 0-qual chars the same length as the sequence.
         ASSUMES:  that sam cigar strings do not allow insertions at beginning or end of alignment (i.e.  local alignment as opposed to global alignment).
 
 
@@ -428,7 +432,10 @@ class SamRecord(SamSequence):
             # Matching sequence: carry it over
             if token[-1] == 'M' or token[-1] == 'X' or token[-1] == '=':
                 self.nopad_noinsert_seq += self.seq[pos_wrt_seq_0based:(pos_wrt_seq_0based+length)]
-                self.nopad_noinsert_qual += self.qual[pos_wrt_seq_0based:(pos_wrt_seq_0based+length)]
+                if self.qual == sam_constants.SAM_UNSPECIFIED:
+                    self.nopad_noinsert_qual += sam_constants.QUAL_ZERO_CHAR*length
+                else:
+                    self.nopad_noinsert_qual += self.qual[pos_wrt_seq_0based:(pos_wrt_seq_0based+length)]
                 pos_wrt_seq_0based += length
                 pos_wrt_ref_1based += length
                 self.ref_align_len += length
@@ -440,7 +447,12 @@ class SamRecord(SamSequence):
                 self.ref_align_len += length
             # Insertion relative to reference: skip it (excise it)
             elif token[-1] == 'I':
-                self.ref_pos_to_insert_seq_qual.update({pos_wrt_ref_1based:
+                if self.qual == sam_constants.SAM_UNSPECIFIED:
+                    self.ref_pos_to_insert_seq_qual.update({pos_wrt_ref_1based:
+                                                            (self.seq[pos_wrt_seq_0based:(pos_wrt_seq_0based+length)],
+                                                             sam_constants.QUAL_ZERO_CHAR*length)})
+                else:
+                    self.ref_pos_to_insert_seq_qual.update({pos_wrt_ref_1based:
                                                             (self.seq[pos_wrt_seq_0based:(pos_wrt_seq_0based+length)],
                                                              self.qual[pos_wrt_seq_0based:(pos_wrt_seq_0based+length)])})
                 pos_wrt_seq_0based += length

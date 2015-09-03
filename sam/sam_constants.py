@@ -4,6 +4,8 @@ PHRED_SANGER_OFFSET = 33
 CIGAR_RE = re.compile('[0-9]+[MIDNSHPX=]')
 SEQ_PAD_CHAR = '-'
 QUAL_PAD_CHAR = ' '     # This is the ASCII character right below lowest PHRED quality score in Sanger qualities  (-1)
+QUAL_ZERO_CHAR = str(chr(PHRED_SANGER_OFFSET + 0))  # Quality of zero
+SAM_UNSPECIFIED = "*"
 
 class SamFlag:
     IS_PAIRED =                0x001
