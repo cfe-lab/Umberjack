@@ -65,7 +65,8 @@ def eval_window(out_dir, window_depth_cutoff, window_breadth_cutoff, start_windo
     :param str hyphy_libdir:  full filepath to directory containing the out of box HyPhy template batch files
     :param str fastree_exe: full filepath to FastTreeMP or FastTree executable
     """
-    LOGGER.debug("Eval window {}-{}".format(start_window_nucpos, end_window_nucpos) + " for sam=" + sam_filename + " ref=" + ref)
+    LOGGER.debug("Eval window {}-{}".format(start_window_nucpos, end_window_nucpos) +
+                 " for sam=" + str(sam_filename) + " ref=" + str(ref) + " msa_fasta=" + str(msa_fasta))
     if ((sam_filename and ref and msa_fasta) or
         (not msa_fasta and (not sam_filename or not ref))):
         raise ValueError("Must specify just msa_fasta or (sam_filename and ref)")
@@ -133,7 +134,8 @@ def eval_window(out_dir, window_depth_cutoff, window_breadth_cutoff, start_windo
         elif mode != MODE_GTR_RATE:
             raise  ValueError("Invalid mode " + mode)
 
-    LOGGER.debug("Done Eval window {}-{}".format(start_window_nucpos, end_window_nucpos) + " for sam=" + sam_filename + " ref=" + ref)
+    LOGGER.debug("Done Eval window {}-{}".format(start_window_nucpos, end_window_nucpos) +
+                 " for sam=" + str(sam_filename) + " ref=" + str(ref) + " msa_fasta=" + str(msa_fasta))
 
 
 
@@ -317,7 +319,7 @@ class UmberjackPool(object):
             msa_fasta_list = UmberjackPool.list_from_file(self.msa_fasta_list)
             if self.out_dir_list:
                 out_dir_list = UmberjackPool.list_from_file(self.out_dir_list)
-                if len(out_dir_list) != msa_fasta_list:
+                if len(out_dir_list) != len(msa_fasta_list):
                     raise ValueError("There should be the same number of output directories in out_dir_list as msa fastas in msa_fasta_list")
             for msa_fasta in msa_fasta_list:
                 UmberjackPool.check_msa_fasta(msa_fasta)
@@ -404,7 +406,7 @@ class UmberjackPool(object):
         :return list[str]:
         """
         items = []
-        with open(listfile, 'r') as fh_in:
+        with open(listfile, 'rU') as fh_in:
             for line in fh_in:
                 line = line.rstrip()
                 items.extend([line])
@@ -603,33 +605,62 @@ class UmberjackPool(object):
         LOGGER.debug("About to tabulate results")
         if self.mode == MODE_DNDS:
             kwds_list = []
-            for samfile, ref in self.sam_ref_iter():
-                # TODO:  unhackl
-                ref_len = sam_handler.get_reflen(sam_filename=samfile, ref=ref)
-                sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
-                if sam_ref_outdir == self.out_dir:
-                    output_csv_filename = self.output_csv_filename
-                else:
-                    output_csv_filename = sam_ref_outdir + os.sep +os.path.basename(samfile).replace(".sam", ".dnds.csv")
-                # TODO:  hack to check if m
-                kwds_list.append({"dnds_tsv_dir": sam_ref_outdir,
-                                  "ref": ref,
-                                  "ref_nuc_len": ref_len,
-                                  "output_csv_filename": output_csv_filename
-                })
+            if self.sam_filename_list or self.sam_filename:
+                for samfile, ref in self.sam_ref_iter():
+                    # TODO:  unhackl
+                    ref_len = sam_handler.get_reflen(sam_filename=samfile, ref=ref)
+                    sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
+                    if self.sam_filename_list:
+                        output_csv_filename = sam_ref_outdir + os.sep +os.path.basename(samfile).replace(".sam", ".dnds.csv")
+                    else:
+                        output_csv_filename = self.output_csv_filename
+                    # TODO:  hack to check if m
+                    kwds_list.append({"dnds_tsv_dir": sam_ref_outdir,
+                                      "ref": ref,
+                                      "ref_nuc_len": ref_len,
+                                      "output_csv_filename": output_csv_filename
+                    })
+            elif self.msa_fasta_list:
+                # TODO:  undo these hacks.  Ask for this info from user
+                for i, msa_fasta in enumerate(UmberjackPool.list_from_file(self.msa_fasta_list)):
+                    ref_len = Utility.get_len_1st_seq(msa_fasta)
+                    out_dir = UmberjackPool.list_from_file(self.out_dir_list)[i]
+                    if msa_fasta.endswith(".msa.fasta"):
+                        output_csv_filename = out_dir + os.sep +os.path.basename(msa_fasta).replace(".msa.fasta", ".dnds.csv")
+                    else:
+                        output_csv_filename = out_dir + os.sep +os.path.basename(msa_fasta).replace(".fasta", ".dnds.csv")
+                    # TODO:  hack to check if m
+                    kwds_list.append({"dnds_tsv_dir": out_dir,
+                                      "ref": "",
+                                      "ref_nuc_len": ref_len,
+                                      "output_csv_filename": output_csv_filename
+                    })
+
             self.spread_work(func=slice_miseq.tabulate_dnds, work_args_iter=kwds_list)
 
             plot_kws_list = []
-            for samfile, ref in self.sam_ref_iter():
-                # TODO:  unhackl
-                sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
-                if sam_ref_outdir == self.out_dir:
-                    output_csv_filename = self.output_csv_filename
-                else:
-                    output_csv_filename = sam_ref_outdir + os.sep +os.path.basename(samfile).replace(".sam", ".dnds.csv")
-                plot_kws_list.append({"dnds_csv": output_csv_filename})
-
+            if self.sam_filename or self.sam_filename_list:
+                for samfile, ref in self.sam_ref_iter():
+                    # TODO:  unhackl
+                    sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
+                    if self.sam_filename_list:
+                        output_csv_filename = sam_ref_outdir + os.sep +os.path.basename(samfile).replace(".sam", ".dnds.csv")
+                    else:
+                        output_csv_filename = self.output_csv_filename
+                    plot_kws_list.append({"dnds_csv": output_csv_filename})
+            elif self.msa_fasta_list:
+                # TODO:  undo these hacks.  Ask for this info from user
+                for i, msa_fasta in enumerate(UmberjackPool.list_from_file(self.msa_fasta_list)):
+                    ref_len = Utility.get_len_1st_seq(msa_fasta)
+                    out_dir = UmberjackPool.list_from_file(self.out_dir_list)[i]
+                    if msa_fasta.endswith(".msa.fasta"):
+                        output_csv_filename = out_dir + os.sep +os.path.basename(msa_fasta).replace(".msa.fasta", ".dnds.csv")
+                    else:
+                        output_csv_filename = out_dir + os.sep +os.path.basename(msa_fasta).replace(".fasta", ".dnds.csv")
+                    # TODO:  hack to check if m
+                    plot_kws_list.append({"dnds_csv": output_csv_filename})
             self.spread_work(func=plotter.plot_dnds, work_args_iter=plot_kws_list)
+
 
         elif self.mode == MODE_GTR_RATE:
             kwds_list = []

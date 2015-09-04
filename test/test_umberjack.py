@@ -1,5 +1,4 @@
 import unittest
-import umberjack
 import pool.UmberjackPool
 import os
 import subprocess
@@ -247,6 +246,7 @@ class TestUmberjack(unittest.TestCase):
 
 
     def test_eval_windows_async_errfree(self):
+
         ERR_FREE_SAM_FILENAME = SIM_DATA_DIR + os.sep + "mixed" + os.sep + "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".mixed.reads.errFree.consensus.bwa.sort.query.sam"
         ERR_FREE_OUT_DIR =  SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + REF + os.sep + "window{}.breadth{}.depth{}.errFree".format(WINDOW_SIZE, MIN_WINDOW_BREADTH_COV_FRACTION, MIN_WINDOW_DEPTH_COV)
         ERR_FREE_ACTUAL_DNDS_CSV = ERR_FREE_OUT_DIR + os.sep + 'actual_dnds_by_site.csv'
@@ -328,6 +328,68 @@ class TestUmberjack(unittest.TestCase):
                                "--mpi",
                                "--sam_filename",  SAM_FILENAME,
                                "--ref", REF,
+                               "--debug"])
+
+
+        rconfig_file = os.path.dirname(__file__) + os.sep +"simulations" + os.sep + "R" + os.sep + "umberjack_unit_test.config"
+        with open(rconfig_file, 'w') as fh_out_config:
+            fh_out_config.write("ACTUAL_DNDS_FILENAME=" + ACTUAL_DNDS_FILENAME + "\n")
+            fh_out_config.write("EXPECTED_DNDS_FILENAME=" + EXPECTED_DNDS_FILENAME + "\n")
+            fh_out_config.write("INDELIBLE_DNDS_FILENAME=" + INDELIBLE_DNDS_FILENAME + "\n")
+
+        subprocess.check_call(["Rscript", "-e", "library(knitr); " +
+                               "setwd('" + R_DIR + "'); " +
+                               "spin('umberjack_unit_test.R', knit=FALSE);" +
+                               "knit2html('./umberjack_unit_test.Rmd', stylesheet='./markdown_bigwidth.css');"],
+                              shell=False, env=os.environ)
+        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.html",
+                    OUT_DIR + os.sep + "umberjack_unit_test.html")
+
+        concord_csv = OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv"
+        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.concordance.csv",
+                    OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv")
+        self._is_good_concordance(concord_csv=concord_csv)
+
+
+    def test_eval_windows_msa_fasta(self):
+
+        OUT_DIR =  SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + REF + os.sep + "window{}.breadth{}.depth{}.msa_fasta".format(WINDOW_SIZE, MIN_WINDOW_BREADTH_COV_FRACTION, MIN_WINDOW_DEPTH_COV)
+        MSA_FASTA_LIST = OUT_DIR + os.sep + "msa_fasta_list.txt"
+        OUT_DIR_LIST = OUT_DIR + os.sep + "msa_fasta_outdir_list.txt"
+        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + "consensus" + os.sep + "umberjack_unittest.mixed.dnds.csv"
+        START_NUCPOS = 1
+        END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
+
+        if not os.path.exists(OUT_DIR):
+            os.makedirs(OUT_DIR)
+
+        with open(MSA_FASTA_LIST, 'w') as fh_out:
+            fh_out.write(SIM_DATA_DIR + os.sep + "mixed" + os.sep + "umberjack_unittest.mixed.fasta")
+        with open(OUT_DIR_LIST, 'w') as fh_out:
+            fh_out.write(OUT_DIR + os.sep + "consensus")
+
+        # Can't call umberjack.eval_windows_mpi() directly since we need to invoke it with mpirun
+        subprocess.check_call(["mpirun",
+                               "-H", "localhost",  # host
+                               "-n", "2",  # copies of program per node
+                               "-output-filename", OUT_DIR + os.sep + "Test_umberjack.log",  # stdout, stderr logfile
+
+                               "python", UMBERJACK_PY,
+                               "--map_qual_cutoff", str(MAPQ_CUTOFF),
+                               "--read_qual_cutoff", str(READ_QUAL_CUTOFF),
+                               "--max_prop_n", str(MAX_PROP_N),
+                               "--window_size", str(WINDOW_SIZE),
+                               "--window_slide", str(WINDOW_SLIDE),
+                               "--window_breadth_cutoff", str(MIN_WINDOW_BREADTH_COV_FRACTION),
+                               "--window_depth_cutoff", str(MIN_WINDOW_DEPTH_COV),
+                               "--start_nucpos", str(START_NUCPOS),
+                               "--end_nucpos", str(END_NUCPOS),
+                               "--threads_per_window", str(THREADS_PER_WINDOW),
+                               "--output_csv_filename",  ACTUAL_DNDS_FILENAME,
+                               "--mode",  "DNDS",
+                               "--mpi",
+                               "--msa_fasta_list",  MSA_FASTA_LIST,
+                               "--out_dir_list",  OUT_DIR_LIST,
                                "--debug"])
 
 

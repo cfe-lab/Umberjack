@@ -1013,14 +1013,15 @@ def create_slice_msa_fasta(fasta_filename, out_fasta_filename, start_pos, end_po
                 line = line.split()[0]  # remove trailing whitespace and any test after the first whitespace
 
                 if line[0] == '>':  # previous sequence is finished.  Write out previous sequence
-                    if do_mask_stop_codon:
-                        seq = mask_stop_codon(seq)
+                    if header and seq:
+                        if do_mask_stop_codon:
+                            seq = mask_stop_codon(seq)
 
-                    written = write_seq(slice_fasta_fh, name=header, seq=seq[start_pos-1:end_pos], max_prop_N=max_prop_N, breadth_thresh=breadth_thresh)
-                    if written:
-                        total_seq += 1
+                        written = write_seq(slice_fasta_fh, name=header, seq=seq[start_pos-1:end_pos], max_prop_N=max_prop_N, breadth_thresh=breadth_thresh)
+                        if written:
+                            total_seq += 1
                     seq = ""
-                    header = line
+                    header = line[1:]
 
                 else:   # cache current sequence so that entire sequence is on one line
                     seq += line

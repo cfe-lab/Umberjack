@@ -553,14 +553,14 @@ def main():
                              description="Version " + str(settings.VERSION),
                              fromfile_prefix_chars='@')
     parser.add_argument("-f", help="Full filepath to config file.  If defined, then ignores all other commandline arguments.")
-    parser.add_argument("--sam_filename", default="",
+    parser.add_argument("--sam_filename", default=None,
                         help=("Full filepath to SAM alignment file.  Must be queryname sorted and must have header." +
                               "One of --sam_filename, --sam_filename_list, --msa_fasta_list must be specified."))
-    parser.add_argument("--sam_filename_list", default="",
+    parser.add_argument("--sam_filename_list", default=None,
                         help=("Full filepath to newline separated list of SAM alignment files.  "
                               "Each SAM file must have a header and must be queryname sorted." +
                               "One of --sam_filename, --sam_filename_list, --msa_fasta_list must be specified."))
-    parser.add_argument("--msa_fasta_list", default="",
+    parser.add_argument("--msa_fasta_list", default=None,
                         help=("Full filepath to newline separated list of Multiple-Sequence-Aligned fasta from which windows will be sliced.  " +
                               "One of --sam_filename, --sam_filename_list, --msa_fasta_list must be specified."))
     parser.add_argument("--ref", default="",
@@ -650,11 +650,11 @@ def main():
             LOGGER.warn("Using config file " + args.f + ".  Ignoring all other commandline arguments.")
         args = parser.parse_args([parser.fromfile_prefix_chars +  args.f])
 
-    if not args.sam_filename and not args.sam_filename_list and not args.msa_fasta and not args.msa_fasta_list:
+    if not args.sam_filename and not args.sam_filename_list  and not args.msa_fasta_list:
         parser.print_help()
         LOGGER.error("Must specify one of --sam_filename or --sam_filename_list --msa_fasta or --msa_fasta_list arguments")
         sys.exit()
-    elif sum([x is not None for x in [args.sam_filename, args.sam_filename_list, args.msa_fasta, args.msa_fasta_list]]) > 1:
+    elif sum([x is not None for x in [args.sam_filename, args.sam_filename_list, args.msa_fasta_list]]) > 1:
         parser.print_help()
         LOGGER.error("Must specify ONLY ONE of --sam_filename or --sam_filename_list --msa_fasta or msa_fasta_list arguments")
         sys.exit()

@@ -33,7 +33,7 @@ class OneNodeUmberjackPool(UmberjackPool):
 
         nodepool.close()  # no more work in the queue allowed
         LOGGER.debug("Done launching pool queue of " + str(len(process_results)) + " processes.  Wait for them to finish.")
-
+        nodepool.join()
 
         done_results = []
         while len(done_results) != len(process_results):
