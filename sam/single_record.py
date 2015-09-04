@@ -129,7 +129,8 @@ class SamRecord(SamSequence):
         if "pnext" in kwargs:
             self.pnext = int(kwargs["pnext"])
 
-        if self.seq == sam_constants.SAM_UNSPECIFIED:
+
+        if self.seq == sam_constants.SAM_UNSPECIFIED and self.is_mapped():
             raise ValueError("Sam must specify sequences")
 
         if self.seq is not None and self.qual is not None and self.qual != sam_constants.SAM_UNSPECIFIED and len(self.seq) != len(self.qual):
@@ -448,11 +449,13 @@ class SamRecord(SamSequence):
             # Insertion relative to reference: skip it (excise it)
             elif token[-1] == 'I':
                 if self.qual == sam_constants.SAM_UNSPECIFIED:
-                    self.ref_pos_to_insert_seq_qual.update({pos_wrt_ref_1based:
+                    # 1-based position wrt reference just BEFORE the insertion
+                    self.ref_pos_to_insert_seq_qual.update({pos_wrt_ref_1based - 1:
                                                             (self.seq[pos_wrt_seq_0based:(pos_wrt_seq_0based+length)],
                                                              sam_constants.QUAL_ZERO_CHAR*length)})
                 else:
-                    self.ref_pos_to_insert_seq_qual.update({pos_wrt_ref_1based:
+                    # 1-based position wrt reference just BEFORE the insertion
+                    self.ref_pos_to_insert_seq_qual.update({pos_wrt_ref_1based - 1:
                                                             (self.seq[pos_wrt_seq_0based:(pos_wrt_seq_0based+length)],
                                                              self.qual[pos_wrt_seq_0based:(pos_wrt_seq_0based+length)])})
                 pos_wrt_seq_0based += length

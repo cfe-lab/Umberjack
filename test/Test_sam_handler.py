@@ -218,7 +218,7 @@ class TestSamHandler(unittest.TestCase):
         """
 
         ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA = TEST_DIR + os.sep + os.path.basename(TEST_PAIR_SELECTION_REMDUP_SAM).replace(".sam", ".msa.fasta")
-        ACTUAL_TEST_PAIR_SELECTION_DUP_TSV = TEST_DIR + os.sep + os.path.basename(TEST_PAIR_SELECTION_REMDUP_SAM).replace(".sam", ".tsv")
+        ACTUAL_TEST_PAIR_SELECTION_DUP_TSV = TEST_DIR + os.sep + os.path.basename(TEST_PAIR_SELECTION_REMDUP_SAM).replace(".sam", ".dup.tsv")
         # Test that the pairs are selected correctly.   We don't care about slices, breadth thresholds or N's or masking stop codons here.
         # But we do care about mapping quality and target references.
         actual_written = sam.sam_handler.create_msa_slice_from_sam(sam_filename=TEST_PAIR_SELECTION_REMDUP_SAM,
@@ -228,12 +228,9 @@ class TestSamHandler(unittest.TestCase):
                                                                    read_qual_cutoff=READ_QUAL_CUTOFF, max_prop_N=1.0,
                                                                    breadth_thresh=0, start_pos=0, end_pos=0,
                                                                    do_insert_wrt_ref=False, do_mask_stop_codon=False,
-                                                                   do_remove_dup=True,
-                                                                   out_dup_tsv_filename=ACTUAL_TEST_PAIR_SELECTION_DUP_TSV)
+                                                                   do_remove_dup=True)
 
 
-        self.assertTrue(os.path.exists(ACTUAL_TEST_PAIR_SELECTION_DUP_TSV) and os.path.getsize(ACTUAL_TEST_PAIR_SELECTION_DUP_TSV)>0,
-                        ACTUAL_TEST_PAIR_SELECTION_DUP_TSV + " doesn't exist or is empty")
 
         self.assertTrue(os.path.exists(ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA) and os.path.getsize(ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA) > 0,
                         ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA + " doesn't exist or is empty")
@@ -247,6 +244,21 @@ class TestSamHandler(unittest.TestCase):
         expected_written = Utility.get_total_seq_from_fasta(EXPECTED_TEST_PAIR_SELECTION_REMDUP_FULL_MSA_FASTA)
         self.assertEqual(expected_written, actual_written,
                          "Expect total written seq {} but got {} from {}".format(expected_written, actual_written, ACTUAL_TEST_PAIR_SELECTION_FULL_MSA_FASTA))
+
+
+    def test_write_dup_tsv(self):
+        # TODO:  actually examine contents of dup tsv
+        ACTUAL_TEST_PAIR_SELECTION_DUP_TSV = TEST_DIR + os.sep + os.path.basename(TEST_PAIR_SELECTION_REMDUP_SAM).replace(".sam", ".dup.tsv")
+
+
+        sam.sam_handler.write_dup_record_tsv(sam_filename=TEST_PAIR_SELECTION_REMDUP_SAM, ref= TEST_PAIR_SELECTION_TARGET_REF,
+                                             mapping_cutoff=MAPQ_CUTOFF, read_qual_cutoff=READ_QUAL_CUTOFF, is_insert=False,
+                                             out_tsv_filename=ACTUAL_TEST_PAIR_SELECTION_DUP_TSV)
+
+
+        self.assertTrue(os.path.exists(ACTUAL_TEST_PAIR_SELECTION_DUP_TSV) and os.path.getsize(ACTUAL_TEST_PAIR_SELECTION_DUP_TSV)>0,
+                        ACTUAL_TEST_PAIR_SELECTION_DUP_TSV + " doesn't exist or is empty")
+
 
 
 
@@ -322,7 +334,7 @@ class TestSamHandler(unittest.TestCase):
             else:
                 expected_written += 1
                 self.assertEqual(expected_seq, actual_seq,
-                                 "Expected {} but got {} for testcase {}".format(expected_seq, actual_seq, testcase.read_name))
+                                 "Expected '{}' but got '{}' for testcase {}".format(expected_seq, actual_seq, testcase.read_name))
 
         self.assertEqual(expected_written, actual_written,
                          "Expect total written seq {} but got {} from {}".format(expected_written, actual_written, ACTUAL_TEST_MERGE_FULL_MSA_FASTA))
