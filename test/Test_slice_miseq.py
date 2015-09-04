@@ -35,6 +35,15 @@ class TestSliceMiSeq(unittest.TestCase):
         # The i'th index represents which windows cover the i'th site
         self.site_2_window = [[0], [0, 1, 2, 3], [1, 2, 3], [1]]
 
+    def add_windows(self, site_dnds_info):
+        for window in self.windows:
+            site_dnds_info.add_window(
+                dnds=(window["nonsyn_subs"]*window["exp_syn_subs"])/(window["syn_subs"]*window["exp_nonsyn_subs"]),
+                dn_minus_ds=((window["nonsyn_subs"]/window["exp_nonsyn_subs"]) - (window["syn_subs"]/window["exp_syn_subs"]))/window["treelen"],
+                reads=window["reads"],
+                syn_subs=window["syn_subs"], nonsyn_subs=window["nonsyn_subs"],
+                exp_syn_subs=window["exp_syn_subs"], exp_nonsyn_subs=window["exp_nonsyn_subs"])
+
 
     def test_site_dnds_info_dnds(self):
         site_dnds_info = slice_miseq.SiteDnDsInfo()
@@ -156,6 +165,7 @@ class TestSliceMiSeq(unittest.TestCase):
     def test_site_dnds_info_(self):
         site_dnds_info = slice_miseq.SiteDnDsInfo()
         windows = self.windows
+        self.add_windows(site_dnds_info)
         expected_windows = len(windows)
         actual_windows = site_dnds_info.get_window_coverage()
         self.assertEqual(expected_windows, actual_windows,
@@ -165,6 +175,7 @@ class TestSliceMiSeq(unittest.TestCase):
     def test_site_dnds_info_reads(self):
         site_dnds_info = slice_miseq.SiteDnDsInfo()
         windows = self.windows
+        self.add_windows(site_dnds_info)
         expected_ave = sum([window["reads"] for window in windows])/len(windows)
         actual_ave = site_dnds_info.get_ave_read_coverage()
         self.assertEqual(expected_ave, actual_ave,
@@ -174,7 +185,8 @@ class TestSliceMiSeq(unittest.TestCase):
     def test_site_dnds_info_nonsyn(self):
         site_dnds_info = slice_miseq.SiteDnDsInfo()
         windows = self.windows
-        expected_ave = sum([window["nonsyn"] for window in windows])/len(windows)
+        self.add_windows(site_dnds_info)
+        expected_ave = sum([window["nonsyn_subs"] for window in windows])/len(windows)
         actual_ave = site_dnds_info.get_ave_nonsyn_subs()
         self.assertEqual(expected_ave, actual_ave,
                                msg="Expected ave nonsynonymous substitutions at site=" + str(expected_ave) +
@@ -185,7 +197,8 @@ class TestSliceMiSeq(unittest.TestCase):
     def test_site_dnds_info_syn(self):
         site_dnds_info = slice_miseq.SiteDnDsInfo()
         windows = self.windows
-        expected_ave = sum([window["syn"] for window in windows])/len(windows)
+        self.add_windows(site_dnds_info)
+        expected_ave = sum([window["syn_subs"] for window in windows])/len(windows)
         actual_ave = site_dnds_info.get_ave_syn_subs()
         self.assertEqual(expected_ave, actual_ave,
                                msg="Expected ave synonymous substitutions at site=" + str(expected_ave) +
@@ -195,7 +208,8 @@ class TestSliceMiSeq(unittest.TestCase):
     def test_site_dnds_info_sub(self):
         site_dnds_info = slice_miseq.SiteDnDsInfo()
         windows = self.windows
-        expected_ave = sum([window["syn"]+window["nonsyn"] for window in windows])/len(windows)
+        self.add_windows(site_dnds_info)
+        expected_ave = sum([window["syn_subs"]+window["nonsyn_subs"] for window in windows])/len(windows)
         actual_ave = site_dnds_info.get_ave_subs()
         self.assertEqual(expected_ave, actual_ave,
                                msg="Expected ave substitutions at site=" + str(expected_ave) +
@@ -315,9 +329,9 @@ class TestSliceMiSeq(unittest.TestCase):
                             expected_ave_dnminusds_weightByReads_nolowsub += ((window["nonsyn_subs"]/window["exp_nonsyn_subs"])-(window["syn_subs"]/window["exp_syn_subs"]))*window["reads"]/(window["treelen"]*exp_total_reads_hisub)
                             expected_ave_dnminusds_weightBySubs_nolowsub += ((window["nonsyn_subs"]/window["exp_nonsyn_subs"])-(window["syn_subs"]/window["exp_syn_subs"]))*(window["nonsyn_subs"]+window["syn_subs"])/(window["treelen"]*exp_total_subs_hisub)
 
-                self.assertAlmostEqual(expected_ave_dnds_weightByReads, float(row["dndsWeightByReads"]), places=10,
+                self.assertAlmostEqual(expected_ave_dnds_weightByReads, float(row["dNdSWeightByReads"]), places=10,
                                        msg="Expected dn/ds weighted by reads=" + str(expected_ave_dnds_weightByReads) +
-                                       " but got " + row["dndsWeightByReads"] + " at site " + str(site_0based+1))
+                                       " but got " + row["dNdSWeightByReads"] + " at site " + str(site_0based+1))
                 self.assertAlmostEqual(expected_ave_dnds_weightBySubs, float(row["dNdSWeightBySubs"]), places=10,
                                        msg="Expected dn/ds weighted by subs=" + str(expected_ave_dnds_weightBySubs) +
                                        " but got " + row["dnMinusDsWeightBySubs"] + " at site " + str(site_0based+1))
