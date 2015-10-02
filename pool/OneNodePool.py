@@ -15,7 +15,7 @@ config.settings.setup_logging()
 LOGGER = logging.getLogger(__name__)
 
 
-class OneNodeUmberjackPool(BasePool):
+class OneNodePool(BasePool):
     """
     Uses python multiprocessing built in process pool.
     """

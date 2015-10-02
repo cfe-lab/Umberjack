@@ -33,7 +33,7 @@ class ReplicaInfo:
         self.mpi_rcv_request = mpi_rcv_request
 
 
-class MPIUmberjackPool(BasePool):
+class MPIPool(BasePool):
     """
     MPI implementation of work pool
     """
@@ -56,7 +56,7 @@ class MPIUmberjackPool(BasePool):
 
 
     def is_parent(self):
-        if self.rank == MPIUmberjackPool.PRIMARY_RANK:
+        if self.rank == MPIPool.PRIMARY_RANK:
             return True
 
 
@@ -86,7 +86,7 @@ class MPIUmberjackPool(BasePool):
 
         try:
 
-            if self.rank != MPIUmberjackPool.PRIMARY_RANK:
+            if self.rank != MPIPool.PRIMARY_RANK:
                 raise ValueError("Only the Parent can launch child replicas")
 
             pool_size = MPI.COMM_WORLD.Get_size()
@@ -105,7 +105,7 @@ class MPIUmberjackPool(BasePool):
                 str_work_args = ', '.join('{}:{}'.format(key, val) for key, val in work_args.items())
                 LOGGER.debug("Sending work_args to replica=" + str(replica_rank) + " args=" + str_work_args)
 
-                send_request = MPI.COMM_WORLD.isend(obj=work_args, dest=replica_rank, tag=MPIUmberjackPool.TAG_WORK)  # non-blocking
+                send_request = MPI.COMM_WORLD.isend(obj=work_args, dest=replica_rank, tag=MPIPool.TAG_WORK)  # non-blocking
                 rcv_request = MPI.COMM_WORLD.irecv(dest=replica_rank, tag=MPI.ANY_TAG)  # non-blocking
 
                 # MPI.MPI.COMM_WORLD.isend() stores a copy of the pickled (i.e. serialized) windows_args dict
@@ -130,7 +130,7 @@ class MPIUmberjackPool(BasePool):
             # All the work is done.
             LOGGER.debug("Terminating replicas...")
             for replica_rank in range(1, pool_size):
-                MPI.COMM_WORLD.isend(obj=None, dest=replica_rank, tag=MPIUmberjackPool.TAG_TERMINATE)
+                MPI.COMM_WORLD.isend(obj=None, dest=replica_rank, tag=MPIPool.TAG_TERMINATE)
             LOGGER.debug("Done terminating replicas.")
 
         except Exception:
@@ -153,20 +153,20 @@ class MPIUmberjackPool(BasePool):
                 try:
                     mpi_status = MPI.Status()
                     # block till the primary tells me to do something
-                    work_args = MPI.COMM_WORLD.recv(source=MPIUmberjackPool.PRIMARY_RANK, tag=MPI.ANY_TAG, status=mpi_status)
+                    work_args = MPI.COMM_WORLD.recv(source=MPIPool.PRIMARY_RANK, tag=MPI.ANY_TAG, status=mpi_status)
 
-                    if mpi_status.Get_tag() == MPIUmberjackPool.TAG_TERMINATE:
+                    if mpi_status.Get_tag() == MPIPool.TAG_TERMINATE:
                         is_terminated = True
                         LOGGER.debug("Replica of rank %d directed to terminate by primary" % self.rank)
                     else:
                         str_work_args = ', '.join('{}:{}'.format(key, val) for key, val in work_args.items())
                         LOGGER.debug("Received work_args=" + str_work_args)
                         result = func(**work_args)
-                        MPI.COMM_WORLD.send(obj=result, dest=MPIUmberjackPool.PRIMARY_RANK, tag=MPIUmberjackPool.TAG_WORK)
+                        MPI.COMM_WORLD.send(obj=result, dest=MPIPool.PRIMARY_RANK, tag=MPIPool.TAG_WORK)
                 except Exception:
                     LOGGER.exception("Failure in replica=" + str(self.rank))
                     err_msg = traceback.format_exc()
-                    MPI.COMM_WORLD.send(obj=err_msg, dest=MPIUmberjackPool.PRIMARY_RANK, tag=MPIUmberjackPool.TAG_WORK)
+                    MPI.COMM_WORLD.send(obj=err_msg, dest=MPIPool.PRIMARY_RANK, tag=MPIPool.TAG_WORK)
         except Exception:
             LOGGER.exception("Uncaught Exception.  Aborting")
             MPI.COMM_WORLD.Abort()
@@ -179,7 +179,7 @@ class MPIUmberjackPool(BasePool):
         :return:
         """
         try:
-            if self.rank == MPIUmberjackPool.PRIMARY_RANK:  # parent
+            if self.rank == MPIPool.PRIMARY_RANK:  # parent
                 self.launch_wait_replicas(work_args_iter, callback=None)
             else:  # replica
                 self.replica_work(func)

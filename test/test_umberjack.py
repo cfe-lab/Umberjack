@@ -1,12 +1,14 @@
 import unittest
-import pool.UmberjackPool
 import os
 import subprocess
-import Utility
 import shutil
 import csv
 import logging
+
+import UmberjackWork
+import Utility
 import config.settings as settings
+
 
 # Simulation Configs
 SIM_DIR = os.path.dirname(os.path.realpath(__file__)) + os.sep + "simulations"
@@ -35,7 +37,7 @@ EXPECTED_DNDS_FILENAME = SIM_DATA_DIR + os.sep + "mixed" + os.sep + SIM_DATA_FIL
 POPN_CONSENSUS_FASTA =  SIM_DATA_DIR + os.sep + "mixed" + os.sep + SIM_DATA_FILENAME_PREFIX + ".mixed.consensus.fasta"
 REF = "consensus"
 
-MODE = pool.UmberjackPool.MODE_DNDS
+MODE = UmberjackWork.MODE_DNDS
 INSERT = False
 MASK_STOP_CODON = True
 REMOVE_DUPLICATES  = True
@@ -205,7 +207,7 @@ class TestUmberjack(unittest.TestCase):
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
 
         # i.e.  it's up to you to open up ./simulations/R/umberjack_unit_test.html and inspect the graphs/contents.
-        from pool.OneNodeUmberjackPool import OneNodeUmberjackPool
+        from pool.OneNodePool import OneNodePool
         kwargs = dict(ref=REF,
                                          sam_filename=SAM_FILENAME,
                                          out_dir=OUT_DIR, map_qual_cutoff=MAPQ_CUTOFF,
@@ -222,7 +224,7 @@ class TestUmberjack(unittest.TestCase):
                                          mask_stop_codon=MASK_STOP_CODON,
                                          remove_duplicates=REMOVE_DUPLICATES,
                                          debug=True)
-        pool = OneNodeUmberjackPool(**kwargs)
+        pool = OneNodePool(**kwargs)
         pool.start()
 
         rconfig_file = R_DIR + os.sep + "umberjack_unit_test.config"
@@ -252,7 +254,7 @@ class TestUmberjack(unittest.TestCase):
         ERR_FREE_ACTUAL_DNDS_CSV = ERR_FREE_OUT_DIR + os.sep + 'actual_dnds_by_site.csv'
         START_NUCPOS = 1
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
-        from pool.OneNodeUmberjackPool import OneNodeUmberjackPool
+        from pool.OneNodePool import OneNodePool
         kwargs = dict(ref=REF,
                                                sam_filename=ERR_FREE_SAM_FILENAME,
                                                out_dir=ERR_FREE_OUT_DIR,
@@ -273,7 +275,7 @@ class TestUmberjack(unittest.TestCase):
                                                mask_stop_codon=MASK_STOP_CODON,
                                                remove_duplicates=REMOVE_DUPLICATES,
                                                debug=True)
-        pool = OneNodeUmberjackPool(**kwargs)
+        pool = OneNodePool(**kwargs)
         pool.start()
 
         rconfig_file = R_DIR + os.sep + "umberjack_unit_test.config"
@@ -444,7 +446,7 @@ class TestUmberjack(unittest.TestCase):
                "--hyphy_exe", HYPHY_EXE,
                "--hyphy_basedir", HYPHY_BASEDIR,
                "--fastree_exe", FASTTREE_EXE,
-               "--mode", pool.UmberjackPool.MODE_COUNT_SUBS]
+               "--mode", UmberjackWork.MODE_COUNT_SUBS]
         subprocess.check_call(cmd, env=os.environ)
 
 
@@ -474,7 +476,7 @@ class TestUmberjack(unittest.TestCase):
                "--hyphy_exe", HYPHY_EXE,
                "--hyphy_basedir", HYPHY_BASEDIR,
                "--fastree_exe", FASTTREE_EXE,
-               "--mode", pool.UmberjackPool.MODE_COUNT_SUBS]
+               "--mode", UmberjackWork.MODE_COUNT_SUBS]
         subprocess.check_call(cmd, env=os.environ)
 
 

@@ -141,7 +141,7 @@ def eval_window(out_dir, window_depth_cutoff, window_breadth_cutoff, start_windo
 
 
 
-class UmberjackPool(object):
+class UmberjackWork(object):
     """
     Does the pipeline work.
     Let's subclasses decide how to spread out work amongst child processes.
@@ -198,7 +198,7 @@ class UmberjackPool(object):
         In order to avoid race conditions, make these output directories before spread_working child processes.
         """
         if self.out_dir_list:
-            for outdir in UmberjackPool.list_from_file(self.out_dir_list):
+            for outdir in UmberjackWork.list_from_file(self.out_dir_list):
                 if not os.path.exists(outdir):
                     os.makedirs(outdir)
         elif not os.path.exists(self.out_dir):
@@ -206,7 +206,7 @@ class UmberjackPool(object):
 
         if self.sam_filename_list or (self.sam_filename and not self.ref):  # multiple sam, ref combos
             for samfile, ref in self.sam_ref_iter():
-                sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
+                sam_ref_outdir = UmberjackWork.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
 
                 if not os.path.exists(sam_ref_outdir):
                     os.makedirs(sam_ref_outdir)
@@ -300,18 +300,18 @@ class UmberjackPool(object):
             LOGGER.fatal("Must specify one of sam_filename, sam_filename_list, or msa_fasta_list")
             raise ValueError("Must specify one of sam_filename, sam_filename_list, or msa_fasta_list")
         elif self.sam_filename:
-            UmberjackPool.check_sam(self.sam_filename, self.ref)
+            UmberjackWork.check_sam(self.sam_filename, self.ref)
         elif self.sam_filename_list:
-            for sam in UmberjackPool.list_from_file(self.sam_filename_list):
-                UmberjackPool.check_sam(sam, self.ref)
+            for sam in UmberjackWork.list_from_file(self.sam_filename_list):
+                UmberjackWork.check_sam(sam, self.ref)
         elif self.msa_fasta_list:
-            msa_fasta_list = UmberjackPool.list_from_file(self.msa_fasta_list)
+            msa_fasta_list = UmberjackWork.list_from_file(self.msa_fasta_list)
             if self.out_dir_list:
-                out_dir_list = UmberjackPool.list_from_file(self.out_dir_list)
+                out_dir_list = UmberjackWork.list_from_file(self.out_dir_list)
                 if len(out_dir_list) != len(msa_fasta_list):
                     raise ValueError("There should be the same number of output directories in out_dir_list as msa fastas in msa_fasta_list")
             for msa_fasta in msa_fasta_list:
-                UmberjackPool.check_msa_fasta(msa_fasta)
+                UmberjackWork.check_msa_fasta(msa_fasta)
 
         return True
 
@@ -409,7 +409,7 @@ class UmberjackPool(object):
         if self.sam_filename:
             queue_samfiles = [self.sam_filename]
         else:
-            queue_samfiles = UmberjackPool.list_from_file(self.sam_filename_list)
+            queue_samfiles = UmberjackWork.list_from_file(self.sam_filename_list)
 
         for queue_next_samfile in queue_samfiles:
             if self.ref:
@@ -444,7 +444,7 @@ class UmberjackPool(object):
         if self.sam_filename:
             queue_samfiles = [self.sam_filename]
         elif self.sam_filename_list:
-            queue_samfiles = UmberjackPool.list_from_file(self.sam_filename_list)
+            queue_samfiles = UmberjackWork.list_from_file(self.sam_filename_list)
         else:
             queue_samfiles = []
 
@@ -465,17 +465,17 @@ class UmberjackPool(object):
                 else:
                     queue_ref_end_nucpos =  self.end_nucpos
 
-                sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=queue_next_samfile,
+                sam_ref_outdir = UmberjackWork.get_sam_ref_outdir(pardir=self.out_dir, samfilename=queue_next_samfile,
                                                                   ref=queue_next_ref)
 
                 if self.debug:
-                    UmberjackPool.create_full_msa_fasta(sam_filename=queue_next_samfile, out_dir=sam_ref_outdir, ref=queue_next_ref,
+                    UmberjackWork.create_full_msa_fasta(sam_filename=queue_next_samfile, out_dir=sam_ref_outdir, ref=queue_next_ref,
                                           mapping_cutoff=self.map_qual_cutoff, read_qual_cutoff=self.read_qual_cutoff,
                                           is_insert=self.insert, is_mask_stop_codon=self.mask_stop_codon)
 
                 # TODO:  only  make this file if debug???
                 if self.remove_duplicates:
-                    UmberjackPool.create_dup_tsv(sam_filename=queue_next_samfile, out_dir=sam_ref_outdir, ref=queue_next_ref,
+                    UmberjackWork.create_dup_tsv(sam_filename=queue_next_samfile, out_dir=sam_ref_outdir, ref=queue_next_ref,
                                    mapping_cutoff=self.map_qual_cutoff, read_qual_cutoff=self.read_qual_cutoff,
                                    is_insert=self.insert)
 
@@ -516,11 +516,11 @@ class UmberjackPool(object):
         :return iterator of dict:
         """
         if self.out_dir_list:
-            queue_out_dirs =  UmberjackPool.list_from_file(self.out_dir_list)
+            queue_out_dirs =  UmberjackWork.list_from_file(self.out_dir_list)
         else:
             queue_out_dirs = []
 
-        for i, queue_msa_fasta in enumerate(UmberjackPool.list_from_file(self.msa_fasta_list)):
+        for i, queue_msa_fasta in enumerate(UmberjackWork.list_from_file(self.msa_fasta_list)):
             if not self.start_nucpos:
                 queue_ref_start_nucpos = 1
             else:
@@ -598,7 +598,7 @@ class UmberjackPool(object):
                 for samfile, ref in self.sam_ref_iter():
                     # TODO:  unhackl
                     ref_len = sam_handler.get_reflen(sam_filename=samfile, ref=ref)
-                    sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
+                    sam_ref_outdir = UmberjackWork.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
                     if self.sam_filename_list:
                         output_csv_filename = sam_ref_outdir + os.sep +os.path.basename(samfile).replace(".sam", ".dnds.csv")
                     else:
@@ -611,9 +611,9 @@ class UmberjackPool(object):
                     })
             elif self.msa_fasta_list:
                 # TODO:  undo these hacks.  Ask for this info from user
-                for i, msa_fasta in enumerate(UmberjackPool.list_from_file(self.msa_fasta_list)):
+                for i, msa_fasta in enumerate(UmberjackWork.list_from_file(self.msa_fasta_list)):
                     ref_len = Utility.get_len_1st_seq(msa_fasta)
-                    out_dir = UmberjackPool.list_from_file(self.out_dir_list)[i]
+                    out_dir = UmberjackWork.list_from_file(self.out_dir_list)[i]
                     if msa_fasta.endswith(".msa.fasta"):
                         output_csv_filename = out_dir + os.sep +os.path.basename(msa_fasta).replace(".msa.fasta", ".dnds.csv")
                     else:
@@ -631,7 +631,7 @@ class UmberjackPool(object):
             if self.sam_filename or self.sam_filename_list:
                 for samfile, ref in self.sam_ref_iter():
                     # TODO:  unhackl
-                    sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
+                    sam_ref_outdir = UmberjackWork.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
                     if self.sam_filename_list:
                         output_csv_filename = sam_ref_outdir + os.sep +os.path.basename(samfile).replace(".sam", ".dnds.csv")
                     else:
@@ -639,9 +639,9 @@ class UmberjackPool(object):
                     plot_kws_list.append({"dnds_csv": output_csv_filename})
             elif self.msa_fasta_list:
                 # TODO:  undo these hacks.  Ask for this info from user
-                for i, msa_fasta in enumerate(UmberjackPool.list_from_file(self.msa_fasta_list)):
+                for i, msa_fasta in enumerate(UmberjackWork.list_from_file(self.msa_fasta_list)):
                     ref_len = Utility.get_len_1st_seq(msa_fasta)
-                    out_dir = UmberjackPool.list_from_file(self.out_dir_list)[i]
+                    out_dir = UmberjackWork.list_from_file(self.out_dir_list)[i]
                     if msa_fasta.endswith(".msa.fasta"):
                         output_csv_filename = out_dir + os.sep +os.path.basename(msa_fasta).replace(".msa.fasta", ".dnds.csv")
                     else:
@@ -655,7 +655,7 @@ class UmberjackPool(object):
             kwds_list = []
             for samfile, ref in self.sam_ref_iter():
                 # TODO:  unhackl
-                sam_ref_outdir = UmberjackPool.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
+                sam_ref_outdir = UmberjackWork.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
                 if sam_ref_outdir == self.out_dir:
                     output_csv_filename = self.output_csv_filename
                 else:
