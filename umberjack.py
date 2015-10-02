@@ -684,13 +684,18 @@ def main():
             # Ignore the concurrent_windows commandline arg and uses the number of processors indicated by mpirun command
             eval_windows_args.pop("concurrent_windows", None)
             LOGGER.debug("Running MPI Version. Ignoring --concurrent_windows flag.  Using mpirun node arguments.")
-            umberjackworker = pool.MPIUmberjackPool.MPIUmberjackPool(**eval_windows_args)
-
+            processpool = pool.MPIUmberjackPool.MPIUmberjackPool()
         except ImportError:
             LOGGER.warn("You must install mpi4py module in order to leverage multiple nodes.  Running on single node.")
             eval_windows_args.pop("mpi", None)
+            import pool.OneNodeUmberjackPool
+            processpool = pool.OneNodeUmberjackPool.OneNodeUmberjackPool(args.concurrent_windows)
     else:
-        umberjackworker = OneNodeUmberjackPool(**eval_windows_args)
+        import pool.OneNodeUmberjackPool
+        processpool = pool.OneNodeUmberjackPool.OneNodeUmberjackPool(args.concurrent_windows)
+
+    eval_windows_args["pool"] = processpool
+    umberjackworker = pool.UmberjackPool.UmberjackPool(**eval_windows_args)
 
     umberjackworker.start()
 

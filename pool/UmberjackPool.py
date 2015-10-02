@@ -178,19 +178,8 @@ class UmberjackPool(object):
         self.sam_filename_list = None
         self.msa_fasta_list = None
         self.mpi = False
+        self.pool = None
         self.__dict__.update(kwargs)
-
-
-        # if self.mpi:
-        #     from pool.MPIPool import  MPIPool
-        #     self. = MPIPool(size=None)
-        # else:
-        #     from pool.SingleNodePool import  SingleNodePool
-        #     self. = SingleNodePool(size=self.concurrent_windows)
-
-
-    def is_parent(self):
-        raise NotImplementedError("This object should be subclassed")
 
 
     def setup(self):
@@ -636,7 +625,7 @@ class UmberjackPool(object):
                                       "output_csv_filename": output_csv_filename
                     })
 
-            self.spread_work(func=slice_miseq.tabulate_dnds, work_args_iter=kwds_list)
+            self.pool.spread_work(func=slice_miseq.tabulate_dnds, work_args_iter=kwds_list)
 
             plot_kws_list = []
             if self.sam_filename or self.sam_filename_list:
@@ -659,7 +648,7 @@ class UmberjackPool(object):
                         output_csv_filename = out_dir + os.sep +os.path.basename(msa_fasta).replace(".fasta", ".dnds.csv")
                     # TODO:  hack to check if m
                     plot_kws_list.append({"dnds_csv": output_csv_filename})
-            self.spread_work(func=plotter.plot_dnds, work_args_iter=plot_kws_list)
+            self.pool.spread_work(func=plotter.plot_dnds, work_args_iter=plot_kws_list)
 
 
         elif self.mode == MODE_GTR_RATE:
@@ -674,7 +663,7 @@ class UmberjackPool(object):
                 kwds_list.append({"fasttree_output_dir": sam_ref_outdir,
                                   "output_csv_filename": output_csv_filename
                 })
-            self.spread_work(func=slice_miseq.tabulate_rates, work_args_iter=kwds_list)
+            self.pool.spread_work(func=slice_miseq.tabulate_rates, work_args_iter=kwds_list)
 
         LOGGER.debug("Done tabulating results")
 
@@ -685,17 +674,16 @@ class UmberjackPool(object):
         :return:
         """
         LOGGER.debug("About to spread window work")
-        self.spread_work(func=eval_window, work_args_iter=self.window_iter())
+        self.pool.spread_work(func=eval_window, work_args_iter=self.window_iter())
         LOGGER.debug("Done spread window work")
+
 
     def start(self):
         """
         Main entry method for the pipeline.
         :return:
         """
-
-        if self.is_parent():
-            self.setup()
+        self.setup()
 
         # spread_work windows for every sam, ref into the same pool
         self.eval_windows()
@@ -703,8 +691,3 @@ class UmberjackPool(object):
 
         # Tabulate results for every sam, ref
         self.tabulate_results()
-
-
-
-    def spread_work(self, func, work_args_iter):
-        raise NotImplementedError("This object should be subclassed")

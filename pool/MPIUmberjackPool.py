@@ -1,8 +1,9 @@
 """
 MPI Pool implementation.
+Note: mpi4py will raise an exception if there is an error during the mpi operations.  No need to check for error codes.
 """
 from mpi4py import MPI
-from UmberjackPool import UmberjackPool
+from pool.basepool import  BasePool
 import  logging
 import traceback
 from collections import deque
@@ -32,7 +33,7 @@ class ReplicaInfo:
         self.mpi_rcv_request = mpi_rcv_request
 
 
-class MPIUmberjackPool(UmberjackPool):
+class MPIUmberjackPool(BasePool):
     """
     MPI implementation of work pool
     """
@@ -41,8 +42,9 @@ class MPIUmberjackPool(UmberjackPool):
     TAG_TERMINATE = 2
 
     def __init__(self, **kwargs):
-        super(MPIUmberjackPool, self).__init__(**kwargs)
+        super(BasePool, self).__init__(**kwargs)
         self.rank = None
+        self.results = []  # keep track of all the results from every replica
         try:
             self.rank = MPI.COMM_WORLD.Get_rank()
             LOGGER.debug("I am rank=" + str(self.rank))
@@ -58,7 +60,25 @@ class MPIUmberjackPool(UmberjackPool):
             return True
 
 
-    def launch_wait_replicas(self, work_args_iter):
+    def wait_replica_done(self, busy_replica_2_request, available_replicas, callback=None):
+        """
+        Waits for replicas to finish.  As soon as one finishes, then retrieve its results and execute the callback.
+        :return:
+        """
+        requests = [window_replica_info.mpi_rcv_request for window_replica_info in busy_replica_2_request.values()]
+        mpi_status = MPI.Status()
+        idx, msg = MPI.Request.waitany(requests, mpi_status)
+        done_replica_rank = mpi_status.Get_source()
+        available_replicas.append(done_replica_rank)
+        del busy_replica_2_request[done_replica_rank]
+        LOGGER.debug("Received success from replica=" + str(done_replica_rank))
+
+        # Now execute the callback
+        if callback:
+            callback(msg)
+
+
+    def launch_wait_replicas(self, work_args_iter, callback=None):
         """
         Launch replica processes
         :return:
@@ -78,19 +98,10 @@ class MPIUmberjackPool(UmberjackPool):
             for work_args in work_args_iter:
                 # Wait until a replica is available
                 while not available_replicas:
-                    requests = [window_replica_info.mpi_rcv_request for window_replica_info in busy_replica_2_request.values()]
-                    mpi_status = MPI.Status()
-                    idx, err_msg = MPI.Request.waitany(requests, mpi_status)
-                    done_replica_rank = mpi_status.Get_source()
-                    available_replicas.append(done_replica_rank)
-                    del busy_replica_2_request[done_replica_rank]
-                    if err_msg:
-                        LOGGER.error("Received error from replica=" + str(done_replica_rank) + " err_msg=" + str(err_msg))
-                    else:
-                        LOGGER.debug("Received success from replica=" + str(done_replica_rank))
+                    self.wait_replica_done(busy_replica_2_request, available_replicas, callback)
+
 
                 replica_rank = available_replicas.popleft()  # first in first out queue
-
                 str_work_args = ', '.join('{}:{}'.format(key, val) for key, val in work_args.items())
                 LOGGER.debug("Sending work_args to replica=" + str(replica_rank) + " args=" + str_work_args)
 
@@ -112,18 +123,9 @@ class MPIUmberjackPool(UmberjackPool):
                                                                          mpi_rcv_request=rcv_request)
 
             # Sent out all work requests.  Wait until all work is done
+
             while busy_replica_2_request:
-                requests = [window_replica_info.mpi_rcv_request for window_replica_info in busy_replica_2_request.values()]
-                mpi_status = MPI.Status()
-                idx, err_msg = MPI.Request.waitany(requests, mpi_status)
-                done_replica_rank = mpi_status.Get_source()
-                available_replicas.append(done_replica_rank)
-                del busy_replica_2_request[done_replica_rank]
-                if err_msg:
-                    LOGGER.error("Received error from replica=" + str(done_replica_rank) + " err_msg=" + str(err_msg))
-                else:
-                    LOGGER.debug("Received success from replica=" + str(done_replica_rank))
-                
+                self.wait_replica_done(busy_replica_2_request, available_replicas, callback)
 
             # All the work is done.
             LOGGER.debug("Terminating replicas...")
@@ -159,8 +161,8 @@ class MPIUmberjackPool(UmberjackPool):
                     else:
                         str_work_args = ', '.join('{}:{}'.format(key, val) for key, val in work_args.items())
                         LOGGER.debug("Received work_args=" + str_work_args)
-                        func(**work_args)
-                        MPI.COMM_WORLD.send(obj=None, dest=MPIUmberjackPool.PRIMARY_RANK, tag=MPIUmberjackPool.TAG_WORK)
+                        result = func(**work_args)
+                        MPI.COMM_WORLD.send(obj=result, dest=MPIUmberjackPool.PRIMARY_RANK, tag=MPIUmberjackPool.TAG_WORK)
                 except Exception:
                     LOGGER.exception("Failure in replica=" + str(self.rank))
                     err_msg = traceback.format_exc()
@@ -170,7 +172,7 @@ class MPIUmberjackPool(UmberjackPool):
             MPI.COMM_WORLD.Abort()
 
 
-    def spread_work(self, func, work_args_iter):
+    def spread_work(self, func, work_args_iter, callback=None):
         """
         If parent process, then launches child replicas.
         If child replicas, then does work.
@@ -178,10 +180,13 @@ class MPIUmberjackPool(UmberjackPool):
         """
         try:
             if self.rank == MPIUmberjackPool.PRIMARY_RANK:  # parent
-                self.launch_wait_replicas(work_args_iter)
+                self.launch_wait_replicas(work_args_iter, callback=None)
             else:  # replica
                 self.replica_work(func)
         except Exception:
             LOGGER.exception("Uncaught Exception.  Aborting")
             MPI.COMM_WORLD.Abort()
+
+
+
 
