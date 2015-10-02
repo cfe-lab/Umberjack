@@ -525,11 +525,11 @@ class Consensus:
         :rtype : str
         """
         # do a quick sanity check
-        if sum(self.seq[0].values()) != sum(self.seq[-1].values()):
+        if self.seq and sum(self.seq[0].values()) != sum(self.seq[-1].values()):
             raise ValueError("Internal cache for nucleotide letter counts corrupted")
-        elif sum(self.codon_seq[-1].values()) != sum(self.codon_seq[-1].values()):
+        elif self.codon_seq and sum(self.codon_seq[-1].values()) != sum(self.codon_seq[-1].values()):
             raise ValueError("Internal cache for codon counts corrupted")
-        elif len(self.codon_seq) != math.ceil(len(self.seq)/float(NUC_PER_CODON)):
+        elif self.codon_seq and self.seq and len(self.codon_seq) != math.ceil(len(self.seq)/float(NUC_PER_CODON)):
             raise ValueError("Internal cache for codon counts no longer in sync with nucleotide counts")
 
         consensus = ""
