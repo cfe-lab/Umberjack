@@ -68,7 +68,7 @@ def eval_window(out_dir, window_depth_cutoff, window_breadth_cutoff, start_windo
     LOGGER.debug("Eval window {}-{}".format(start_window_nucpos, end_window_nucpos) +
                  " for sam=" + str(sam_filename) + " ref=" + str(ref) + " msa_fasta=" + str(msa_fasta))
     if ((sam_filename and ref and msa_fasta) or
-        (not msa_fasta and (not sam_filename or not ref))):
+            (not msa_fasta and (not sam_filename or not ref))):
         raise ValueError("Must specify just msa_fasta or (sam_filename and ref)")
     elif sam_filename and ref:
         sam_filename_nopath = os.path.split(sam_filename)[1]
@@ -98,8 +98,8 @@ def eval_window(out_dir, window_depth_cutoff, window_breadth_cutoff, start_windo
         msa_window_filename_prefix = out_dir + os.sep + msa_window_filename_prefix + "." + str(start_window_nucpos) + "_" + str(end_window_nucpos)
         msa_window_fasta_filename = msa_window_filename_prefix + ".fasta"
 
-        # TODO:  handle duplicates, mask_stop_codon
-        total_slice_seq = Utility.create_slice_msa_fasta(fasta_filename=msa_fasta,
+        # TODO:  handle duplicates
+        total_slice_seq = slice_miseq.create_slice_msa_fasta(fasta_filename=msa_fasta,
                                                          out_fasta_filename=msa_window_fasta_filename,
                                                          start_pos=start_window_nucpos,
                                                          end_pos=end_window_nucpos,

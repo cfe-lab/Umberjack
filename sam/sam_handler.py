@@ -194,7 +194,7 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
                                                    slice_end_wrt_ref_1based=end_pos,
                                                    do_insert_wrt_ref=do_insert_wrt_ref,
                                                    do_mask_stop_codon=do_mask_stop_codon)
-            is_written = Utility.write_seq(out_fasta_fh, pair.get_name(), mseq, max_prop_N, breadth_thresh)
+            is_written = slice_miseq.write_seq(out_fasta_fh, pair.get_name(), mseq, max_prop_N, breadth_thresh)
             total_written += 1 if is_written else 0
 
     LOGGER.debug("Done slice fasta " + out_fasta_filename)

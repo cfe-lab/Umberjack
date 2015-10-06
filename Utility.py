@@ -950,28 +950,6 @@ def newick_nice_name(name):
     return re.sub(pattern=NEWICK_NAME_RE, repl='_', string=name)
 
 
-def write_seq(fh_out, name, seq, max_prop_N=1.0, breadth_thresh=0.0):
-    """
-    Helper function to write out sequence to fasta file handle if has sufficient bases.
-    Renames the sequence name so that it is newick compatible.
-    :param FileIO fh_out:  python file handle
-    :param str name: Sequence Name
-    :param str seq:  Sequence
-    :param float max_prop_N: maximum fraction allowed N.  Doesn't care about gaps.
-            Setting this to less than 1 only makes sense when a read has not been sliced prior to passing into this function,
-            since the fraction of N's is only calculated on the sequence passed in.
-    :param float breadth_thresh:  minimum fraction of true bases (ACGT) required.  Only calculated on the sequence passed in.
-    :return bool:  True if sequence written out
-    """
-
-    if seq.count('N') / float(len(seq)) <= max_prop_N and (seq.count("N") + seq.count("-"))/float(len(seq)) <= (1.0-breadth_thresh):
-        # Newick tree formats don't like special characters.  Convert them to underscores.
-        newick_nice_qname = newick_nice_name(name)
-        fh_out.write(">" + newick_nice_qname + "\n")
-        fh_out.write(seq + "\n")
-        return True
-    return False
-
 
 def mask_stop_codon(seq):
     """
@@ -986,51 +964,3 @@ def mask_stop_codon(seq):
     return seq
 
 
-def create_slice_msa_fasta(fasta_filename, out_fasta_filename, start_pos, end_pos, max_prop_N=1.0, breadth_thresh=0.0, do_mask_stop_codon=False):
-    """
-    From a fasta file of multiple sequence alignments, extract the sequence sequence from desired region.
-    If the sequence is shorter than <end_pos>, then fills in the gaps with '-' characters so that it ends at <end_pos>
-
-    Only puts in the read into the sliced msa fasta if it obeys the window constraints.
-
-    :rtype int: total sequences written
-    :param str fasta_filename: full file path to fasta of multiple sequence alignments
-    :param str out_fasta_filename:  full file path to output fasta of sliced multiple sequence alignments
-    :param int start_pos : 1-based start position of region to extract
-    :param int end_pos: 1-based end position of region to extract
-    :param float max_prop_N:  proportion of bases in sequences that can be N within the start_pos and end_pos inclusive
-    :param float breadth_thresh: fraction of sequence that be A,C,T,or G within start_pos and end_pos inclusive.
-    :param bool do_mask_stop_codon:  whether or not to mask stop codons in the slices with "NNN"
-    """
-
-    total_seq = 0
-    with open(fasta_filename, 'r') as fasta_fh, open(out_fasta_filename, 'w') as slice_fasta_fh:
-        header = ""
-        seq = ""
-        for line in fasta_fh:
-            line = line.rstrip()
-            if line:
-                line = line.split()[0]  # remove trailing whitespace and any test after the first whitespace
-
-                if line[0] == '>':  # previous sequence is finished.  Write out previous sequence
-                    if header and seq:
-                        if do_mask_stop_codon:
-                            seq = mask_stop_codon(seq)
-
-                        written = write_seq(slice_fasta_fh, name=header, seq=seq[start_pos-1:end_pos], max_prop_N=max_prop_N, breadth_thresh=breadth_thresh)
-                        if written:
-                            total_seq += 1
-                    seq = ""
-                    header = line[1:]
-
-                else:   # cache current sequence so that entire sequence is on one line
-                    seq += line
-
-        if do_mask_stop_codon:
-            seq = mask_stop_codon(seq)
-
-        written = write_seq(slice_fasta_fh, name=header, seq=seq[start_pos-1:end_pos], max_prop_N=max_prop_N, breadth_thresh=breadth_thresh)
-        if written:
-            total_seq += 1
-
-    return total_seq
