@@ -180,7 +180,7 @@ class MPIPool(BasePool):
         """
         try:
             if self.rank == MPIPool.PRIMARY_RANK:  # parent
-                self.launch_wait_replicas(work_args_iter, callback=None)
+                self.launch_wait_replicas(work_args_iter, callback=callback)
             else:  # replica
                 self.replica_work(func)
         except Exception:
