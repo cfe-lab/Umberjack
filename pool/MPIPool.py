@@ -1,6 +1,9 @@
 """
 MPI Pool implementation.
-Note: mpi4py will raise an exception if there is an error during the mpi operations.  No need to check for error codes.
+Note:
+- mpi4py will raise an exception if there is an error during the mpi operations.  No need to check for error codes.
+- The maximum picklable message size is 32kB (from mpi4py v 1.3.1).
+
 """
 from mpi4py import MPI
 from pool.basepool import  BasePool
@@ -41,6 +44,7 @@ class MPIPool(BasePool):
     TAG_WORK = 1
     TAG_TERMINATE = 2
 
+
     def __init__(self, **kwargs):
         super(BasePool, self).__init__(**kwargs)
         self.rank = None
@@ -69,18 +73,28 @@ class MPIPool(BasePool):
         mpi_status = MPI.Status()
         idx, msg = MPI.Request.waitany(requests, mpi_status)
         done_replica_rank = mpi_status.Get_source()
+
         available_replicas.append(done_replica_rank)
         del busy_replica_2_request[done_replica_rank]
-        LOGGER.debug("Received success from replica=" + str(done_replica_rank))
 
-        # Now execute the callback
-        if callback:
-            callback(msg)
+        if mpi_status.Get_tag() == MPI.ERR_TAG:
+            LOGGER.warn("Received error from replica " + str(done_replica_rank) +
+                        ": " + str(msg))
+        else:
+            LOGGER.debug("Received success from replica=" + str(done_replica_rank))
+
+            # Now execute the callback
+            if callback:
+                callback(msg)
+
+
+
 
 
     def launch_wait_replicas(self, work_args_iter, callback=None):
         """
-        Launch replica processes
+        Launch replica processes.
+        NB:  Do not pass messages > 32kB when pickled.
         :return:
         """
 
@@ -162,11 +176,12 @@ class MPIPool(BasePool):
                         str_work_args = ', '.join('{}:{}'.format(key, val) for key, val in work_args.items())
                         LOGGER.debug("Received work_args=" + str_work_args)
                         result = func(**work_args)
+                        LOGGER.debug("Returning " + str(result))
                         MPI.COMM_WORLD.send(obj=result, dest=MPIPool.PRIMARY_RANK, tag=MPIPool.TAG_WORK)
                 except Exception:
                     LOGGER.exception("Failure in replica=" + str(self.rank))
                     err_msg = traceback.format_exc()
-                    MPI.COMM_WORLD.send(obj=err_msg, dest=MPIPool.PRIMARY_RANK, tag=MPIPool.TAG_WORK)
+                    MPI.COMM_WORLD.send(obj=err_msg, dest=MPIPool.PRIMARY_RANK, tag=MPI.ERR_TAG)
         except Exception:
             LOGGER.exception("Uncaught Exception.  Aborting")
             MPI.COMM_WORLD.Abort()
