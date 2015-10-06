@@ -78,7 +78,7 @@ class MPIPool(BasePool):
         del busy_replica_2_request[done_replica_rank]
 
         if mpi_status.Get_tag() == MPI.ERR_TAG:
-            LOGGER.warn("Received error from replica " + str(done_replica_rank) +
+            LOGGER.error("Received error from replica " + str(done_replica_rank) +
                         ": " + str(msg))
         else:
             LOGGER.debug("Received success from replica=" + str(done_replica_rank))
