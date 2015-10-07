@@ -176,7 +176,6 @@ class MPIPool(BasePool):
                         str_work_args = ', '.join('{}:{}'.format(key, val) for key, val in work_args.items())
                         LOGGER.debug("Received work_args=" + str_work_args)
                         result = func(**work_args)
-                        LOGGER.debug("Returning " + str(result))
                         MPI.COMM_WORLD.send(obj=result, dest=MPIPool.PRIMARY_RANK, tag=MPIPool.TAG_WORK)
                 except Exception:
                     LOGGER.exception("Failure in replica=" + str(self.rank))
