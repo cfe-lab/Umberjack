@@ -344,9 +344,11 @@ def  calc_metric_entropy(symbol_to_count):
             log_p_symbol = math.log(p_symbol, 2)  # Log2  probability of letter
             total_entropy -= (p_symbol * log_p_symbol)
 
-    total_symbols = float(len(symbol_to_count.keys()))
+    total_symbols = float(len([k for k, v in symbol_to_count.iteritems() if v > 0]))
     if total_symbols > 1:
         metric_entropy = total_entropy / math.log(total_symbols, 2)
+    elif total_symbols == 1 and total_seqs > 1:
+        metric_entropy = 0
     else:
         metric_entropy = None
 
@@ -435,12 +437,12 @@ class Consensus:
                 truebase_end = nucpos_0based
                 break
             else:
-                self.seq[nucpos_0based][Consensus.PAD_CHAR] += 1 # right pad gap
+                self.seq[nucpos_0based][Consensus.PAD_CHAR] += occur # right pad gap
                 codon = Consensus.PAD_CHAR + codon
 
             if nucpos_0based % 3 == 0:
                 codonpos_0based = nucpos_0based / NUC_PER_CODON
-                self.codon_seq[codonpos_0based][codon] += 1
+                self.codon_seq[codonpos_0based][codon] += occur
                 codon = ""
 
         # Now go forwards
@@ -452,10 +454,10 @@ class Consensus:
 
             if base == Consensus.PAD_CHAR or base == Consensus.GAP_CHAR:
                 if is_left_pad:
-                    self.seq[nucpos_0based][Consensus.PAD_CHAR] += 1
+                    self.seq[nucpos_0based][Consensus.PAD_CHAR] += occur
                     codon += Consensus.PAD_CHAR
                 else:
-                    self.seq[nucpos_0based][Consensus.GAP_CHAR] += 1
+                    self.seq[nucpos_0based][Consensus.GAP_CHAR] += occur
                     codon += Consensus.GAP_CHAR
             else:
                 is_left_pad = False
@@ -526,9 +528,9 @@ class Consensus:
         """
         # do a quick sanity check
         if self.seq and sum(self.seq[0].values()) != sum(self.seq[-1].values()):
-            raise ValueError("Internal cache for nucleotide letter counts corrupted")
+            raise ValueError("Internal cache for nucleotide letter counts corrupted.  First position dict:" + str(self.seq[0]) + " last position dict: " + str(self.seq[-1]))
         elif self.codon_seq and sum(self.codon_seq[-1].values()) != sum(self.codon_seq[-1].values()):
-            raise ValueError("Internal cache for codon counts corrupted")
+            raise ValueError("Internal cache for codon counts corrupted.  First seq dict:" + str(self.codon_seq[0]) + " last seq dict: " + str(self.codon_seq[-1]))
         elif self.codon_seq and self.seq and len(self.codon_seq) != math.ceil(len(self.seq)/float(NUC_PER_CODON)):
             raise ValueError("Internal cache for codon counts no longer in sync with nucleotide counts")
 
@@ -749,7 +751,8 @@ class Consensus:
                 if self.seq[pos_0based][letter] > 0:
                     total_symbols += 1
 
-        if total_symbols == 0:
+        total_seq = self.get_depth(pos_0based, is_count_ambig, is_count_gaps, is_count_pad)
+        if total_seq <= 1:
             metric_entropy = None
         elif total_symbols == 1:
             metric_entropy = 0
