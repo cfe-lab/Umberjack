@@ -282,6 +282,22 @@ class MyTestCase(unittest.TestCase):
         os.remove(tmpfile.name)
 
 
+    def test_calc_metric_entropy(self):
+
+        symbol_to_count = dict(A=1, G=2, C=0, T=0)
+        actual = Utility.calc_metric_entropy(symbol_to_count)
+        expected = -(1.0/3 * math.log(1.0/3, 2) + 2.0/3 * math.log(2.0/3, 2))/math.log(2, 2)
+        self.assertEqual(expected, actual, "expected={} actual={}".format( expected, actual))
+
+
+        symbol_to_count = dict(AAA=1, GGC=0, CTX=2, GTT=1)
+        actual = Utility.calc_metric_entropy(symbol_to_count)
+        print actual
+        expected = -(2 * 1.0/4 * math.log(1.0/4, 2) + 2.0/4 * math.log(2.0/4, 2))/math.log(3, 2)
+        self.assertEqual(expected, actual, "expected={} actual={}".format( expected, actual))
+
+
+
     def test_metric_entropy(self):
         tmpfile = tempfile.NamedTemporaryFile(delete=False)
         tmpfile.write(">seq1\n")
@@ -312,13 +328,13 @@ class MyTestCase(unittest.TestCase):
 
         tmpfile = tempfile.NamedTemporaryFile(delete=False)
         tmpfile.write(">seq1\n")
-        tmpfile.write("ATNG\n")
+        tmpfile.write("ATNGA\n")
         tmpfile.write(">seq2\n")
-        tmpfile.write("GCGT\n")
+        tmpfile.write("GCGT-\n")
         tmpfile.write(">seq3\n")
-        tmpfile.write("GTGC\n")
+        tmpfile.write("GTGCN\n")
         tmpfile.write(">seq4\n")
-        tmpfile.write("NC--\n")
+        tmpfile.write("NC---\n")
         tmpfile.flush()
         os.fsync(tmpfile.file.fileno())
         tmpfile.close()
@@ -329,7 +345,8 @@ class MyTestCase(unittest.TestCase):
         expected = [ -(1.0/3 * math.log(1.0/3, 2) + 2.0/3 * math.log(2.0/3, 2))/math.log(2, 2),
                      -(2.0/4 * math.log(2.0/4, 2) + 2.0/4 * math.log(2.0/4, 2))/math.log(2, 2),
                      0,
-                     -(1.0/3 * math.log(1.0/3, 2) + 1.0/3 * math.log(1.0/3, 2) + 1.0/3 * math.log(1.0/3, 2))/math.log(3, 2)]
+                     -(1.0/3 * math.log(1.0/3, 2) + 1.0/3 * math.log(1.0/3, 2) + 1.0/3 * math.log(1.0/3, 2))/math.log(3, 2),
+                     None]
 
         for pos in range (0, len(expected)):
             actual = cons.get_metric_entropy(pos)
