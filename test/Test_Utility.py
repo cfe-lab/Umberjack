@@ -297,9 +297,9 @@ class MyTestCase(unittest.TestCase):
         cons = Utility.Consensus()
         cons.parse(tmpfile.name)
 
-        expected = [ -(1.0/3 * math.log(1.0/3, 2) + 2.0/3 * math.log(2.0/3, 2))/math.log(3, 2),
-                     -(2.0/3 * math.log(2.0/3, 2) + 1.0/3 * math.log(1.0/3, 2))/math.log(3, 2),
-                     -(2.0/2 * math.log(2.0/2, 2) )/math.log(3, 2),
+        expected = [ -(1.0/3 * math.log(1.0/3, 2) + 2.0/3 * math.log(2.0/3, 2))/math.log(2, 2),
+                     -(2.0/3 * math.log(2.0/3, 2) + 1.0/3 * math.log(1.0/3, 2))/math.log(2, 2),
+                     0,
                      -(1.0/3 * math.log(1.0/3, 2) + 1.0/3 * math.log(1.0/3, 2) + 1.0/3 * math.log(1.0/3, 2))/math.log(3, 2)]
 
         for pos in range (0, len(expected)):
@@ -325,9 +325,9 @@ class MyTestCase(unittest.TestCase):
         cons = Utility.Consensus()
         cons.parse(tmpfile.name)
 
-        expected = [ -(1.0/3 * math.log(1.0/3, 2) + 2.0/3 * math.log(2.0/3, 2))/math.log(3, 2),
-                     -(2.0/3 * math.log(2.0/3, 2) + 1.0/3 * math.log(1.0/3, 2))/math.log(3, 2),
-                     -(2.25/3 * math.log(2.25/3, 2) + 3*0.25/3 * math.log(0.25/3, 2))/math.log(3, 2),
+        expected = [ -(1.0/3 * math.log(1.0/3, 2) + 2.0/3 * math.log(2.0/3, 2))/math.log(2, 2),
+                     -(2.0/3 * math.log(2.0/3, 2) + 1.0/3 * math.log(1.0/3, 2))/math.log(2, 2),
+                     -(2.25/3 * math.log(2.25/3, 2) + 3*0.25/3 * math.log(0.25/3, 2))/math.log(4, 2),
                      -(1.0/3 * math.log(1.0/3, 2) + 1.0/3 * math.log(1.0/3, 2) + 1.0/3 * math.log(1.0/3, 2))/math.log(3, 2)]
 
         for pos in range (0, len(expected)):
@@ -353,9 +353,9 @@ class MyTestCase(unittest.TestCase):
         cons = Utility.Consensus()
         cons.parse(tmpfile.name)
 
-        expected = [ -(1.0/3 * math.log(1.0/3, 2) + 2.0/3 * math.log(2.0/3, 2))/math.log(3, 2),
-                     -(2.0/3 * math.log(2.0/3, 2) + 1.0/3 * math.log(1.0/3, 2))/math.log(3, 2),
-                     -(2.25/3 * math.log(2.25/3, 2) + 3*0.25/3 * math.log(0.25/3, 2))/math.log(3, 2),
+        expected = [ -(1.0/3 * math.log(1.0/3, 2) + 2.0/3 * math.log(2.0/3, 2))/math.log(2, 2),
+                     -(2.0/3 * math.log(2.0/3, 2) + 1.0/3 * math.log(1.0/3, 2))/math.log(2, 2),
+                     -(2.25/3 * math.log(2.25/3, 2) + 3*0.25/3 * math.log(0.25/3, 2))/math.log(4, 2),
                      -(1.0/3 * math.log(1.0/3, 2) + 1.0/3 * math.log(1.0/3, 2) + 1.0/3 * math.log(1.0/3, 2))/math.log(3, 2)]
 
         for pos in range (0, len(expected)):

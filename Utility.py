@@ -344,9 +344,9 @@ def  calc_metric_entropy(symbol_to_count):
             log_p_symbol = math.log(p_symbol, 2)  # Log2  probability of letter
             total_entropy -= (p_symbol * log_p_symbol)
 
-
-    if total_seqs > 1:
-        metric_entropy = total_entropy / math.log(total_seqs, 2)
+    total_symbols = float(len(symbol_to_count.keys()))
+    if total_symbols > 1:
+        metric_entropy = total_entropy / math.log(total_symbols, 2)
     else:
         metric_entropy = None
 
@@ -738,15 +738,24 @@ class Consensus:
                 which can be compared across sites to measure randomness
         :rtype float
         """
-        total_seqs = self.get_depth(pos_0based=pos_0based, is_count_ambig=is_count_ambig, is_count_gaps=is_count_gaps, is_count_pad=is_count_pad)
+        total_symbols = 0
 
-        if not total_seqs:
+        if ((is_count_ambig and self.seq[pos_0based][Consensus.AMBIG_NUC_CHAR] > 0) or
+                (is_count_gaps and self.seq[pos_0based][Consensus.GAP_CHAR] > 0) or
+                (is_count_pad and self.seq[pos_0based][Consensus.PAD_CHAR] > 0) ):
+            total_symbols = len(Consensus.TRUE_BASES)
+        else:
+            for letter in Consensus.TRUE_BASES:
+                if self.seq[pos_0based][letter] > 0:
+                    total_symbols += 1
+
+        if total_symbols == 0:
             metric_entropy = None
-        elif total_seqs == 1:
+        elif total_symbols == 1:
             metric_entropy = 0
         else:
             shannon_entropy = self.get_shannon_entropy(pos_0based, is_count_ambig, is_count_gaps, is_count_pad)
-            metric_entropy = shannon_entropy/math.log(total_seqs, 2)  # shannon entropy is wrt log2, make sure metric entropy also wrt log2
+            metric_entropy = shannon_entropy/math.log(total_symbols, 2)  # shannon entropy is wrt log2, make sure metric entropy also wrt log2
         return metric_entropy
 
 
