@@ -304,8 +304,37 @@ class MyTestCase(unittest.TestCase):
 
         for pos in range (0, len(expected)):
             actual = cons.get_metric_entropy(pos)
-            print("Pos=0 expected={} actual={}".format(expected[pos], actual))
-            self.assertEqual(expected[pos], actual, "Pos=0 expected={} actual={}".format(expected[pos], actual))
+            print("Pos={} expected={} actual={}".format(pos, expected[pos], actual))
+            self.assertEqual(expected[pos], actual, "Pos={} expected={} actual={}".format(pos, expected[pos], actual))
+
+        os.remove(tmpfile.name)
+
+
+        tmpfile = tempfile.NamedTemporaryFile(delete=False)
+        tmpfile.write(">seq1\n")
+        tmpfile.write("ATNG\n")
+        tmpfile.write(">seq2\n")
+        tmpfile.write("GCGT\n")
+        tmpfile.write(">seq3\n")
+        tmpfile.write("GTGC\n")
+        tmpfile.write(">seq4\n")
+        tmpfile.write("NC--\n")
+        tmpfile.flush()
+        os.fsync(tmpfile.file.fileno())
+        tmpfile.close()
+
+        cons = Utility.Consensus()
+        cons.parse(tmpfile.name)
+
+        expected = [ -(1.0/3 * math.log(1.0/3, 2) + 2.0/3 * math.log(2.0/3, 2))/math.log(2, 2),
+                     -(2.0/4 * math.log(2.0/4, 2) + 2.0/4 * math.log(2.0/4, 2))/math.log(2, 2),
+                     0,
+                     -(1.0/3 * math.log(1.0/3, 2) + 1.0/3 * math.log(1.0/3, 2) + 1.0/3 * math.log(1.0/3, 2))/math.log(3, 2)]
+
+        for pos in range (0, len(expected)):
+            actual = cons.get_metric_entropy(pos)
+            print("Pos={} expected={} actual={}".format(pos, expected[pos], actual))
+            self.assertEqual(expected[pos], actual, "Pos={} expected={} actual={}".format(pos, expected[pos], actual))
 
         os.remove(tmpfile.name)
 
