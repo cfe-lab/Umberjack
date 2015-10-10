@@ -9,6 +9,27 @@ NEWICK_NAME_RE = re.compile('[:;\.\-\(\)\[\]]')
 NUC_PER_CODON = 3
 STOP_AA = "*"
 AA  = ["A", "C", "D", "E", "F", "G", "H", "I", "K", "L", "M", "N", "P", "Q", "R", "S", "T", "V", "W", "Y", "*"]
+CODON = [
+    'TTT' ,  'TCT' ,  'TAT' ,  'TGT' ,
+    'TTC' ,  'TCC' ,  'TAC' ,  'TGC' ,
+    'TTA' ,  'TCA' ,  'TAA' ,  'TGA' ,
+    'TTG' ,  'TCG' ,  'TAG' ,  'TGG' ,
+
+    'CTT' ,  'CCT' ,  'CAT' ,  'CGT' ,
+    'CTC' ,  'CCC' ,  'CAC' ,  'CGC' ,
+    'CTA' ,  'CCA' ,  'CAA' ,  'CGA' ,
+    'CTG' ,  'CCG' ,  'CAG' ,  'CGG' ,
+
+    'ATT' ,  'ACT' ,  'AAT' ,  'AGT' ,
+    'ATC' ,  'ACC' ,  'AAC' ,  'AGC' ,
+    'ATA' ,  'ACA' ,  'AAA' ,  'AGA' ,
+    'ATG' ,  'ACG' ,  'AAG' ,  'AGG' ,
+
+    'GTT' ,  'GCT' ,  'GAT' ,  'GGT' ,
+    'GTC' ,  'GCC' ,  'GAC' ,  'GGC' ,
+    'GTA' ,  'GCA' ,  'GAA' ,  'GGA' ,
+    'GTG' ,  'GCG' ,  'GAG' ,  'GGG']
+
 CODON2AA = {
     'TTT' : 'F', 'TCT' : 'S', 'TAT' : 'Y', 'TGT' : 'C',
     'TTC' : 'F', 'TCC' : 'S', 'TAC' : 'Y', 'TGC' : 'C',
@@ -51,6 +72,8 @@ CODON2AA = {
     'GTN' : 'V',
     'TAR' : '*','TRA' : '*',
     }
+
+NUC_MIXTURES = ["R", "Y", "S", "K", "W", "M", "B", "D", "H", "V", "N"]
 
 def create_dir_check(new_dir):
     """
