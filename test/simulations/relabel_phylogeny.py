@@ -8,6 +8,7 @@ the earliest coalescence events are way too deep.
 import sys
 import math
 from Bio import Phylo
+from cStringIO import StringIO
 
 in_tree_file = sys.argv[1]
 
@@ -62,15 +63,23 @@ for i, tip in enumerate(tips):
 
 
 # Indelible wants beginning of newick to start with (, end of newick to end with );
-from cStringIO import StringIO
+# It also doesn't like singleton root nodes.
+# R doesn't like singleton root nodes too.
 
+# BioPython will write out root branch as singleton node no matter what.
+# EG.  ((...)Clade0:4, (...)Clade1:3)Root:2;
+# Collapse the root single node
+# EG>  ((...)Clade0:4, (...)Clade1:3);
 tree_strio = StringIO()
 Phylo.write(t, tree_strio, format="newick", format_branch_length='%1.9f')
 tree_strio.flush()
 tree_str = tree_strio.getvalue()
 tree_strio.close()
-tree_str = "(" + tree_str.replace(";", ");")
-# tree_str = tree_str.replace(":0.000000000;", ";")
+# Find index of last branch length separator ":", this is the root branch length separator
+root_branch_index = tree_str.rindex(":")
+tree_str = tree_str[:root_branch_index] + ";"
+
+
 
 relabled_nwk = in_tree_file.replace(".nwk", ".rename.nwk")
 with open(relabled_nwk, "w") as fh_out:

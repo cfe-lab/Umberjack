@@ -32,12 +32,6 @@ SECTION = "sim"
 
 class TestSims(unittest.TestCase):
 
-    # def __init__(self,  **kwargs):
-    #     super(unittest.TestCase, self).__init__( **kwargs)
-    #
-    #     self.configparser = None
-
-
     def setUp(self):
         """
         Generate simulated data for unit tests unless it already exists (takes a long time to run)
@@ -202,6 +196,32 @@ class TestSims(unittest.TestCase):
 
 
 
+    def test_full_popn_tree(self):
+        """
+        Tests that the FastTree tree of the full population uses the same topology as the input tree generated from the coalescent simulator.
+        :return:
+        """
+        # Use R phangorn package to calculate
+        try:
+            from rpy2.robjects.packages import importr
+            import rpy2.robjects as ro
+
+            # /data/umberjack_unittest/mixed/umberjack_unittest.mixed.nwk
+            final_popn_tree_file = SIM_DATA_DIR + os.sep + "mixed" + os.sep + SIM_DATA_FILENAME_PREFIX  + ".mixed.nwk"#
+            # /data/umberjack_unittest/umberjack_unittest.rename.nwk
+            orig_tree_file = SIM_DATA_DIR + os.sep + SIM_DATA_FILENAME_PREFIX + ".rename.nwk"
+
+            ro.r("library(phangorn)")
+            ro.r("library(ape)")
+            ro.r("orig_tree <- read.tree('{}')".format(orig_tree_file))
+            ro.r("reconstruct_tree <- read.tree('{}')".format(final_popn_tree_file))
+            # robinson foulds distance
+            ro.r("rf_dist <- treedist(orig_tree, reconstruct_tree)")
+            rf_dist = ro.r("rf_dist")
+
+            print rf_dist
+        except ImportError:
+            print "Unable to import rpy2 and thus unable to check tree toplogies"
 
 
 
