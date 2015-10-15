@@ -11,9 +11,49 @@ from cStringIO import StringIO
 import csv
 import os
 import subprocess
+import config.settings
+import shutil
+import ConfigParser
+import Bio.SeqIO as SeqIO
+from Bio.Align import MultipleSeqAlignment
 
+# Simulation Configs
+SIM_DIR = os.path.dirname(os.path.realpath(__file__)) + os.sep + "simulations"
+SIM_BIN_DIR = SIM_DIR + os.sep + "bin"
+SIM_DATA_FILENAME_PREFIX = "umberjack_unittest"
+SIM_DATA_DIR = SIM_DIR + os.sep + "data" + os.sep + SIM_DATA_FILENAME_PREFIX
+SIM_DATA_CONFIG_FILE = SIM_DATA_DIR + os.sep + "umberjack_unittest_sim.conf"
+
+# Executables
+SIM_PIPELINE_PY = os.path.dirname(os.path.realpath(__file__)) + os.sep + "simulations" + os.sep + "sim_pipeline.py"
+
+# Config File section
+SECTION = "sim"
 
 class TestSims(unittest.TestCase):
+
+    # def __init__(self,  **kwargs):
+    #     super(unittest.TestCase, self).__init__( **kwargs)
+    #
+    #     self.configparser = None
+
+
+    def setUp(self):
+        """
+        Generate simulated data for unit tests unless it already exists (takes a long time to run)
+        """
+        config.settings.setup_logging()
+
+        self.configparser = ConfigParser.RawConfigParser()
+        self.configparser.read(SIM_DATA_CONFIG_FILE)
+        filename_prefix = self.configparser.get(SECTION, "FILENAME_PREFIX")
+
+        final_popn_fasta = SIM_DATA_DIR + os.sep + "mixed" + os.sep + filename_prefix + ".mixed.fasta"
+        if not os.path.exists(final_popn_fasta) or not os.path.getsize(final_popn_fasta):
+            subprocess.check_call(["python", SIM_PIPELINE_PY, SIM_DATA_CONFIG_FILE])
+
+
+
 
     @staticmethod
     def get_tree_len(treefilename):
@@ -21,7 +61,7 @@ class TestSims(unittest.TestCase):
         Gets the tree length, i.e.  the sum of every branch in the tree.  Excludes root branch length.
         """
         tree = Phylo.read(treefilename, "newick")
-        root_branch_length = tree.clade.branch_length
+        root_branch_length = tree.clade.branch_length if tree.clade.branch_length is not None else 0
         tree_branch_length  = tree.clade.total_branch_length()
         return tree_branch_length - root_branch_length
 
@@ -56,17 +96,114 @@ class TestSims(unittest.TestCase):
 
 
     def test_indelible_tree_len(self):
-        # TODO:  explicitly create indelible 50 scaling tree
-        expected_tree_len = 50
-        indelible_tree_txt = "/home/thuy/gitrepo/Umberjack/test/simulations/data/small/trees.txt"
-        indelible_tree_str = indelibler.get_tree_string(indelible_tree_txt)
+        """
+        Check that INDELible trees lengths are scaled to the rate given in config file.
+        :return:
+        """
 
-        indelible_tree_handle = StringIO(indelible_tree_str)
-        actual_tree_len = TestSims.get_tree_len(indelible_tree_handle)
-        indelible_tree_handle.close()
+        # for each scaling rate, check that indelible scaled the tree correctly
+        for expected_tree_len in [int(x) for x in self.configparser.get(SECTION, "INDELIBLE_SCALING_RATES").split(",")]:
 
-        self.assertAlmostEqual(expected_tree_len, actual_tree_len, 0,
+            indelible_tree_txt = SIM_DATA_DIR + os.sep + str(expected_tree_len) + os.sep + "trees.txt"
+            indelible_tree_str = indelibler.get_tree_string(indelible_tree_txt)
+
+            indelible_tree_handle = StringIO(indelible_tree_str)
+            actual_tree_len = TestSims.get_tree_len(indelible_tree_handle)
+            indelible_tree_handle.close()
+
+            self.assertAlmostEqual(expected_tree_len, actual_tree_len, 0,
                                "Expected tree len=" + str(expected_tree_len) + " but got " + str(actual_tree_len))
+
+
+    def test_sample_genomes(self):
+        """
+        Tests that the final population sequences are comprised of the correct blocks of
+        INDELible population sequences at different scaling rates.
+        :return:
+        """
+        # data/umberjack_unittest/mixed/umberjack_unittest.mixed.fasta
+        filename_prefix = self.configparser.get(SECTION, "FILENAME_PREFIX")
+        final_popn_fasta = SIM_DATA_DIR + os.sep + "mixed" + os.sep + filename_prefix + ".mixed.fasta"
+        final_popn_rates_csv = SIM_DATA_DIR + os.sep + "mixed" + os.sep + filename_prefix + ".mixed.rates.csv"
+
+
+
+        # Each scaling factor should be represented equally
+        site_to_scale = []
+        scale_to_codons = dict()
+        with open(final_popn_rates_csv, "rU") as fh_in:
+            # Site	Scaling_factor	Rate_class	Omega
+            reader = csv.DictReader(fh_in)
+            for row in reader:
+                codonsite_0based = int(row["Site"]) - 1
+                scaling_factor = row["Scaling_factor"]
+                site_to_scale.append((codonsite_0based, scaling_factor))
+                if scaling_factor not in  scale_to_codons:
+                    scale_to_codons[scaling_factor] = [codonsite_0based]
+                else:
+                    scale_to_codons[scaling_factor].extend([codonsite_0based])
+
+        codons_perblock = self.configparser.getint(SECTION, "CODONS_PER_BLOCK")
+        total_codons = self.configparser.getint(SECTION, "NUM_CODON_SITES")
+        scaling_factors = [int(x) for x in self.configparser.get(SECTION, "INDELIBLE_SCALING_RATES").split(",")]
+        expected_codons_per_scale = total_codons/len(scaling_factors)
+
+        actual_codon_counts_per_scale = [len(x) for x in scale_to_codons.values()]
+        self.assertItemsEqual([expected_codons_per_scale] * len(scaling_factors),
+                              actual_codon_counts_per_scale,
+                              "Expect same number of codons per scaling factor")
+
+
+        # Each scaling factor should be in blocks of consecutive codons
+        site_to_scale = sorted(site_to_scale, key=lambda (site, scale): site)
+        last_scale = None
+        for codonsite_0based, scale in site_to_scale:
+            # We are not at the beginning of a new block
+            if codonsite_0based % codons_perblock != 0 and last_scale is not None:
+                # if this site's scaling factor isn't the same as the last scaling factor, crap out
+                self.assertEqual(last_scale, scale, "Expect that consecutive codons in block should have same scaling factor")
+            last_scale = scale
+
+
+        # Each block at a certain scaling rate in the final population should be equal
+        # to the same block in the original INDELibel population at the same scaling rate.
+        # Check for both tip fastas and ancestral fastas.
+        actual_aln = MultipleSeqAlignment(SeqIO.parse(final_popn_fasta, "fasta"))
+        for scale, codons in scale_to_codons.iteritems():
+            # data/umberjack_unittest/50/umberjack_unittest.50.fasta
+            orig_popn_fasta = SIM_DATA_DIR + os.sep + str(scale) + os.sep + filename_prefix + ".{}.fasta".format(scale)
+            expected_aln = MultipleSeqAlignment(SeqIO.parse(orig_popn_fasta, "fasta"))
+            for codonsite_0based in codons:
+                nuc_start_0based = codonsite_0based * 3
+                for nuc_0based in range(nuc_start_0based, nuc_start_0based + 3):
+                    self.assertEqual(expected_aln[:, nuc_0based],
+                                     actual_aln[:, nuc_0based],
+                                     "Expect nucleotide site (0based) " + str(nuc_0based) + " in " + final_popn_fasta +
+                                     " to originate from " + orig_popn_fasta)
+
+        # inner node (ancestral sequences)
+        # Be careful!  HyPhy batch scripts will auto write its reconstructed ancestors and tips to .mixed.anc.fasta,
+        # which is not the same as the concatenation of original ancestors, scaled at different rates in .mixed.ancestral.fasta
+        final_anc_popn_fasta = SIM_DATA_DIR + os.sep + "mixed" + os.sep + filename_prefix + ".mixed.ancestral.fasta"
+        actual_anc_aln = MultipleSeqAlignment(SeqIO.parse(final_anc_popn_fasta, "fasta"))
+
+        for scale, codons in scale_to_codons.iteritems():
+
+            orig_anc_popn_fasta = SIM_DATA_DIR + os.sep + str(scale) + os.sep + filename_prefix + ".{}_ANCESTRAL.fasta".format(scale)
+            expected_anc_aln = MultipleSeqAlignment(SeqIO.parse(orig_anc_popn_fasta, "fasta"))
+
+            for codonsite_0based in codons:
+                nuc_start_0based = codonsite_0based * 3
+                for nuc_0based in range(nuc_start_0based, nuc_start_0based + 3):
+                    self.assertEqual(expected_anc_aln[:, nuc_0based],
+                                     actual_anc_aln[:, nuc_0based],
+                                     "Expect nucleotide site (0based) " + str(nuc_0based) + " in " + final_anc_popn_fasta +
+                                     " to originate from " + orig_anc_popn_fasta)
+
+
+
+
+
 
 
     def test_calc_total_poss_subst(self):

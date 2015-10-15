@@ -91,6 +91,7 @@ LOGGER.debug("Finished execute ")
 
 
 # Create sample genome by concatenating slices of indelible alignments from different mutation rates.
+CODONS_PER_BLOCK = config.getint(SECTION, "CODONS_PER_BLOCK")
 sample_genomes_fasta = OUTDIR + os.sep + "mixed" + os.sep + FILENAME_PREFIX + ".mixed.fasta"
 sample_genomes_consensus_fasta = sample_genomes_fasta.replace(".fasta", ".consensus.fasta")
 if (os.path.exists(sample_genomes_fasta) and os.path.getsize(sample_genomes_fasta) and
@@ -99,13 +100,14 @@ if (os.path.exists(sample_genomes_fasta) and os.path.getsize(sample_genomes_fast
 else:
     sample_genomes_exe = os.path.abspath(os.path.dirname(__file__) + os.sep + "sample_genomes.py")
     sample_genomes_cmd = ["python", sample_genomes_exe,
-                          INDELIBLE_SCALING_RATES,  #  comma delimited list of mutation scaling rates
-                          OUTDIR + os.sep + "mixed",  # full filepath of directory for sample_genomes.py output
-                          FILENAME_PREFIX + ".mixed", # prefix of sample_genomes.py population sequence output files
-                          str(SEED), # random seed
-                          str(NUM_CODON_SITES),  # number codon sites
-                          OUTDIR,  # Indelible output directory
-                          FILENAME_PREFIX]  # INDELible output filename prefix
+                          "-scaling_factors", INDELIBLE_SCALING_RATES,  #  comma delimited list of mutation scaling rates
+                          "-output_dir", OUTDIR + os.sep + "mixed",  # full filepath of directory for sample_genomes.py output
+                          "-output_filename_prefix", FILENAME_PREFIX + ".mixed", # prefix of sample_genomes.py population sequence output files
+                          "-seed", str(SEED), # random seed
+                          "-codons_per_block", str(CODONS_PER_BLOCK),
+                          "-total_blocks", str(NUM_CODON_SITES / CODONS_PER_BLOCK),  # number blocks
+                          "-input_dir", OUTDIR,  # Indelible output directory
+                          "-input_filename_prefix", FILENAME_PREFIX]  # INDELible output filename prefix
     LOGGER.debug("About to execute " + " ".join(sample_genomes_cmd))
     subprocess.check_call(sample_genomes_cmd, env=os.environ)
     LOGGER.debug("Finished execute ")

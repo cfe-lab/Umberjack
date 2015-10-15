@@ -79,23 +79,23 @@ class TestUmberjack(unittest.TestCase):
         Generate simulated data for unit tests
         """
         settings.setup_logging()
-        # if os.path.exists(SIM_DATA_DIR):  # Clean the simulated data, except for the config file
-        #     dirpar, dirnames, files =  os.walk(SIM_DATA_DIR).next()
-        #     for dirname in dirnames:
-        #         full_dirpath = dirpar + os.sep + dirname
-        #         shutil.rmtree(full_dirpath)
-        #         print ("Removed " + full_dirpath)
-        #     for file in files:
-        #         full_filepath = dirpar + os.sep + file
-        #         if full_filepath != SIM_DATA_CONFIG_FILE:
-        #             os.remove(full_filepath)
-        #             print ("Removed " + full_filepath)
-        #
-        # if os.path.exists(SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX):
-        #     print ("Removed " + SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX)
-        #     shutil.rmtree(SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX)
-        #
-        # subprocess.check_call(["python", SIM_PIPELINE_PY, SIM_DATA_CONFIG_FILE])
+        if os.path.exists(SIM_DATA_DIR):  # Clean the simulated data, except for the config file
+            dirpar, dirnames, files =  os.walk(SIM_DATA_DIR).next()
+            for dirname in dirnames:
+                full_dirpath = dirpar + os.sep + dirname
+                shutil.rmtree(full_dirpath)
+                print ("Removed " + full_dirpath)
+            for file in files:
+                full_filepath = dirpar + os.sep + file
+                if full_filepath != SIM_DATA_CONFIG_FILE:
+                    os.remove(full_filepath)
+                    print ("Removed " + full_filepath)
+
+        if os.path.exists(SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX):
+            print ("Removed " + SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX)
+            shutil.rmtree(SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX)
+
+        subprocess.check_call(["python", SIM_PIPELINE_PY, SIM_DATA_CONFIG_FILE])
 
 
 
@@ -207,7 +207,7 @@ class TestUmberjack(unittest.TestCase):
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
 
         # i.e.  it's up to you to open up ./simulations/R/umberjack_unit_test.html and inspect the graphs/contents.
-        from pool.OneNodePool import OneNodePool
+        import UmberjackWork
         kwargs = dict(ref=REF,
                                          sam_filename=SAM_FILENAME,
                                          out_dir=OUT_DIR, map_qual_cutoff=MAPQ_CUTOFF,
@@ -224,7 +224,7 @@ class TestUmberjack(unittest.TestCase):
                                          mask_stop_codon=MASK_STOP_CODON,
                                          remove_duplicates=REMOVE_DUPLICATES,
                                          debug=True)
-        pool = OneNodePool(**kwargs)
+        pool = UmberjackWork.UmberjackWork(**kwargs)
         pool.start()
 
         rconfig_file = R_DIR + os.sep + "umberjack_unit_test.config"
@@ -254,7 +254,7 @@ class TestUmberjack(unittest.TestCase):
         ERR_FREE_ACTUAL_DNDS_CSV = ERR_FREE_OUT_DIR + os.sep + 'actual_dnds_by_site.csv'
         START_NUCPOS = 1
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
-        from pool.OneNodePool import OneNodePool
+        import UmberjackWork
         kwargs = dict(ref=REF,
                                                sam_filename=ERR_FREE_SAM_FILENAME,
                                                out_dir=ERR_FREE_OUT_DIR,
@@ -269,13 +269,13 @@ class TestUmberjack(unittest.TestCase):
                                                threads_per_window=THREADS_PER_WINDOW,
                                                concurrent_windows=WINDOW_PROCS,
                                                output_csv_filename=ERR_FREE_ACTUAL_DNDS_CSV,
-                                               mode=pool.UmberjackPool.MODE_DNDS,
+                                               mode=UmberjackWork.MODE_DNDS,
                                                window_slide=WINDOW_SLIDE,
                                                insert=INSERT,
                                                mask_stop_codon=MASK_STOP_CODON,
                                                remove_duplicates=REMOVE_DUPLICATES,
                                                debug=True)
-        pool = OneNodePool(**kwargs)
+        pool = UmberjackWork.UmberjackWork(**kwargs)
         pool.start()
 
         rconfig_file = R_DIR + os.sep + "umberjack_unit_test.config"
