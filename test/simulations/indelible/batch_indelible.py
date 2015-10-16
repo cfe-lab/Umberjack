@@ -73,14 +73,14 @@ for scaling_rate in scaling_rates:
             handle.write('[fastaextension] fasta\n')
             handle.write('[printrates] TRUE\n')
             handle.write('[randomseed] ' + str(RANDOM_SEED) + '\n')
-            handle.write('[MODEL] M3\n[submodel] %f\n' % KAPPA)
+            handle.write('[MODEL] M3\n[submodel] %f\n' % KAPPA)  # KAPPA is Transition/Transversion ratio
 
             prop_string = ''
             omega_string = ''
             for i, omega in enumerate(OMEGAS):
                 if i < (len(OMEGAS)-1):
-                    prop_string += ' %f' % PROP[i]
-                omega_string += ' %1.2f' % omega
+                    prop_string += ' %f' % PROP[i]  # probability of each dn/ds value
+                omega_string += ' %1.2f' % omega  # dn/ds values follow discrete gamma distro
 
             handle.write(prop_string + '\n')
             handle.write(omega_string + '\n')

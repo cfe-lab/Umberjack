@@ -12,12 +12,13 @@ GTRRATES_LINE_START = "GTRRates"
 
 
 
-def make_tree(fasta_fname, threads=1, fastree_exe=settings.DEFAULT_FASTTREEMP_EXE, debug=False, custom_flags=None):
+def make_tree(fasta_fname, out_tree_fname=None, threads=1, fastree_exe=settings.DEFAULT_FASTTREEMP_EXE, debug=False, custom_flags=None):
     """
     Creates a phylogenetic tree from the fasta.
     Tree file written to same directory as fasta and has same name as fasta but with ".nwk" suffix.
     FastTree logfile written to same directory as fasta and has same name as fasta but with ".fasttree.log" suffix.
     :param str fasta_fname:  path to multiple sequence aligned fasta file.  File should have .fasta suffix.
+    :param str out_tree_fname:  output newick tree filename
     :param int threads: number of FastTreeMP threads
     :param str fastree_exe:  path to FastTreeMP or FastTree executable.  If empty, then uses FastTreeMP from PATH environment variable.
     :param bool debug:  whether to output verbose fasttree stdout/stderr to file.  File will have same name as fasta but with ".fasttree.stdouterr.txt" suffix.
@@ -27,7 +28,10 @@ def make_tree(fasta_fname, threads=1, fastree_exe=settings.DEFAULT_FASTTREEMP_EX
     """
     fasta_fname_prefix = os.path.splitext(fasta_fname)[0]  # Remove the .fasta suffix
     fastree_logfilename = fasta_fname_prefix + ".fasttree.log"
-    fastree_treefilename = fasta_fname_prefix + ".nwk"
+    if not out_tree_fname:
+        fastree_treefilename = fasta_fname_prefix + ".nwk"
+    else:
+        fastree_treefilename = out_tree_fname
     fasttree_stdouterr_filename = fasta_fname_prefix + ".fasttree.stdouterr.txt"
     LOGGER.debug("Start Fasttree  " + fastree_treefilename)
 
