@@ -275,9 +275,9 @@ class TestTopology(unittest.TestCase):
         total_mid_miss = total_miss - total_miss_end
         mid_size = len(seq) - total_miss_end
 
-        print total_left_miss
-        print total_right_miss
-        print total_mid_miss
+        # print total_left_miss
+        # print total_right_miss
+        # print total_mid_miss
 
         miss_seq = "-" * total_left_miss
 
@@ -346,14 +346,25 @@ class TestTopology(unittest.TestCase):
             if tip.name not in selecttip_to_count.keys() or selecttip_to_count[tip.name] == 0:
                 tree.prune(tip)
 
-        # Rename tip names to {tipname}_read0
-        # We only keep the first copy of any duplicated sequence.
+        # Append resampled tips to the tree as polytomies.
+        # Rename tips to [tipname]_read[index]
         for tip in tree.get_terminals():
-            tip.name = "{}_read0".format(tip.name)
+            dup_count = selecttip_to_count[tip.name]
+            if dup_count >= 2:
+                tip.split(n=dup_count, branch_length=0)
+                dup_tips = tip.clades
+            else:
+                dup_tips = [tip]
+            for i, dup_tip in enumerate(dup_tips):
+                dup_tip.name = "{}_read{}".format(tip.name, i)
 
-        # Remove duplicate sequences (whether they were original duplicated in the original fasta, or resampled)
+
+        # We expected the resampled tips to be polytomies.
+        # But if we replace the tip fasta sequences with random missing data, then copied sequences
+        # will no longer be identical.
+        # Check which sequences are actually identical, then remove the copies from the output tree,
+        # keeping the first copy encountered (in alphabetical tip name order).
         dup_ids = TestTopology.find_dup_seq(fasta=out_fastafile)
-        tips = tree.get_terminals()
         for tip in tree.get_terminals():
             if tip.name in dup_ids:
                 tree.prune(tip)
@@ -666,7 +677,8 @@ class TestTopology(unittest.TestCase):
 
                 TestTopology.subsample(treefile=final_popn_unconstrained_treefile, fastafile=final_popn_fasta,
                                        out_treefile=expected_subsample_treefile, out_fastafile=sub_fasta,
-                                       sample_fraction=sample_fraction, seed=seed, miss_fraction=missing_fraction)
+                                       sample_fraction=sample_fraction, seed=seed, miss_fraction=missing_fraction,
+                                       replace=True)
 
 
                 # Try to reproduce the INDELible tree with the INDELible fasta sequences as input
