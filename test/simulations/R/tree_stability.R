@@ -334,3 +334,51 @@ treedist(final_popn_resample_free_nodup_tree, recon_final_popn_resample_nodup_tr
 par(mfrow=c(1,2))
 plot_tree_diff(final_popn_resample_free_nodup_tree, recon_final_popn_resample_nodup_tree,main="Resampled Final Population Tree, No Topology Constraint, Dup Removed")
 plot_tree_diff(recon_final_popn_resample_nodup_tree, final_popn_resample_free_nodup_tree, main="Reconstructed Tree From Resampled Final Population Seq, Dup Removed")
+
+
+
+#' Final Population Tree, No Topology Constraint, Dup Seq From Missing Data Removed
+#' ======================================================
+#' 
+final_popn_missing_free_nodup_tree_filename <- config[config$key=="FINAL_MISSING_POPN_FREE_NODUP_TREE_FILENAME",]$val
+final_popn_missing_free_nodup_tree <- read.tree(final_popn_missing_free_nodup_tree_filename)
+
+#' Depth = `r max(node.depth.edgelength(final_popn_missing_free_nodup_tree))` = `r max(node.depth.edgelength(final_popn_missing_free_nodup_tree))/1e-4/365`  years of HIV evolution
+#' 
+#' Deepest Tip = `r final_popn_missing_free_nodup_tree$tip.label[which.max(node.depth.edgelength(final_popn_missing_free_nodup_tree))]`
+#' 
+#' Total Tree Branch Length = `r sum(final_popn_missing_free_nodup_tree$edge.length)`
+#' 
+#' Depth Summary:
+#'
+summary(node.depth.edgelength(final_popn_missing_free_nodup_tree))
+
+
+#' Reconstructed Tree From Missing DAta Final Population Seq, Dup Seq Removed
+#' ===========================================================
+#' 
+recon_final_popn_missing_nodup_tree_filename <- config[config$key=="RECON_FINAL_MISSING_POPN_NODUP_TREE_FILENAME",]$val
+recon_final_popn_missing_nodup_tree <- read.tree(recon_final_popn_missing_nodup_tree_filename)
+
+#' Depth = `r max(node.depth.edgelength(recon_final_popn_missing_nodup_tree))` = `r max(node.depth.edgelength(recon_final_popn_missing_nodup_tree))/1e-4/365`  years of HIV evolution
+#' 
+#' Deepest Tip = `r recon_final_popn_missing_nodup_tree$tip.label[which.max(node.depth.edgelength(recon_final_popn_missing_nodup_tree))]`
+#' 
+#' Total Tree Branch Length = `r sum(recon_final_popn_missing_nodup_tree$edge.length)`
+#' 
+#' Depth Summary:
+#'
+summary(node.depth.edgelength(recon_final_popn_missing_nodup_tree))
+
+
+
+#' Difference Between Final Population Tree (No Topology Constraints) and Reconstructed Tree from Missing Data Final Population Seq
+#' ==================================================
+#' 
+
+treedist(final_popn_missing_free_nodup_tree, recon_final_popn_missing_nodup_tree)
+
+#+ fig.width=20, fig.height=15
+par(mfrow=c(1,2))
+plot_tree_diff(final_popn_missing_free_nodup_tree, recon_final_popn_missing_nodup_tree,main="Final Population Tree, No Topology Constraint, Missing Data Dup Removed")
+plot_tree_diff(recon_final_popn_missing_nodup_tree, final_popn_missing_free_nodup_tree, main="Reconstructed Tree From Missing Data Final Population Seq, Missing Data Dup Removed")

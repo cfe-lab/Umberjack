@@ -24,7 +24,8 @@ import fasttree.fasttree_handler
 import random
 from collections import defaultdict
 import logging
-
+import Utility
+import math
 
 # Simulation Configs
 SIM_DIR = os.path.dirname(os.path.realpath(__file__)) + os.sep + "simulations"
@@ -250,23 +251,68 @@ class TestTopology(unittest.TestCase):
 
 
     @staticmethod
-    def subsample(treefile, fastafile, out_treefile, out_fastafile, fraction, replace=False, seed=None):
+    def miss_seq(seq, fraction, seed=None, is_rand_fraction=False):
+        """
+        Gaps-out or N's out fraction of seq.
+        Randomly assigns gaps at end, N's in the middle.
+        :param str seq:  nucleotide sequence
+        :param float fraction:  fraction of bases to turn into gaps or Ns.  If is_rand_fraction, then randomly assigns UP TO fraction of bases.
+        Otherwise, assigns floor (fraction of bases).
+        :param bool is_rand_fraction:  whether to randomize the fraction of bases to assign as gaps or N's.
+        :return str:  gapped, N'ed sequence.
+        """
+        randomizer = random.Random(seed)
+        if is_rand_fraction:
+            max_miss = math.floor(fraction * len(seq))
+            total_miss = randomizer.randint(0, max_miss)
+        else:
+            total_miss = int(math.floor(fraction * len(seq)))
+
+        total_miss_end = randomizer.randint(0, total_miss)
+        total_left_miss = randomizer.randint(0, total_miss_end)
+        total_right_miss =  total_miss_end - total_left_miss
+
+        total_mid_miss = total_miss - total_miss_end
+        mid_size = len(seq) - total_miss_end
+
+        print total_left_miss
+        print total_right_miss
+        print total_mid_miss
+
+        miss_seq = "-" * total_left_miss
+
+        mid_miss_idx = randomizer.sample(range(total_left_miss, total_left_miss+mid_size), total_mid_miss)
+        for i in range(total_left_miss, total_left_miss+mid_size):
+            if i in mid_miss_idx:
+                miss_seq += "N"
+            else:
+                miss_seq += seq[i]
+
+        miss_seq += "-" * total_right_miss
+
+        return miss_seq
+
+
+    @staticmethod
+    def subsample(treefile, fastafile, out_treefile, out_fastafile, sample_fraction, replace=False, seed=None,
+                  miss_fraction=None):
         """
         Subsamples population with or without replacement up to the desired fraction.  Returns subsampled tree and fasta.
         Removes duplicated sequences from the output tree (ie sequences in the original fasta that are duplicated, or sequences that have been resampled).
         Does not remove duplicated sequences from the output fasta.
         :param str treefile:  filepath to newick population tree
         :param str fastafile:  filepath to population sequences in fasta format
-        :param float fraction:  fraction of population to sample
+        :param float sample_fraction:  fraction of population to sample
         :param bool replace:  whether to sample with replacement
         :param int seed:  the random seed to randomly select individuals.
+        :param float miss_fraction:  fraction of sequence to turn into gaps or N's.
         :return [str]:  list of sequence names selected. Renames sequences to  "<name>_read<copy">
         """
         # NB:  ART read simulator generates read with names like otu1-read2.  Use underscore instead of hyphen to make HyPhy friendly.
         tree = Phylo.read(treefile, "newick")
         tips = tree.get_terminals()
 
-        sample_size = int(round(fraction *  len(tips)))
+        sample_size = int(round(sample_fraction *  len(tips)))
 
         randomizer = random.Random(seed)
         if not replace:
@@ -283,9 +329,16 @@ class TestTopology(unittest.TestCase):
             for tipname, count in selecttip_to_count.iteritems():
                 for i in range(0, count):
                     new_tipname = "{}_read{}".format(tipname, i)
-                    fh_out_fasta.write(">" + new_tipname + "\n")
-                    fh_out_fasta.write(str(seqdict[tipname].seq) + "\n")
                     tipname_sample.extend([new_tipname])
+                    fh_out_fasta.write(">" + new_tipname + "\n")
+
+                    seq = str(seqdict[tipname].seq)
+                    if miss_fraction:  # Gap-out, N-out bases to simulate missing data
+                        miss_seq = TestTopology.miss_seq(seq=seq, fraction=miss_fraction)
+                    else:
+                        miss_seq = seq
+                    fh_out_fasta.write(miss_seq + "\n")
+
 
 
         # Prune the tree of tips that weren't selected for the sample.
@@ -342,7 +395,7 @@ class TestTopology(unittest.TestCase):
 
                 TestTopology.subsample(treefile=indelible_nwk, fastafile=indelible_tip_fasta,
                                        out_treefile=expected_subsample_treefile, out_fastafile=subsample_fasta,
-                                       seed=seed, fraction=sample_fraction)
+                                       sample_fraction=sample_fraction, seed=seed)
 
 
 
@@ -458,7 +511,7 @@ class TestTopology(unittest.TestCase):
 
                 TestTopology.subsample(treefile=indelible_nwk, fastafile=indelible_tip_fasta,
                                        out_treefile=expected_subsample_treefile, out_fastafile=subsample_fasta,
-                                       seed=seed, fraction=sample_fraction, replace=True)
+                                       sample_fraction=sample_fraction, replace=True, seed=seed)
 
 
 
@@ -497,7 +550,7 @@ class TestTopology(unittest.TestCase):
 
             TestTopology.subsample(treefile=final_popn_unconstrained_treefile, fastafile=final_popn_fasta,
                                    out_treefile=expected_subsample_treefile, out_fastafile=subsample_fasta,
-                                   seed=seed, fraction=sample_fraction)
+                                   sample_fraction=sample_fraction, seed=seed)
 
 
             # Try to match the topology of the pruned final population topology when we use pruned fasta as input
@@ -534,7 +587,7 @@ class TestTopology(unittest.TestCase):
 
             TestTopology.subsample(treefile=final_popn_unconstrained_treefile, fastafile=final_popn_fasta,
                                    out_treefile=expected_subsample_treefile, out_fastafile=subsample_fasta,
-                                   seed=seed, fraction=sample_fraction)
+                                   sample_fraction=sample_fraction, seed=seed)
 
 
             # Try to reproduce the INDELible tree with the INDELible fasta sequences as input
@@ -551,6 +604,89 @@ class TestTopology(unittest.TestCase):
 
 
 
+    def test_missing_seq_final_popn(self):
+        """
+        Checks that Ns or gaps do not drastically alter topology.
+        :return:
+        """
+        seed = self.configparser.getint(SECTION, "SEED")
+        fasttree_threads = self.configparser.getint(SECTION, "PROCS")
+
+        final_popn_fasta = SIM_DATA_DIR + os.sep + "mixed" + os.sep + SIM_DATA_FILENAME_PREFIX + ".mixed.fasta"
+        final_popn_tree_file = SIM_DATA_DIR + os.sep + "mixed" + os.sep + SIM_DATA_FILENAME_PREFIX  + ".mixed.nwk"#
+
+        final_popn_unconstrained_treefile = final_popn_tree_file.replace(".nwk", ".free.nwk")
+        fasttree.fasttree_handler.make_tree(fasta_fname=final_popn_fasta,
+                                            out_tree_fname=final_popn_unconstrained_treefile,
+                                            threads=fasttree_threads, debug=True)
+
+        for missing_fraction in [0.125]:
+            missing_fasta = final_popn_fasta.replace(".fasta", ".missing.{:.3}.fasta".format(missing_fraction))
+            expected_subsample_treefile = final_popn_unconstrained_treefile.replace(".nwk", ".missing.{:.3}.nodup.nwk".format(missing_fraction))
+
+            TestTopology.subsample(treefile=final_popn_unconstrained_treefile, fastafile=final_popn_fasta,
+                                   out_treefile=expected_subsample_treefile, out_fastafile=missing_fasta,
+                                   sample_fraction=1, seed=seed, miss_fraction=missing_fraction)
+
+
+            # Try to reproduce the INDELible tree with the INDELible fasta sequences as input
+            repro_treefile = missing_fasta.replace(".fasta", ".repro.nwk")
+            fasttree.fasttree_handler.make_tree(fasta_fname=missing_fasta,
+                                                out_tree_fname=repro_treefile,
+                                                threads=fasttree_threads, debug=True)
+
+             # robinson foulds distance only well defined for binary trees.  Prune duplicate copies of the same sequence from tree.
+            nodup_repro_treefile =  repro_treefile.replace(".nwk", ".nodup.nwk")
+            TestTopology.prune_copies_by_seq(in_treefile=repro_treefile, out_treefile=nodup_repro_treefile, fastafile=missing_fasta)
+
+            self.cmp_topology(expected_treefile=expected_subsample_treefile, actual_treefile=nodup_repro_treefile, is_reroot=False)
+
+
+    def test_missing_seq_resample_final_popn(self):
+        """
+        Checks that random Ns or gaps in resampled sequences do not drastically alter topology.
+        :return:
+        """
+        seed = self.configparser.getint(SECTION, "SEED")
+        fasttree_threads = self.configparser.getint(SECTION, "PROCS")
+
+        final_popn_fasta = SIM_DATA_DIR + os.sep + "mixed" + os.sep + SIM_DATA_FILENAME_PREFIX + ".mixed.fasta"
+        final_popn_tree_file = SIM_DATA_DIR + os.sep + "mixed" + os.sep + SIM_DATA_FILENAME_PREFIX  + ".mixed.nwk"#
+
+        final_popn_unconstrained_treefile = final_popn_tree_file.replace(".nwk", ".free.nwk")
+        fasttree.fasttree_handler.make_tree(fasta_fname=final_popn_fasta,
+                                            out_tree_fname=final_popn_unconstrained_treefile,
+                                            threads=fasttree_threads, debug=True)
+
+        for sample_fraction in [0.5]:
+            for missing_fraction in [0.125]:
+                sub_fasta = final_popn_fasta.replace(".fasta", ".resample.{:.1}.missing.{:.3}.fasta".format(sample_fraction, missing_fraction))
+                expected_subsample_treefile = final_popn_unconstrained_treefile.replace(".nwk",
+                                                                                        ".resample.{:.1}.missing.{:.3}.nodup.nwk".format(sample_fraction, missing_fraction))
+
+                TestTopology.subsample(treefile=final_popn_unconstrained_treefile, fastafile=final_popn_fasta,
+                                       out_treefile=expected_subsample_treefile, out_fastafile=sub_fasta,
+                                       sample_fraction=sample_fraction, seed=seed, miss_fraction=missing_fraction)
+
+
+                # Try to reproduce the INDELible tree with the INDELible fasta sequences as input
+                repro_treefile = sub_fasta.replace(".fasta", ".repro.nwk")
+                fasttree.fasttree_handler.make_tree(fasta_fname=sub_fasta,
+                                                    out_tree_fname=repro_treefile,
+                                                    threads=fasttree_threads, debug=True)
+
+                 # robinson foulds distance only well defined for binary trees.  Prune duplicate copies of the same sequence from tree.
+                nodup_repro_treefile =  repro_treefile.replace(".nwk", ".nodup.nwk")
+                TestTopology.prune_copies_by_seq(in_treefile=repro_treefile, out_treefile=nodup_repro_treefile, fastafile=sub_fasta)
+
+                self.cmp_topology(expected_treefile=expected_subsample_treefile, actual_treefile=nodup_repro_treefile, is_reroot=False)
+
 
 if __name__ == "__main__":
+
+    # for i in range(0, 10):
+    #     print 'test ' + str(i)
+    #     #print TestTopology.miss_seq("AAAAACCCCCTTTTTGGGGG", fraction=0.125, seed=i)
+    #     print TestTopology.miss_seq("AAAAAAAAAACCCCCCCCCCTTTTTTTTTTGGGGGGGGGG", fraction=0.125, is_rand_fraction=True)
+
     unittest.main()
