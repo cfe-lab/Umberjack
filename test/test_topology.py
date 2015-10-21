@@ -1,3 +1,4 @@
+
 """
 Checks that topology is stable from FastTree across genome.
 - Test that FastTree reconstrucsts tree with same topology as coalescent simulated topology using INDELible fasta sequences.
@@ -22,6 +23,8 @@ from Bio.Align import MultipleSeqAlignment
 import fasttree.fasttree_handler
 import random
 from collections import defaultdict
+import logging
+
 
 # Simulation Configs
 SIM_DIR = os.path.dirname(os.path.realpath(__file__)) + os.sep + "simulations"
@@ -35,6 +38,8 @@ SIM_PIPELINE_PY = os.path.dirname(os.path.realpath(__file__)) + os.sep + "simula
 
 # Config File section
 SECTION = "sim"
+
+LOGGER = logging.getLogger(__name__)
 
 class TestTopology(unittest.TestCase):
 
@@ -80,33 +85,109 @@ class TestTopology(unittest.TestCase):
             raise
 
 
+    def cmp_topology(self, expected_treefile, actual_treefile, is_reroot=False):
+        """
+        Compares the topology of the trees.  Asserts if there is non-zero Robinson Foulds distance.
+        If reroot specifed, then uses the first tip in the expected tree as the root.
+        :return:
+        """
+        # Use R phangorn package to calculate
+        import rpy2.robjects as ro
+        ro.r("library(phangorn)")
+        ro.r("library(ape)")
+        ro.r("expected_tree <- read.tree('{}')".format(expected_treefile))
+        ro.r("actual_tree <- read.tree('{}')".format(actual_treefile))
+
+        # Check if trees have different labels.  R will throw error if they do.
+        ro.r("expected_notin_actual <- expected_tree$tip.label[!expected_tree$tip.label %in% actual_tree$tip.label]")
+        expected_notin_actual = ro.r("expected_notin_actual")
+        rlen_e_notin_a = ro.r("length(expected_notin_actual)")[0]
+        self.assertEqual(rlen_e_notin_a, 0,
+                         "There are tips in expected tree not in actual tree=" + str(expected_notin_actual) +
+                         ". expected tree = " + expected_treefile +
+                         " actual tree=" + actual_treefile)
+        ro.r("actual_notin_expected <- actual_tree$tip.label[!actual_tree$tip.label %in% expected_tree$tip.label]")
+        actual_notin_expected = ro.r("actual_notin_expected")
+        rlen_a_notin_e = ro.r("length(actual_notin_expected)")[0]
+        self.assertEqual(rlen_a_notin_e, 0,
+                         "There are tips in actual tree not in expected tree=" + str(actual_notin_expected) +
+                         ".  expected tree = " + expected_treefile +
+                         " actual tree=" + actual_treefile)
+
+        if is_reroot:
+            ro.r("newroot <- expected_tree$tip.label[1]")
+            ro.r("expected_tree <- root(expected_tree, outgroup=newroot, resolve.root=TRUE)")
+            ro.r("actual_tree <- root(actual_tree, outgroup=newroot, resolve.root=TRUE)")
+
+
+        # robinson foulds distance
+        ro.r("rf_dist <- RF.dist(expected_tree, actual_tree)")
+        print ro.r("rf_dist")
+        rf_dist = ro.r("rf_dist")[0]
+
+        self.assertEqual(rf_dist, 0,
+                     "Actual tree " + actual_treefile + " should have same topology as expected tree " +
+                     expected_treefile + ". Instead robinson foulds distance =" + str(rf_dist))
+
+
+
+
+
+
 
     def test_full_popn_tree(self):
         """
         Tests that the FastTree tree of the full population uses the same topology as the input tree generated from the coalescent simulator.
         :return:
         """
-        # Use R phangorn package to calculate
-        import rpy2.robjects as ro
 
+        final_popn_fasta = SIM_DATA_DIR + os.sep + "mixed" + os.sep + SIM_DATA_FILENAME_PREFIX + ".mixed.fasta"
         # /data/umberjack_unittest/mixed/umberjack_unittest.mixed.nwk
         final_popn_tree_file = SIM_DATA_DIR + os.sep + "mixed" + os.sep + SIM_DATA_FILENAME_PREFIX  + ".mixed.nwk"#
+        nodup_final_popn_tree_file = final_popn_tree_file.replace(".nwk", ".nodup.nwk")
 
         # /data/umberjack_unittest/umberjack_unittest.rename.nwk
         orig_tree_file = SIM_DATA_DIR + os.sep + SIM_DATA_FILENAME_PREFIX + ".rename.nwk"
+        nodup_orig_tree_file = orig_tree_file.replace(".nwk", ".nodup.nwk")
 
-        ro.r("library(phangorn)")
-        ro.r("library(ape)")
-        ro.r("orig_tree <- read.tree('{}')".format(orig_tree_file))
-        ro.r("reconstruct_tree <- read.tree('{}')".format(final_popn_tree_file))
-        # robinson foulds distance
-        ro.r("rf_dist <- RF.dist(orig_tree, reconstruct_tree)")
-        rf_dist = ro.r("rf_dist")[0]
+        # INDELible will output identical sequences when branch lengths are too short, even if the original coalescent tree
+        # specifies non-zero branch lengths.  As a result, FastTree puts these identical sequences as polytomies.
+        # Get rid of tips from duplicated INDELible sequences from both the original coalescent and final population tree.
+        TestTopology.prune_copies_by_seq(fastafile=final_popn_fasta, in_treefile=final_popn_tree_file, out_treefile=nodup_final_popn_tree_file)
+        TestTopology.prune_copies_by_seq(fastafile=final_popn_fasta, in_treefile=orig_tree_file, out_treefile=nodup_orig_tree_file)
+
+        self.cmp_topology(expected_treefile=nodup_orig_tree_file, actual_treefile=nodup_final_popn_tree_file)
 
 
-        self.assertEqual(rf_dist, 0,
-                         "Final Full Population Tree should have same topology as original coalescent tree, " +
-                         " Instead robinson foulds distance =" + str(rf_dist))
+
+    def test_full_popn_free_tree(self):
+        """
+        Tests that the FastTree tree of the full population made without topology constraints
+        uses the same topology as the input tree generated from the coalescent simulator.
+        :return:
+        """
+        # /data/umberjack_unittest/mixed/umberjack_unittest.mixed.nwk
+        final_popn_free_tree_file = SIM_DATA_DIR + os.sep + "mixed" + os.sep + SIM_DATA_FILENAME_PREFIX  + ".mixed.free.nwk"
+        nodup_final_popn_free_tree_file = final_popn_free_tree_file.replace(".nwk", ".nodup.nwk")
+        final_popn_fasta = SIM_DATA_DIR + os.sep + "mixed" + os.sep + SIM_DATA_FILENAME_PREFIX + ".mixed.fasta"
+
+        # /data/umberjack_unittest/umberjack_unittest.rename.nwk
+        orig_tree_file = SIM_DATA_DIR + os.sep + SIM_DATA_FILENAME_PREFIX + ".rename.nwk"
+        nodup_orig_tree_file = orig_tree_file.replace(".nwk", ".nodup.nwk")
+
+        fasttree_threads = self.configparser.getint(SECTION, "PROCS")
+
+        fasttree.fasttree_handler.make_tree(fasta_fname=final_popn_fasta,
+                                                             out_tree_fname=final_popn_free_tree_file,
+                                                             threads=fasttree_threads, debug=True)
+
+        # INDELible will output identical sequences when branch lengths are too short, even if the original coalescent tree
+        # specifies non-zero branch lengths.  As a result, FastTree puts these identical sequences as polytomies.
+        # Get rid of tips from duplicated INDELible sequences from both the original coalescent and final population tree.
+        TestTopology.prune_copies_by_seq(fastafile=final_popn_fasta, in_treefile=final_popn_free_tree_file, out_treefile=nodup_final_popn_free_tree_file)
+        TestTopology.prune_copies_by_seq(fastafile=final_popn_fasta, in_treefile=orig_tree_file, out_treefile=nodup_orig_tree_file)
+
+        self.cmp_topology(expected_treefile=nodup_orig_tree_file, actual_treefile=nodup_final_popn_free_tree_file)
 
 
 
@@ -115,8 +196,6 @@ class TestTopology(unittest.TestCase):
         Test that the INDELible scaled tree has the same topology as the original coalescent tree
         :return:
         """
-        import rpy2.robjects as ro
-
         for expected_tree_len in [int(x) for x in self.configparser.get(SECTION, "INDELIBLE_SCALING_RATES").split(",")]:
             # INDELible creates a TSV with the tree.  Convert to separate newick file.
             indelible_tree_txt = SIM_DATA_DIR + os.sep + str(expected_tree_len) + os.sep + "trees.txt"
@@ -130,32 +209,18 @@ class TestTopology(unittest.TestCase):
             # /data/umberjack_unittest/umberjack_unittest.rename.nwk
             orig_tree_file = SIM_DATA_DIR + os.sep + SIM_DATA_FILENAME_PREFIX + ".rename.nwk"
 
-
-            ro.r("library(phangorn)")
-            ro.r("library(ape)")
-            ro.r("orig_tree <- read.tree('{}')".format(orig_tree_file))
-            ro.r("reconstruct_tree <- read.tree('{}')".format(indelible_nwk))
-            # robinson foulds distance
-            ro.r("rf_dist <- RF.dist(orig_tree, reconstruct_tree)")
-            rf_dist = ro.r("rf_dist")[0]
-
-
-            self.assertEqual(rf_dist, 0,
-                         "INDELible  tree " + indelible_nwk + " should have same topology as coalescent tree " +
-                         orig_tree_file + ". Instead robinson foulds distance =" + str(rf_dist))
+            self.cmp_topology(expected_treefile=orig_tree_file, actual_treefile=indelible_nwk)
 
 
 
     def test_fasttree_topology(self):
         """
-        Test that FastTree can reproduce the same topology of an INDELible tree given the INDELibel fasta sequences as input
+        Test that FastTree can reproduce the same topology of an INDELible tree given the INDELible fasta sequences as input
         and the INDELIble tree as a constraint.
         We do this on the full genome population scaled at only 1 mutation scaling rate
         so that we don't have multiple mutation rates per sequence confounding issues with tree reconstruction.
         :return:
         """
-
-        import rpy2.robjects as ro
 
         for expected_tree_len in [int(x) for x in self.configparser.get(SECTION, "INDELIBLE_SCALING_RATES").split(",")]:
             # INDELible creates a TSV with the tree.  Convert to separate newick file.
@@ -167,37 +232,37 @@ class TestTopology(unittest.TestCase):
             indelible_tree_io.close()
 
 
+
             # Try to reproduce the INDELible tree with the INDELible fasta sequences as input and the INDELible tree as topology constraint
             indelible_tip_fasta = SIM_DATA_DIR + os.sep + str(expected_tree_len) + os.sep + "{}.{}_TRUE.fasta".format(SIM_DATA_FILENAME_PREFIX, expected_tree_len)
             repro_treefile = fasttree.fasttree_handler.make_tree_repro(fasta_fname=indelible_tip_fasta,
                                                                        intree_fname=indelible_nwk)
 
+            # At low mutation rates, INDELible will output fasta sequences that are identical,
+            # and won't fully correspond to the input tree topology.
+            # Remove the duplicate copies before comparing topologies.
+            nodup_indelible_nwk = indelible_nwk.replace(".nwk", ".nodup.nwk")
+            nodup_repro_treefile = repro_treefile.replace(".nwk", ".nodup.nwk")
+            TestTopology.prune_copies_by_seq(fastafile=indelible_tip_fasta, in_treefile=indelible_nwk, out_treefile=nodup_indelible_nwk)
+            TestTopology.prune_copies_by_seq(fastafile=indelible_tip_fasta, in_treefile=repro_treefile, out_treefile=nodup_repro_treefile)
 
-            ro.r("library(phangorn)")
-            ro.r("library(ape)")
-            ro.r("orig_tree <- read.tree('{}')".format(indelible_nwk))
-            ro.r("reconstruct_tree <- read.tree('{}')".format(repro_treefile))
-            # robinson foulds distance
-            ro.r("rf_dist <- RF.dist(orig_tree, reconstruct_tree)")
-            rf_dist = ro.r("rf_dist")[0]
-
-
-            self.assertEqual(rf_dist, 0,
-                         "Reconstructed FastTree tree " + repro_treefile + " should have same topology as input tree " +
-                         indelible_nwk + ". Instead robinson foulds distance =" + str(rf_dist))
+            self.cmp_topology(expected_treefile=nodup_indelible_nwk, actual_treefile=nodup_repro_treefile)
 
 
     @staticmethod
     def subsample(treefile, fastafile, out_treefile, out_fastafile, fraction, replace=False, seed=None):
         """
         Subsamples population with or without replacement up to the desired fraction.  Returns subsampled tree and fasta.
+        Removes duplicated sequences from the output tree (ie sequences in the original fasta that are duplicated, or sequences that have been resampled).
+        Does not remove duplicated sequences from the output fasta.
         :param str treefile:  filepath to newick population tree
         :param str fastafile:  filepath to population sequences in fasta format
         :param float fraction:  fraction of population to sample
         :param bool replace:  whether to sample with replacement
         :param int seed:  the random seed to randomly select individuals.
-        :return [str]:  list of sequence names selected.  If multiple copies of same sequence, then rename "<name>_<copy">
+        :return [str]:  list of sequence names selected. Renames sequences to  "<name>_read<copy">
         """
+        # NB:  ART read simulator generates read with names like otu1-read2.  Use underscore instead of hyphen to make HyPhy friendly.
         tree = Phylo.read(treefile, "newick")
         tips = tree.get_terminals()
 
@@ -216,41 +281,44 @@ class TestTopology(unittest.TestCase):
         seqdict = SeqIO.to_dict(SeqIO.parse(fastafile, "fasta"))
         with open(out_fastafile, 'w') as fh_out_fasta:
             for tipname, count in selecttip_to_count.iteritems():
-                if count >= 2:
-                    for i in range(0, count):
-                        new_tipname = "{}_{}".format(tipname, i)
-                        fh_out_fasta.write(">" + new_tipname + "\n")
-                        fh_out_fasta.write(str(seqdict[tipname].seq) + "\n")
-                        tipname_sample.extend([new_tipname])
-                elif count == 1:
-                    fh_out_fasta.write(">{}\n".format(tipname))
+                for i in range(0, count):
+                    new_tipname = "{}_read{}".format(tipname, i)
+                    fh_out_fasta.write(">" + new_tipname + "\n")
                     fh_out_fasta.write(str(seqdict[tipname].seq) + "\n")
-                    tipname_sample.extend([tipname])
+                    tipname_sample.extend([new_tipname])
 
-        # Prune the tree
+
+        # Prune the tree of tips that weren't selected for the sample.
         for tip in tips:
             if tip.name not in selecttip_to_count.keys() or selecttip_to_count[tip.name] == 0:
                 tree.prune(tip)
 
-        # Rename tips that have been sampled multiple times to the name of the first copy.
-        for tipname, count in selecttip_to_count.iteritems():
-            if count >= 2:
-                tip = tree.find_clades(target=tipname, terminal=True).next()
-                tip.name = "{}_0".format(tipname)
+        # Rename tip names to {tipname}_read0
+        # We only keep the first copy of any duplicated sequence.
+        for tip in tree.get_terminals():
+            tip.name = "{}_read0".format(tip.name)
+
+        # Remove duplicate sequences (whether they were original duplicated in the original fasta, or resampled)
+        dup_ids = TestTopology.find_dup_seq(fasta=out_fastafile)
+        tips = tree.get_terminals()
+        for tip in tree.get_terminals():
+            if tip.name in dup_ids:
+                tree.prune(tip)
+
 
         Phylo.write(tree, out_treefile, "newick")
 
         return tipname_sample
 
 
+
     def test_subsample(self):
         """
         Test that FastTree reconstruction of subsampled INDELible population has same topology as INDELible tree.
-        Don't use final population whose sequences are concatenated from multiple muitation rates.
+        Don't use final population whose sequences are concatenated from multiple mutation rates.
         Instead, just use a population whose entire genome has been scaled by a single mutation rate.
 
         """
-        import rpy2.robjects as ro
 
         seed = self.configparser.getint(SECTION, "SEED")
         fasttree_threads = self.configparser.getint(SECTION, "PROCS")
@@ -281,31 +349,37 @@ class TestTopology(unittest.TestCase):
                 # Try to reproduce the INDELible tree with the INDELible fasta sequences as input
                 repro_treefile = fasttree.fasttree_handler.make_tree(fasta_fname=subsample_fasta,
                                                                      threads=fasttree_threads, debug=True)
+                # Get rid of duplicate sequences in the tips
+                nodup_repro_treefile = repro_treefile.replace(".nwk", ".nodup.nwk")
+                TestTopology.prune_copies_by_seq(in_treefile=repro_treefile, out_treefile=nodup_repro_treefile, fastafile=subsample_fasta)
+                self.cmp_topology(expected_treefile=expected_subsample_treefile, actual_treefile=nodup_repro_treefile, is_reroot=False)
 
-                ro.r("library(phangorn)")
-                ro.r("library(ape)")
-                ro.r("expected_tree <- read.tree('{}')".format(expected_subsample_treefile))
-                ro.r("reconstruct_tree <- read.tree('{}')".format(repro_treefile))
-
-                # FastTree makes unrooted tree; its root is arbitrarily set.  Reroot trees with same root before compare.
-                # Use first sequence in subsampled fasta as the root for both trees.
-                first = SeqIO.parse(subsample_fasta, "fasta").next()
-
-                ro.r("reconstruct_tree_rooted <- root(reconstruct_tree, outgroup='{}', resolve.root=TRUE)".format(first.id))
-                ro.r("expected_tree_rooted <- root(expected_tree, outgroup='{}', resolve.root=TRUE)".format(first.id))
-
-                # robinson foulds distance
-                ro.r("rf_dist <- RF.dist(expected_tree_rooted, reconstruct_tree_rooted)")
-                rf_dist = ro.r("rf_dist")[0]
-
-
-                self.assertEqual(rf_dist, 0,
-                             "Reconstructed FastTree tree " + repro_treefile + " should have same topology as input tree " +
-                             expected_subsample_treefile + ". Instead robinson foulds distance =" + str(rf_dist))
 
 
     @staticmethod
-    def prune_copies(treefile, out_treefile):
+    def find_dup_seq(fasta):
+        """
+        Finds duplicated sequences (headers can be different, but sequences are the same) in a fasta.
+        Uses the first copy (ordered by alphabetical order by header id) as the original copy.
+        :param fasta:
+        :return [str]:  header ids of sequences that are duplicates of original seq.
+        """
+        rec_dict = SeqIO.to_dict(SeqIO.parse(fasta, "fasta"))
+        seq_set = set([])
+        dup_ids = []
+        for id in sorted(rec_dict.keys()):
+            seq = str(rec_dict[id].seq)
+            if seq in seq_set:
+                dup_ids.extend([id])
+            else:
+                seq_set.add(seq)
+
+        return dup_ids
+
+
+
+    @staticmethod
+    def prune_copies_by_tipname(treefile, out_treefile):
         """
         Finds polytomies made from copies of the same sequence indicated by tip names with format "[name]_[copy number]".
         Prunes all but the first copy "[name]_0" when it encounters these copies.
@@ -328,6 +402,31 @@ class TestTopology(unittest.TestCase):
         Phylo.write(repro_tree, out_treefile, "newick")
 
 
+    @staticmethod
+    def prune_copies_by_seq(in_treefile, out_treefile, fastafile):
+        """
+        This is a helper function to account for the fact that if there is insufficient branch length,
+        INDELible will output multiple identical sequences, even if the desired input tree has non-zero branches lengths.
+
+        If there are identical sequences in the actual fasta file, then they will result in polytomies in the actual tree.
+        We need to ensure that the expected_treefile is revised to remove the extra copies of the identical sequences.
+        Only the first copy of the sequence in alpha order by tip name is kept.
+
+        :return :
+        """
+        dup_ids = TestTopology.find_dup_seq(fasta=fastafile)
+        if dup_ids:
+            LOGGER.warn("Found duplicate sequences in fasta " + fastafile)
+
+        tree = Phylo.read(in_treefile, 'newick')
+        for tip in tree.get_terminals():
+            if tip.name in dup_ids:
+                tree.prune(tip)
+
+        Phylo.write(tree, out_treefile, "newick")
+
+
+
     def test_subsample_replace(self):
         """
         Test that FastTree reconstruction of subsampled with replacement INDELible population has same topology as INDELible tree
@@ -336,8 +435,6 @@ class TestTopology(unittest.TestCase):
         Instead, just use a population whose entire genome has been scaled by a single mutation rate.
         :return:
         """
-        import rpy2.robjects as ro
-
         seed = self.configparser.getint(SECTION, "SEED")
         fasttree_threads = self.configparser.getint(SECTION, "PROCS")
 
@@ -369,44 +466,12 @@ class TestTopology(unittest.TestCase):
                 repro_treefile = fasttree.fasttree_handler.make_tree(fasta_fname=subsample_fasta,
                                                                      threads=fasttree_threads, debug=True)
 
-                # robinson foulds distance only well defined for binary trees.  Prune sister copies of the same sequence from tree.
-                # If the copies of the same sequence aren't polytomies in the tree, then FastTree screwed up.
-
-                repro_binary_treefile =  repro_treefile.replace(".nwk", ".binary.nwk")
-                TestTopology.prune_copies(repro_treefile, repro_binary_treefile)
+                # robinson foulds distance only well defined for binary trees.  Prune duplicate copies of the same sequence from tree.
+                nodup_repro_treefile =  repro_treefile.replace(".nwk", ".nodup.nwk")
+                TestTopology.prune_copies_by_seq(in_treefile=repro_treefile, out_treefile=nodup_repro_treefile, fastafile=subsample_fasta)
 
 
-                ro.r("library(phangorn)")
-                ro.r("library(ape)")
-                ro.r("expected_tree <- read.tree('{}')".format(expected_subsample_treefile))
-                ro.r("reconstruct_tree <- read.tree('{}')".format(repro_binary_treefile))
-
-                # FastTree makes unrooted tree; its root is arbitrarily set.  Reroot trees with same root before compare.
-                # Use First tip in fasttree as common root.
-                repro_tree = Phylo.read(repro_binary_treefile, 'newick')
-                commonroot = repro_tree.get_terminals()[0].name
-
-                ro.r("reconstruct_tree_rooted <- root(reconstruct_tree, outgroup='{}', resolve.root=TRUE)".format(commonroot))
-                ro.r("expected_tree_rooted <- root(expected_tree, outgroup='{}', resolve.root=TRUE)".format(commonroot))
-                #ro.r("png('reconstruct_tree_rooted.png')")
-                #ro.r("plot(reconstruct_tree_rooted)")
-                #ro.r("dev.off()")
-                #ro.r("png('expected_tree_rooted.png')")
-                #ro.r("plot(expected_tree_rooted)")
-                #ro.r("dev.off()")
-
-                #print ro.r("reconstruct_tree_rooted$tip.label[!reconstruct_tree_rooted$tip.label %in% expected_tree_rooted$tip.label]")
-                #print ro.r("expected_tree_rooted$tip.label[!expected_tree_rooted$tip.label %in% reconstruct_tree_rooted$tip.label]")
-
-                # robinson foulds distance
-                ro.r("rf_dist <- RF.dist(expected_tree_rooted, reconstruct_tree_rooted)")
-                rf_dist = ro.r("rf_dist")[0]
-
-
-
-                self.assertEqual(rf_dist, 0,
-                             "Reconstructed FastTree tree " + repro_binary_treefile + " should have same topology as input tree " +
-                             expected_subsample_treefile + ". Instead robinson foulds distance =" + str(rf_dist))
+                self.cmp_topology(expected_treefile=expected_subsample_treefile, actual_treefile=nodup_repro_treefile, is_reroot=False)
 
 
 
@@ -415,8 +480,6 @@ class TestTopology(unittest.TestCase):
         Test that FastTree reconstruction of subsampled final population has same topology as
         the initial FastTree of the full final population (created with no topology constraint).
         """
-        import rpy2.robjects as ro
-
         seed = self.configparser.getint(SECTION, "SEED")
         fasttree_threads = self.configparser.getint(SECTION, "PROCS")
 
@@ -430,7 +493,7 @@ class TestTopology(unittest.TestCase):
 
         for sample_fraction in [0.5]:
             subsample_fasta = final_popn_fasta.replace(".fasta", ".prune.{:.1}.fasta".format(sample_fraction))
-            expected_subsample_treefile = final_popn_unconstrained_treefile.replace(".nwk", ".prune.{:.1}.nwk".format(sample_fraction))
+            expected_subsample_treefile = final_popn_unconstrained_treefile.replace(".nwk", ".prune.{:.1}.nodup.nwk".format(sample_fraction))
 
             TestTopology.subsample(treefile=final_popn_unconstrained_treefile, fastafile=final_popn_fasta,
                                    out_treefile=expected_subsample_treefile, out_fastafile=subsample_fasta,
@@ -438,29 +501,14 @@ class TestTopology(unittest.TestCase):
 
 
             # Try to match the topology of the pruned final population topology when we use pruned fasta as input
-            repro_treefile = fasttree.fasttree_handler.make_tree(fasta_fname=subsample_fasta,
-                                                                 threads=fasttree_threads, debug=True)
-
-            ro.r("library(phangorn)")
-            ro.r("library(ape)")
-            ro.r("expected_tree <- read.tree('{}')".format(expected_subsample_treefile))
-            ro.r("reconstruct_tree <- read.tree('{}')".format(repro_treefile))
-
-            # FastTree makes unrooted tree; its root is arbitrarily set.  Reroot trees with same root before compare.
-            # Use first sequence in subsampled fasta as the root for both trees.
-            first = SeqIO.parse(subsample_fasta, "fasta").next()
-
-            ro.r("reconstruct_tree_rooted <- root(reconstruct_tree, outgroup='{}', resolve.root=TRUE)".format(first.id))
-            ro.r("expected_tree_rooted <- root(expected_tree, outgroup='{}', resolve.root=TRUE)".format(first.id))
-
-            # robinson foulds distance
-            ro.r("rf_dist <- RF.dist(expected_tree_rooted, reconstruct_tree_rooted)")
-            rf_dist = ro.r("rf_dist")[0]
-
-
-            self.assertEqual(rf_dist, 0,
-                         "Reconstructed FastTree tree " + repro_treefile + " should have same topology as input tree " +
-                         expected_subsample_treefile + ". Instead robinson foulds distance =" + str(rf_dist))
+            repro_treefile = subsample_fasta.replace(".fasta", ".repro.nwk")
+            fasttree.fasttree_handler.make_tree(fasta_fname=subsample_fasta,
+                                                out_tree_fname=repro_treefile,
+                                                threads=fasttree_threads, debug=True)
+            # robinson foulds distance only well defined for binary trees.  Prune duplicate copies of the same sequence from tree.
+            nodup_repro_treefile =  repro_treefile.replace(".nwk", ".nodup.nwk")
+            TestTopology.prune_copies_by_seq(in_treefile=repro_treefile, out_treefile=nodup_repro_treefile, fastafile=subsample_fasta)
+            self.cmp_topology(expected_treefile=expected_subsample_treefile, actual_treefile=nodup_repro_treefile, is_reroot=False)
 
 
 
@@ -469,8 +517,6 @@ class TestTopology(unittest.TestCase):
         Test that FastTree reconstruction of subsampled with replacement final population has same topology as
         the initial FastTree of the pruned full final population (created with no topology constraint).
         """
-        import rpy2.robjects as ro
-
         seed = self.configparser.getint(SECTION, "SEED")
         fasttree_threads = self.configparser.getint(SECTION, "PROCS")
 
@@ -484,7 +530,7 @@ class TestTopology(unittest.TestCase):
 
         for sample_fraction in [0.5]:
             subsample_fasta = final_popn_fasta.replace(".fasta", ".resample.{:.1}.fasta".format(sample_fraction))
-            expected_subsample_treefile = final_popn_unconstrained_treefile.replace(".nwk", ".resample.{:.1}.nwk".format(sample_fraction))
+            expected_subsample_treefile = final_popn_unconstrained_treefile.replace(".nwk", ".resample.{:.1}.nodup.nwk".format(sample_fraction))
 
             TestTopology.subsample(treefile=final_popn_unconstrained_treefile, fastafile=final_popn_fasta,
                                    out_treefile=expected_subsample_treefile, out_fastafile=subsample_fasta,
@@ -492,45 +538,16 @@ class TestTopology(unittest.TestCase):
 
 
             # Try to reproduce the INDELible tree with the INDELible fasta sequences as input
-            repro_treefile = fasttree.fasttree_handler.make_tree(fasta_fname=subsample_fasta,
-                                                                 threads=fasttree_threads, debug=True)
+            repro_treefile = subsample_fasta.replace(".fasta", ".repro.nwk")
+            fasttree.fasttree_handler.make_tree(fasta_fname=subsample_fasta,
+                                                out_tree_fname=repro_treefile,
+                                                threads=fasttree_threads, debug=True)
 
-            # robinson foulds distance only well defined for binary trees.  Prune sister copies of the same sequence from tree.
-            # If the copies of the same sequence aren't polytomies in the tree, then FastTree screwed up.
-            repro_binary_treefile =  repro_treefile.replace(".nwk", ".binary.nwk")
-            TestTopology.prune_copies(repro_treefile, repro_binary_treefile)
+             # robinson foulds distance only well defined for binary trees.  Prune duplicate copies of the same sequence from tree.
+            nodup_repro_treefile =  repro_treefile.replace(".nwk", ".nodup.nwk")
+            TestTopology.prune_copies_by_seq(in_treefile=repro_treefile, out_treefile=nodup_repro_treefile, fastafile=subsample_fasta)
 
-            ro.r("library(phangorn)")
-            ro.r("library(ape)")
-            ro.r("expected_tree <- read.tree('{}')".format(expected_subsample_treefile))
-            ro.r("reconstruct_tree <- read.tree('{}')".format(repro_binary_treefile))
-
-            # FastTree makes unrooted tree; its root is arbitrarily set.  Reroot trees with same root before compare.
-            # Use First tip in fasttree as common root.
-            repro_tree = Phylo.read(repro_binary_treefile, 'newick')
-            commonroot = repro_tree.get_terminals()[0].name
-
-            ro.r("reconstruct_tree_rooted <- root(reconstruct_tree, outgroup='{}', resolve.root=TRUE)".format(commonroot))
-            ro.r("expected_tree_rooted <- root(expected_tree, outgroup='{}', resolve.root=TRUE)".format(commonroot))
-            #ro.r("png('reconstruct_tree_rooted.png')")
-            #ro.r("plot(reconstruct_tree_rooted)")
-            #ro.r("dev.off()")
-            #ro.r("png('expected_tree_rooted.png')")
-            #ro.r("plot(expected_tree_rooted)")
-            #ro.r("dev.off()")
-
-            #print ro.r("reconstruct_tree_rooted$tip.label[!reconstruct_tree_rooted$tip.label %in% expected_tree_rooted$tip.label]")
-            #print ro.r("expected_tree_rooted$tip.label[!expected_tree_rooted$tip.label %in% reconstruct_tree_rooted$tip.label]")
-
-            # robinson foulds distance
-            ro.r("rf_dist <- RF.dist(expected_tree_rooted, reconstruct_tree_rooted)")
-            rf_dist = ro.r("rf_dist")[0]
-
-
-
-            self.assertEqual(rf_dist, 0,
-                         "Reconstructed FastTree tree " + repro_binary_treefile + " should have same topology as input tree " +
-                         expected_subsample_treefile + ". Instead robinson foulds distance =" + str(rf_dist))
+            self.cmp_topology(expected_treefile=expected_subsample_treefile, actual_treefile=nodup_repro_treefile, is_reroot=False)
 
 
 
