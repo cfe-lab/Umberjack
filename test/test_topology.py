@@ -295,7 +295,7 @@ class TestTopology(unittest.TestCase):
 
     @staticmethod
     def subsample(treefile, fastafile, out_treefile, out_fastafile, sample_fraction, replace=False, seed=None,
-                  miss_fraction=None):
+                  miss_fraction=None, removedup=True):
         """
         Subsamples population with or without replacement up to the desired fraction.  Returns subsampled tree and fasta.
         Removes duplicated sequences from the output tree (ie sequences in the original fasta that are duplicated, or sequences that have been resampled).
@@ -306,6 +306,8 @@ class TestTopology(unittest.TestCase):
         :param bool replace:  whether to sample with replacement
         :param int seed:  the random seed to randomly select individuals.
         :param float miss_fraction:  fraction of sequence to turn into gaps or N's.
+        :param bool removedup:  whether to remove duplicated sequences from the output tree.
+            NB:  Duplicated sequences will always be output in output fasta.
         :return [str]:  list of sequence names selected. Renames sequences to  "<name>_read<copy">
         """
         # NB:  ART read simulator generates read with names like otu1-read2.  Use underscore instead of hyphen to make HyPhy friendly.
@@ -358,16 +360,16 @@ class TestTopology(unittest.TestCase):
             for i, dup_tip in enumerate(dup_tips):
                 dup_tip.name = "{}_read{}".format(tip.name, i)
 
-
-        # We expected the resampled tips to be polytomies.
-        # But if we replace the tip fasta sequences with random missing data, then copied sequences
-        # will no longer be identical.
-        # Check which sequences are actually identical, then remove the copies from the output tree,
-        # keeping the first copy encountered (in alphabetical tip name order).
-        dup_ids = TestTopology.find_dup_seq(fasta=out_fastafile)
-        for tip in tree.get_terminals():
-            if tip.name in dup_ids:
-                tree.prune(tip)
+        if removedup:
+            # We expected the resampled tips to be identical to each other, resulting in polytomies in the output tree.
+            # But if we replace the tip fasta sequences with random missing data, then copied sequences
+            # will no longer be identical.
+            # Check which sequences are actually identical, then remove the copies from the output tree,
+            # keeping the first copy encountered (in alphabetical tip name order).
+            dup_ids = TestTopology.find_dup_seq(fasta=out_fastafile)
+            for tip in tree.get_terminals():
+                if tip.name in dup_ids:
+                    tree.prune(tip)
 
 
         Phylo.write(tree, out_treefile, "newick")
@@ -413,7 +415,8 @@ class TestTopology(unittest.TestCase):
                 # Try to reproduce the INDELible tree with the INDELible fasta sequences as input
                 repro_treefile = fasttree.fasttree_handler.make_tree(fasta_fname=subsample_fasta,
                                                                      threads=fasttree_threads, debug=True)
-                # Get rid of duplicate sequences in the tips
+                # Get rid of duplicate sequences in the tips that are a result of low mutation rate.
+                # These show up as polytomies in the actual tree, even if the expected tree has non-zero branch lengths between them.
                 nodup_repro_treefile = repro_treefile.replace(".nwk", ".nodup.nwk")
                 TestTopology.prune_copies_by_seq(in_treefile=repro_treefile, out_treefile=nodup_repro_treefile, fastafile=subsample_fasta)
                 self.cmp_topology(expected_treefile=expected_subsample_treefile, actual_treefile=nodup_repro_treefile, is_reroot=False)
@@ -530,7 +533,8 @@ class TestTopology(unittest.TestCase):
                 repro_treefile = fasttree.fasttree_handler.make_tree(fasta_fname=subsample_fasta,
                                                                      threads=fasttree_threads, debug=True)
 
-                # robinson foulds distance only well defined for binary trees.  Prune duplicate copies of the same sequence from tree.
+                # Get rid of duplicate sequences in the tips that are a result of low mutation rate.
+                # These show up as polytomies in the actual tree, even if the expected tree has non-zero branch lengths between them.
                 nodup_repro_treefile =  repro_treefile.replace(".nwk", ".nodup.nwk")
                 TestTopology.prune_copies_by_seq(in_treefile=repro_treefile, out_treefile=nodup_repro_treefile, fastafile=subsample_fasta)
 
@@ -557,11 +561,11 @@ class TestTopology(unittest.TestCase):
 
         for sample_fraction in [0.5]:
             subsample_fasta = final_popn_fasta.replace(".fasta", ".prune.{:.1}.fasta".format(sample_fraction))
-            expected_subsample_treefile = final_popn_unconstrained_treefile.replace(".nwk", ".prune.{:.1}.nodup.nwk".format(sample_fraction))
+            expected_subsample_treefile = final_popn_unconstrained_treefile.replace(".nwk", ".prune.{:.1}.nwk".format(sample_fraction))
 
             TestTopology.subsample(treefile=final_popn_unconstrained_treefile, fastafile=final_popn_fasta,
                                    out_treefile=expected_subsample_treefile, out_fastafile=subsample_fasta,
-                                   sample_fraction=sample_fraction, seed=seed)
+                                   sample_fraction=sample_fraction, seed=seed, replace=False, removedup=False)
 
 
             # Try to match the topology of the pruned final population topology when we use pruned fasta as input
@@ -569,10 +573,8 @@ class TestTopology(unittest.TestCase):
             fasttree.fasttree_handler.make_tree(fasta_fname=subsample_fasta,
                                                 out_tree_fname=repro_treefile,
                                                 threads=fasttree_threads, debug=True)
-            # robinson foulds distance only well defined for binary trees.  Prune duplicate copies of the same sequence from tree.
-            nodup_repro_treefile =  repro_treefile.replace(".nwk", ".nodup.nwk")
-            TestTopology.prune_copies_by_seq(in_treefile=repro_treefile, out_treefile=nodup_repro_treefile, fastafile=subsample_fasta)
-            self.cmp_topology(expected_treefile=expected_subsample_treefile, actual_treefile=nodup_repro_treefile, is_reroot=False)
+
+            self.cmp_topology(expected_treefile=expected_subsample_treefile, actual_treefile=repro_treefile, is_reroot=False)
 
 
 
@@ -594,11 +596,11 @@ class TestTopology(unittest.TestCase):
 
         for sample_fraction in [0.5]:
             subsample_fasta = final_popn_fasta.replace(".fasta", ".resample.{:.1}.fasta".format(sample_fraction))
-            expected_subsample_treefile = final_popn_unconstrained_treefile.replace(".nwk", ".resample.{:.1}.nodup.nwk".format(sample_fraction))
+            expected_subsample_treefile = final_popn_unconstrained_treefile.replace(".nwk", ".resample.{:.1}.nwk".format(sample_fraction))
 
             TestTopology.subsample(treefile=final_popn_unconstrained_treefile, fastafile=final_popn_fasta,
                                    out_treefile=expected_subsample_treefile, out_fastafile=subsample_fasta,
-                                   sample_fraction=sample_fraction, seed=seed)
+                                   sample_fraction=sample_fraction, seed=seed, replace=True, removedup=False)
 
 
             # Try to reproduce the INDELible tree with the INDELible fasta sequences as input
@@ -606,12 +608,7 @@ class TestTopology(unittest.TestCase):
             fasttree.fasttree_handler.make_tree(fasta_fname=subsample_fasta,
                                                 out_tree_fname=repro_treefile,
                                                 threads=fasttree_threads, debug=True)
-
-             # robinson foulds distance only well defined for binary trees.  Prune duplicate copies of the same sequence from tree.
-            nodup_repro_treefile =  repro_treefile.replace(".nwk", ".nodup.nwk")
-            TestTopology.prune_copies_by_seq(in_treefile=repro_treefile, out_treefile=nodup_repro_treefile, fastafile=subsample_fasta)
-
-            self.cmp_topology(expected_treefile=expected_subsample_treefile, actual_treefile=nodup_repro_treefile, is_reroot=False)
+            self.cmp_topology(expected_treefile=expected_subsample_treefile, actual_treefile=repro_treefile, is_reroot=False)
 
 
 
@@ -633,11 +630,12 @@ class TestTopology(unittest.TestCase):
 
         for missing_fraction in [0.125]:
             missing_fasta = final_popn_fasta.replace(".fasta", ".missing.{:.3}.fasta".format(missing_fraction))
-            expected_subsample_treefile = final_popn_unconstrained_treefile.replace(".nwk", ".missing.{:.3}.nodup.nwk".format(missing_fraction))
+            expected_subsample_treefile = final_popn_unconstrained_treefile.replace(".nwk", ".missing.{:.3}.nwk".format(missing_fraction))
 
             TestTopology.subsample(treefile=final_popn_unconstrained_treefile, fastafile=final_popn_fasta,
                                    out_treefile=expected_subsample_treefile, out_fastafile=missing_fasta,
-                                   sample_fraction=1, seed=seed, miss_fraction=missing_fraction)
+                                   sample_fraction=1, seed=seed, miss_fraction=missing_fraction,
+                                   replace=False, removedup=False)
 
 
             # Try to reproduce the INDELible tree with the INDELible fasta sequences as input
@@ -646,11 +644,7 @@ class TestTopology(unittest.TestCase):
                                                 out_tree_fname=repro_treefile,
                                                 threads=fasttree_threads, debug=True)
 
-             # robinson foulds distance only well defined for binary trees.  Prune duplicate copies of the same sequence from tree.
-            nodup_repro_treefile =  repro_treefile.replace(".nwk", ".nodup.nwk")
-            TestTopology.prune_copies_by_seq(in_treefile=repro_treefile, out_treefile=nodup_repro_treefile, fastafile=missing_fasta)
-
-            self.cmp_topology(expected_treefile=expected_subsample_treefile, actual_treefile=nodup_repro_treefile, is_reroot=False)
+            self.cmp_topology(expected_treefile=expected_subsample_treefile, actual_treefile=repro_treefile, is_reroot=False)
 
 
     def test_missing_seq_resample_final_popn(self):
@@ -673,12 +667,12 @@ class TestTopology(unittest.TestCase):
             for missing_fraction in [0.125]:
                 sub_fasta = final_popn_fasta.replace(".fasta", ".resample.{:.1}.missing.{:.3}.fasta".format(sample_fraction, missing_fraction))
                 expected_subsample_treefile = final_popn_unconstrained_treefile.replace(".nwk",
-                                                                                        ".resample.{:.1}.missing.{:.3}.nodup.nwk".format(sample_fraction, missing_fraction))
+                                                                                        ".resample.{:.1}.missing.{:.3}.nwk".format(sample_fraction, missing_fraction))
 
                 TestTopology.subsample(treefile=final_popn_unconstrained_treefile, fastafile=final_popn_fasta,
                                        out_treefile=expected_subsample_treefile, out_fastafile=sub_fasta,
                                        sample_fraction=sample_fraction, seed=seed, miss_fraction=missing_fraction,
-                                       replace=True)
+                                       replace=True, removedup=False)
 
 
                 # Try to reproduce the INDELible tree with the INDELible fasta sequences as input
@@ -686,12 +680,7 @@ class TestTopology(unittest.TestCase):
                 fasttree.fasttree_handler.make_tree(fasta_fname=sub_fasta,
                                                     out_tree_fname=repro_treefile,
                                                     threads=fasttree_threads, debug=True)
-
-                 # robinson foulds distance only well defined for binary trees.  Prune duplicate copies of the same sequence from tree.
-                nodup_repro_treefile =  repro_treefile.replace(".nwk", ".nodup.nwk")
-                TestTopology.prune_copies_by_seq(in_treefile=repro_treefile, out_treefile=nodup_repro_treefile, fastafile=sub_fasta)
-
-                self.cmp_topology(expected_treefile=expected_subsample_treefile, actual_treefile=nodup_repro_treefile, is_reroot=False)
+                self.cmp_topology(expected_treefile=expected_subsample_treefile, actual_treefile=repro_treefile, is_reroot=False)
 
 
 if __name__ == "__main__":
