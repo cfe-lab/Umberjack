@@ -85,11 +85,13 @@ class TestTopology(unittest.TestCase):
             print "Unable to import rpy2 and thus unable to check tree toplogies"
             raise
 
-
-    def cmp_topology(self, expected_treefile, actual_treefile, is_reroot=False):
+    @staticmethod
+    def get_rf_dist(expected_treefile, actual_treefile, is_reroot=False):
         """
-        Compares the topology of the trees.  Asserts if there is non-zero Robinson Foulds distance.
-        If reroot specifed, then uses the first tip in the expected tree as the root.
+
+        :param expected_treefile:
+        :param actual_treefile:
+        :param is_reroot:
         :return:
         """
         # Use R phangorn package to calculate
@@ -103,17 +105,20 @@ class TestTopology(unittest.TestCase):
         ro.r("expected_notin_actual <- expected_tree$tip.label[!expected_tree$tip.label %in% actual_tree$tip.label]")
         expected_notin_actual = ro.r("expected_notin_actual")
         rlen_e_notin_a = ro.r("length(expected_notin_actual)")[0]
-        self.assertEqual(rlen_e_notin_a, 0,
-                         "There are tips in expected tree not in actual tree=" + str(expected_notin_actual) +
-                         ". expected tree = " + expected_treefile +
-                         " actual tree=" + actual_treefile)
+        if rlen_e_notin_a !=  0:
+            raise ValueError(
+                             "There are tips in expected tree not in actual tree=" + str(expected_notin_actual) +
+                             ". expected tree = " + expected_treefile +
+                             " actual tree=" + actual_treefile)
+
         ro.r("actual_notin_expected <- actual_tree$tip.label[!actual_tree$tip.label %in% expected_tree$tip.label]")
         actual_notin_expected = ro.r("actual_notin_expected")
         rlen_a_notin_e = ro.r("length(actual_notin_expected)")[0]
-        self.assertEqual(rlen_a_notin_e, 0,
-                         "There are tips in actual tree not in expected tree=" + str(actual_notin_expected) +
-                         ".  expected tree = " + expected_treefile +
-                         " actual tree=" + actual_treefile)
+        if rlen_a_notin_e != 0:
+            raise ValueError(
+                             "There are tips in actual tree not in expected tree=" + str(actual_notin_expected) +
+                             ".  expected tree = " + expected_treefile +
+                             " actual tree=" + actual_treefile)
 
         if is_reroot:
             ro.r("newroot <- expected_tree$tip.label[1]")
@@ -123,8 +128,17 @@ class TestTopology(unittest.TestCase):
 
         # robinson foulds distance
         ro.r("rf_dist <- RF.dist(expected_tree, actual_tree)")
-        print ro.r("rf_dist")
+        #print ro.r("rf_dist")
         rf_dist = ro.r("rf_dist")[0]
+        return rf_dist
+
+    def cmp_topology(self, expected_treefile, actual_treefile, is_reroot=False):
+        """
+        Compares the topology of the trees.  Asserts if there is non-zero Robinson Foulds distance.
+        If reroot specifed, then uses the first tip in the expected tree as the root.
+        :return:
+        """
+        rf_dist = TestTopology.get_rf_dist(expected_treefile, actual_treefile, is_reroot)
 
         self.assertEqual(rf_dist, 0,
                      "Actual tree " + actual_treefile + " should have same topology as expected tree " +
@@ -375,6 +389,56 @@ class TestTopology(unittest.TestCase):
         Phylo.write(tree, out_treefile, "newick")
 
         return tipname_sample
+
+    @staticmethod
+    def resample_tree_from_fasta(treefile, fastafile, out_treefile):
+        """
+        Fasta contains resampled tips, renamed with format [tipname]_read[num].
+
+        Resample the tips in the tree according to the resampled seq in the fasta.
+        :param str treefile:  filepath to newick population tree
+        :param str fastafile:  filepath to population sequences in fasta format
+        :param float sample_fraction:  fraction of population to sample
+        :param bool replace:  whether to sample with replacement
+        :param int seed:  the random seed to randomly select individuals.
+        :param float miss_fraction:  fraction of sequence to turn into gaps or N's.
+        :param bool removedup:  whether to remove duplicated sequences from the output tree.
+            NB:  Duplicated sequences will always be output in output fasta.
+        :return [str]:  list of sequence names selected. Renames sequences to  "<name>_read<copy">
+        """
+        # NB:  ART read simulator generates read with names like otu1-read2.  Use underscore instead of hyphen to make HyPhy friendly.
+        tree = Phylo.read(treefile, "newick")
+        tips = tree.get_terminals()
+
+        tipbasename_to_newtips = {}
+        for rec in SeqIO.parse(fastafile, "fasta"):
+            tip_basename = rec.id.split("_")[0]
+            if tip_basename not in tipbasename_to_newtips:
+                tipbasename_to_newtips[tip_basename] = []
+            tipbasename_to_newtips[tip_basename].extend([rec.id])
+
+        # Prune the tree of tips that weren't selected for the sample.
+        for tip in tips:
+            if tip.name not in tipbasename_to_newtips:
+                tree.prune(tip)
+
+        # Append resampled tips to the tree as polytomies.
+        # Rename tips to [tipname]_read[index]
+        for tip in tree.get_terminals():
+            if tip.name not in tipbasename_to_newtips:
+                raise ValueError("tip should be in tree")
+            dup_count = len(tipbasename_to_newtips[tip.name])
+            if dup_count >= 2:
+                tip.split(n=dup_count, branch_length=0)
+                dup_tips = tip.clades
+            else:
+                dup_tips = [tip]
+            for i, dup_tip in enumerate(dup_tips):
+                newtip_name = tipbasename_to_newtips[tip.name][i]
+                dup_tip.name = newtip_name
+
+        Phylo.write(tree, out_treefile, "newick")
+
 
 
 
