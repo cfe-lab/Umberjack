@@ -631,6 +631,34 @@ class Consensus:
         else:
             return None
 
+    def get_codon_conserve(self, codon_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False):
+        """
+        :param int codon_pos_0based: 0-based position in the multiple sequence alignment
+        :param bool is_count_ambig:  whether to include N as 0.25 of A, C, G, T
+        :param bool is_count_gaps:  whether to include inner "-" as 0.25 of A, C, G, T
+        :param bool is_count_pad:  whether to include outer - as 0.25 of A, C, G, T
+        :return: the fraction of conserved sequences at every position in the multiple sequence alignment or None if there are no valid characters
+        :rtype float
+        """
+        conserve_count = 0.0
+        total_count = 0.0
+
+        codon_to_count = self.get_codon_freq(codon_pos_0based)
+        for codon, count in codon_to_count.iteritems():
+            if ((not is_count_ambig and codon.find("N")) or
+                (not is_count_gaps and codon.find("-")) or
+                    (not is_count_pad and codon.find("X"))):
+                continue
+
+            total_count += 1
+            if conserve_count < count:
+                conserve_count = count
+
+        if total_count:
+            return conserve_count/total_count
+        else:
+            return None
+
 
     def get_ave_conserve(self, start_pos_0based, after_end_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False):
         """
@@ -700,6 +728,43 @@ class Consensus:
             total_entropy = -total_entropy
 
         return total_entropy
+
+
+    def get_codon_shannon_entropy(self, codon_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False):
+        """
+        Gets the Shannon Entropy (measure of bits required to represent each symbol) at the given codon site.
+        :param int codon_pos_0based: 0-based codon position in the multiple sequence alignment
+        :param bool is_count_ambig:  whether to codons with N's
+        :param bool is_count_gaps:  whether to include codons with "-"  (inner gaps)
+        :param bool is_count_pad:  whether to include codons with "X" (outer gaps or left/right padding)
+        :return: Shannon Entropy.  Log2 based.
+        :rtype float
+        """
+
+        codon_to_count = self.get_codon_freq(codon_pos_0based)
+        unambig_codon_count = {}
+        for codon, count in codon_to_count.iteritems():
+            if ((not is_count_ambig and codon.find("N")) or
+                (not is_count_gaps and codon.find("-")) or
+                    (not is_count_pad and codon.find("X"))):
+                continue
+
+            unambig_codon_count[codon] = count
+
+        total_seqs = len(unambig_codon_count)
+        if not total_seqs:
+            total_entropy = None
+        else:
+            total_entropy = 0.0
+            for codon, count  in unambig_codon_count.iteritems():
+
+                if count:
+                    p_symbol = count / total_seqs  # probability of this symbol (aka codon) occuring at this position
+                    log_p_symbol = math.log(p_symbol, 2)  # Log2  probability of symbol
+                    total_entropy -= (p_symbol * log_p_symbol)
+
+        return total_entropy
+
 
     def get_ave_shannon_entropy(self, start_pos_0based, after_end_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False):
         """
