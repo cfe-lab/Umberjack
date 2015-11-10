@@ -24,34 +24,6 @@ settings.setup_logging()
 LOGGER = logging.getLogger(__name__)
 
 
-
-
-# ART_BIN_DIR = sys.argv[1]
-# ART_QUAL_PROFILE_TSV1 = sys.argv[2]
-# ART_QUAL_PROFILE_TSV2 = sys.argv[3]
-# REFERENCE_FASTA = sys.argv[4]
-# CONSENSUS_FASTA = sys.argv[5]
-# ART_OUTPUT_PREFIX = sys.argv[6]
-# ART_INSERT_RATE1 = sys.argv[7]
-# ART_INSERT_RATE2 = sys.argv[8]
-# ART_DEL_RATE1 = sys.argv[9]
-# ART_DEL_RATE2 = sys.argv[10]
-# ART_QUAL_SHIFT1 = sys.argv[11]
-# ART_QUAL_SHIFT12 = sys.argv[12]
-# ART_READ_LENGTH = sys.argv[13]
-# ART_FOLD_COVER = sys.argv[14]
-# ART_MEAN_INSERT_SIZE = sys.argv[15]
-# ART_STDDEV_INSERT_SIZE = sys.argv[16]
-#
-# PICARD_BIN_DIR = sys.argv[17]
-#
-# BWA_BIN_DIR = sys.argv[18]
-# BWA_OUT_DIR = sys.argv[19]
-#
-# PROCS = int(sys.argv[20])
-# SEED = int(sys.argv[21])
-# INDELIBLE_RATES_CSV = sys.argv[22]
-
 SECTION = "sim"
 
 config_file = sys.argv[1]
@@ -85,15 +57,15 @@ BWA_BIN_DIR = sim_helper.get_path_str(config.get(SECTION, "BWA_BIN_DIR"), OUTDIR
 PROCS = config.getint(SECTION, "PROCS")
 
 # TODO:  don't hard code these - get them from config file
-ART_OUTPUT_PREFIX =OUTDIR + os.sep + "mixed" + os.sep + "reads" + os.sep + FILENAME_PREFIX + ".mixed.reads"
-REFERENCE_FASTA = OUTDIR + os.sep + "mixed" + os.sep + FILENAME_PREFIX + ".mixed.fasta"
-CONSENSUS_FASTA = OUTDIR + os.sep + "mixed" + os.sep + FILENAME_PREFIX + ".mixed.consensus.fasta"
-BWA_OUT_DIR = OUTDIR + os.sep + "mixed" + os.sep + "aln"
-INDELIBLE_RATES_CSV = OUTDIR + os.sep + "mixed" + os.sep + FILENAME_PREFIX + ".mixed.rates.csv"
+ART_OUTPUT_PREFIX = OUTDIR + os.sep +  "reads" + os.sep + FILENAME_PREFIX + ".reads"
+REFERENCE_FASTA = OUTDIR + os.sep + "fullpopn" + os.sep +  FILENAME_PREFIX + "_TRUE.fasta"  # Use the INDELible genome fasta as the population reference
+CONSENSUS_FASTA = OUTDIR + os.sep + "fullpopn" + os.sep +  FILENAME_PREFIX + ".consensus.fasta"
+BWA_OUT_DIR = OUTDIR + os.sep +  "aln"
+INDELIBLE_RATES_CSV = OUTDIR + os.sep + "fullpopn" + os.sep + FILENAME_PREFIX + "_RATES.csv"
 
 
 CONSENSUS_NAME = "consensus"
-MIN_BASE_Q = 20
+MIN_BASE_Q = 20       # TODO:  get this from the config file
 MIN_MAP_Q = 20
 MAX_PROP_N = 0.1
 
@@ -325,22 +297,18 @@ else:
 
         with open(nuc_conserve_csv, 'w') as fh_out:
             LOGGER.debug("About to output conservation, entropy from " + msa_fasta + " to " + nuc_conserve_csv)
-            writer = csv.DictWriter(fh_out, fieldnames=["NucSite", "Conserve", "Entropy", "NucDepth", "CodonDepth"])
+            writer = csv.DictWriter(fh_out, fieldnames=["CodonSite", "ConserveCodon", "EntropyCodon", "CodonDepth"])
             writer.writeheader()
 
             aln = Utility.Consensus()
             aln.parse(msa_fasta)
 
-
-            for nuc_pos_0based in range(0, aln.get_alignment_len()):
-                codon_pos_0based = nuc_pos_0based * Utility.NUC_PER_CODON
+            for codon_pos_0based in range(0, aln.get_alignment_len()/3):
                 outrow = dict()
-                outrow["NucSite"] = nuc_pos_0based + 1
-                outrow["Conserve"] = aln.get_conserve(nuc_pos_0based, is_count_ambig=True, is_count_gaps=True, is_count_pad=False)
-                outrow["Entropy"] = aln.get_shannon_entropy(nuc_pos_0based, is_count_ambig=True, is_count_gaps=True, is_count_pad=False)
-                outrow["NucDepth"] = aln.get_depth(nuc_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
-                codon_pos_0based = nuc_pos_0based / Utility.NUC_PER_CODON
-                outrow["CodonDepth"] = aln.get_codon_depth(codon_pos_0based=codon_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
+                outrow["CodonSite"] = codon_pos_0based + 1
+                outrow["ConserveCodon"] = aln.get_codon_conserve(codon_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
+                outrow["EntropyCodon"] = aln.get_codon_shannon_entropy(codon_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
+                outrow["CodonDepth"] = aln.get_codon_depth(codon_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
                 writer.writerow(outrow)
 
 output_cmp_msa_csv  = ART_OUTPUT_PREFIX + ".cmp.msa.csv"
@@ -464,36 +432,36 @@ else:
 
 # Pass Info to R for plotting into HTML format
 ####################################################################
-if os.path.exists(bwa_output_prefix + ".cov.html") and os.path.getsize(bwa_output_prefix + ".cov.html"):
-    LOGGER.warn("Not regerating simulated data stats knitr html " + bwa_output_prefix + ".cov.html")
-else:
-    Rscript_wdir =  os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + os.sep + "R")
-    # Output the R config file (workaround cuz can't seem to set commandline parameters for rmd knitr scripts)
-    Rcov_config_file = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + os.sep + "R" + os.sep + "small_cov.config")
-    with open(Rcov_config_file, 'w') as fh_out_rconfig:
-        fh_out_rconfig.write("FULL_POPN_CONSERVE_CSV={}".format(REFERENCE_FASTA.replace(".fasta", ".conserve.csv")) + "\n")
-        fh_out_rconfig.write("ART_FOLD_COVER={}".format(ART_FOLD_COVER) + "\n")
-        fh_out_rconfig.write("ORIG_ERR_FREE_COV_TSV={}".format(ART_OUTPUT_PREFIX + ".errFree.cov.tsv") + "\n")
-        fh_out_rconfig.write("ALN_ERR_FREE_COV_TSV={}".format(bwa_output_prefix + ".errFree.consensus.bwa.cov.tsv") + "\n")
-        fh_out_rconfig.write("ORIG_ERR_FREE_WGS_METRICS={}".format(ART_OUTPUT_PREFIX + ".errFree.picard.wgsmetrics") + "\n")
-        fh_out_rconfig.write("ALN_ERR_FREE_WGS_METRICS={}".format(bwa_output_prefix + ".errFree.consensus.bwa.picard.wgsmetrics") + "\n")
-        fh_out_rconfig.write("ORIG_ERR_FREE_CONSERVE_CSV={}".format(ART_OUTPUT_PREFIX + ".errFree.conserve.csv") + "\n")
-        fh_out_rconfig.write("ALN_ERR_FREE_CONSERVE_CSV={}".format(bwa_output_prefix + ".errFree.consensus.bwa.conserve.csv") + "\n")
-        fh_out_rconfig.write("ORIG_COV_TSV={}".format(ART_OUTPUT_PREFIX + ".cov.tsv") + "\n")
-        fh_out_rconfig.write("ALN_COV_TSV={}".format(bwa_output_prefix + ".consensus.bwa.cov.tsv") + "\n")
-        fh_out_rconfig.write("ORIG_WGS_METRICS={}".format(ART_OUTPUT_PREFIX + ".picard.wgsmetrics") + "\n")
-        fh_out_rconfig.write("ALN_WGS_METRICS={}".format(bwa_output_prefix + ".consensus.bwa.picard.wgsmetrics") + "\n")
-        fh_out_rconfig.write("ORIG_CONSERVE_CSV={}".format(ART_OUTPUT_PREFIX + ".conserve.csv") + "\n")
-        fh_out_rconfig.write("ALN_CONSERVE_CSV={}".format(bwa_output_prefix + ".consensus.bwa.conserve.csv") + "\n")
-        fh_out_rconfig.write("INDELIBLE_RATES_CSV={}".format(INDELIBLE_RATES_CSV) + "\n")
-        fh_out_rconfig.write("CMP_READ_ERR_CSV={}".format(output_cmp_msa_csv) + "\n")
-
-    Rscript_cmd = ("library(knitr); " +
-                   "setwd('{}'); ".format(Rscript_wdir) +
-                   "spin('small_cov.R', knit=FALSE); " +
-                   "knit2html('small_cov.Rmd', stylesheet='markdown_bigwidth.css')")
-    subprocess.check_call(["Rscript", "-e", Rscript_cmd], env=os.environ)
-    shutil.copy(Rscript_wdir + os.sep + "small_cov.html", bwa_output_prefix + ".cov.html")
+# if os.path.exists(bwa_output_prefix + ".cov.html") and os.path.getsize(bwa_output_prefix + ".cov.html"):
+#     LOGGER.warn("Not regerating simulated data stats knitr html " + bwa_output_prefix + ".cov.html")
+# else:
+#     Rscript_wdir =  os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + os.sep + "R")
+#     # Output the R config file (workaround cuz can't seem to set commandline parameters for rmd knitr scripts)
+#     Rcov_config_file = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + os.sep + "R" + os.sep + "small_cov.config")
+#     with open(Rcov_config_file, 'w') as fh_out_rconfig:
+#         fh_out_rconfig.write("FULL_POPN_CONSERVE_CSV={}".format(REFERENCE_FASTA.replace(".fasta", ".conserve.csv")) + "\n")
+#         fh_out_rconfig.write("ART_FOLD_COVER={}".format(ART_FOLD_COVER) + "\n")
+#         fh_out_rconfig.write("ORIG_ERR_FREE_COV_TSV={}".format(ART_OUTPUT_PREFIX + ".errFree.cov.tsv") + "\n")
+#         fh_out_rconfig.write("ALN_ERR_FREE_COV_TSV={}".format(bwa_output_prefix + ".errFree.consensus.bwa.cov.tsv") + "\n")
+#         fh_out_rconfig.write("ORIG_ERR_FREE_WGS_METRICS={}".format(ART_OUTPUT_PREFIX + ".errFree.picard.wgsmetrics") + "\n")
+#         fh_out_rconfig.write("ALN_ERR_FREE_WGS_METRICS={}".format(bwa_output_prefix + ".errFree.consensus.bwa.picard.wgsmetrics") + "\n")
+#         fh_out_rconfig.write("ORIG_ERR_FREE_CONSERVE_CSV={}".format(ART_OUTPUT_PREFIX + ".errFree.conserve.csv") + "\n")
+#         fh_out_rconfig.write("ALN_ERR_FREE_CONSERVE_CSV={}".format(bwa_output_prefix + ".errFree.consensus.bwa.conserve.csv") + "\n")
+#         fh_out_rconfig.write("ORIG_COV_TSV={}".format(ART_OUTPUT_PREFIX + ".cov.tsv") + "\n")
+#         fh_out_rconfig.write("ALN_COV_TSV={}".format(bwa_output_prefix + ".consensus.bwa.cov.tsv") + "\n")
+#         fh_out_rconfig.write("ORIG_WGS_METRICS={}".format(ART_OUTPUT_PREFIX + ".picard.wgsmetrics") + "\n")
+#         fh_out_rconfig.write("ALN_WGS_METRICS={}".format(bwa_output_prefix + ".consensus.bwa.picard.wgsmetrics") + "\n")
+#         fh_out_rconfig.write("ORIG_CONSERVE_CSV={}".format(ART_OUTPUT_PREFIX + ".conserve.csv") + "\n")
+#         fh_out_rconfig.write("ALN_CONSERVE_CSV={}".format(bwa_output_prefix + ".consensus.bwa.conserve.csv") + "\n")
+#         fh_out_rconfig.write("INDELIBLE_RATES_CSV={}".format(INDELIBLE_RATES_CSV) + "\n")
+#         fh_out_rconfig.write("CMP_READ_ERR_CSV={}".format(output_cmp_msa_csv) + "\n")
+#
+#     Rscript_cmd = ("library(knitr); " +
+#                    "setwd('{}'); ".format(Rscript_wdir) +
+#                    "spin('small_cov.R', knit=FALSE); " +
+#                    "knit2html('small_cov.Rmd', stylesheet='markdown_bigwidth.css')")
+#     subprocess.check_call(["Rscript", "-e", Rscript_cmd], env=os.environ)
+#     shutil.copy(Rscript_wdir + os.sep + "small_cov.html", bwa_output_prefix + ".cov.html")
 
 
 

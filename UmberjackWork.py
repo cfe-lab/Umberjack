@@ -187,9 +187,9 @@ class UmberjackWork(object):
         Stuff that only the parent should do before child processes work.
         :return
         """
-        if self.pool.is_parent():
-            self.check_input()
-            self.make_outdir()
+
+        self.check_input()
+        self.make_outdir()
 
 
 
@@ -205,12 +205,13 @@ class UmberjackWork(object):
         elif not os.path.exists(self.out_dir):
             os.makedirs(self.out_dir)
 
-        if self.sam_filename_list or (self.sam_filename and not self.ref):  # multiple sam, ref combos
-            for samfile, ref in self.sam_ref_iter():
-                sam_ref_outdir = UmberjackWork.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
+        # multiple sam, ref combos
+        for samfile, ref in self.sam_ref_iter():
+            sam_ref_outdir = UmberjackWork.get_sam_ref_outdir(pardir=self.out_dir, samfilename=samfile, ref=ref)
 
-                if not os.path.exists(sam_ref_outdir):
-                    os.makedirs(sam_ref_outdir)
+            if not os.path.exists(sam_ref_outdir):
+                os.makedirs(sam_ref_outdir)
+
 
 
     @staticmethod
@@ -354,6 +355,7 @@ class UmberjackWork(object):
             LOGGER.warn("Found existing Full MSA-Fasta from SAM for ref " + ref + ".  Not regenerating")
 
         return msa_fasta_filename
+
 
     @staticmethod
     def create_dup_tsv(sam_filename, out_dir, ref, mapping_cutoff, read_qual_cutoff, is_insert):

@@ -2,6 +2,15 @@
 import csv
 from cStringIO import StringIO
 import Bio.Phylo as Phylo
+from collections import namedtuple
+import random
+
+# Keep track of Partitions for INDELible control.txt file
+Partition = namedtuple("Partition", field_names=["TreeFile", "TreeLen", "Codons"])
+
+# Keep track of unique Trees separately for INDELible control.txt file, so that we don't write the same Tree multiple times
+Tree = namedtuple("Tree", field_names=["TreeFile", "TreeLen"])
+
 
 
 def get_tree_string(tree_txt):
@@ -86,3 +95,38 @@ def write_tree(tree_txt, tree_newick):
 
 
 
+def write_partition_csv(partition_csv, treefile_to_codons, tree_scaling_rates, seed=None):
+    """
+    Writes a Partition CSV with headers TreeFile, TreeLen, Codons
+    which tells batch_indelible.py how to partition the genome by phylogenetic topology, mutation rate.
+
+    TODO:  allow multiple scaling rates per tree
+
+    :param str partition_csv: filepath to output partition CSV
+    :param OrderedDict treefile_to_codons: {str: int}  filepath to newick tree  ==> number of codons to apply to that tree topology
+    :param list tree_scaling_rates:  scaling rates to randomly apply to each tree
+    :param int seed:  random seed
+    """
+
+    # Create partition CSV
+    with open(partition_csv, 'w') as fh_out_partition_csv:
+        writer = csv.DictWriter(fh_out_partition_csv, fieldnames=Partition._fields)
+        writer.writeheader()
+
+        randomizer = random.Random(seed)
+        # for each breakpoint tree & scaling rate combo, create a new genome partition
+        for treefile, recombo_codons in treefile_to_codons.iteritems():
+
+            # shuffle the scaling rates for each recombination partition
+            randomizer.shuffle(tree_scaling_rates)  # shuffles in place
+
+            # Divvy up the codons evenly amongst the scaling rates.
+            # If can't divvy up evenly, just assign the remaining codons to the next scaling rate.
+            for codonpos in range(0, recombo_codons, recombo_codons/len(tree_scaling_rates)):
+                scaling_rate_idx = (codonpos / len(tree_scaling_rates))  % len(tree_scaling_rates)
+                scaling_rate = tree_scaling_rates[scaling_rate_idx]
+
+                recombo_scale_codons = min(recombo_codons/len(tree_scaling_rates), recombo_codons - codonpos)
+
+                partition = Partition(TreeFile=treefile, TreeLen=scaling_rate, Codons=recombo_scale_codons)
+                writer.writerow(partition._asdict())

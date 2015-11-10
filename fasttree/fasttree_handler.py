@@ -71,7 +71,7 @@ def make_tree(fasta_fname, out_tree_fname=None, threads=1, fastree_exe=settings.
     return fastree_treefilename
 
 
-def make_tree_repro(fasta_fname, intree_fname, fastree_exe=settings.DEFAULT_FASTREE_EXE):
+def make_tree_repro(fasta_fname, intree_fname, outtree_fname=None, fastree_exe=settings.DEFAULT_FASTREE_EXE):
     """
     Creates a phylogenetic tree from the fasta.  Resulting tree will maintain the same topology as input tree,
     but branch lengths will be optimized.
@@ -84,11 +84,16 @@ def make_tree_repro(fasta_fname, intree_fname, fastree_exe=settings.DEFAULT_FAST
 
     :param str fasta_fname:  multiple sequence aligned fasta file
     :param str intree_fname:  full filepath to input tree for which the topology should not change
+    :param str outtree_fname:  output filename of newick tree.  If none, then replaces fasta with .nwk suffix.
     :param str fastree_exe: full filepath to FastTree executable.  If empty, uses FastTree from PATH env var
     """
     fasta_fname_prefix = os.path.splitext(fasta_fname)[0]  # Remove the .fasta suffix
     fastree_logfilename = fasta_fname_prefix + ".fasttree.log"
-    fastree_treefilename = fasta_fname_prefix + ".nwk"
+    if not outtree_fname:
+        fastree_treefilename = fasta_fname_prefix + ".nwk"
+    else:
+        fastree_treefilename = outtree_fname
+
     fasttree_stdouterr_filename = fasta_fname_prefix + ".fasttree.stdouterr.txt"
     LOGGER.debug("Start Fasttree  " + fastree_treefilename)
 

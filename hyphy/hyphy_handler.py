@@ -11,18 +11,31 @@ NUC_MODEL_CMP_BS = "GTRrate.bf"
 
 
 # Columns in the HyPhy dN/dS tab-separates values file
+HYPHY_TSV_SITE = "Site"  # 0-based codon site with respect to codon fasta file used as HyPhy input
 HYPHY_TSV_DN_COL = 'dN'
 HYPHY_TSV_DS_COL = 'dS'
 HYPHY_TSV_S_COL = 'Observed S Changes'
 HYPHY_TSV_N_COL = 'Observed NS Changes'
+HYPHY_TSV_DN_MINUS_DS_COL = 'dN-dS'
 HYPHY_TSV_SCALED_DN_MINUS_DS_COL = 'Scaled dN-dS'
 HYPHY_TSV_PROB_FULLSEQ_S_COL = 'P{S leq. observed}'
 HYPHY_TSV_NEG_PROB_FULLSEQ_S_COL = 'P{S geq. observed}'
 HYPHY_TSV_EXP_S_COL = 'E[S Sites]'
 HYPHY_TSV_EXP_N_COL = 'E[NS Sites]'
 
+# Site    Observed S Changes      Observed NS Changes     E[S Sites]      E[NS Sites]     dS      dN      dN-dS   Scaled dN-dS
+FIELD_NAMES = [HYPHY_TSV_SITE,
+               HYPHY_TSV_S_COL,
+               HYPHY_TSV_N_COL,
+               HYPHY_TSV_EXP_S_COL,
+               HYPHY_TSV_EXP_N_COL,
+               HYPHY_TSV_DS_COL,
+               HYPHY_TSV_DN_COL,
+               HYPHY_TSV_DN_MINUS_DS_COL,
+               HYPHY_TSV_SCALED_DN_MINUS_DS_COL]
 
-def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=settings.DEFAULT_HYPHY_EXE, hyphy_basedir=settings.DEFAULT_HYPHY_BASEDIR,
+def calc_dnds(codon_fasta_filename, tree_filename, hyphy_filename_prefix=None,
+              hyphy_exe=settings.DEFAULT_HYPHY_EXE, hyphy_basedir=settings.DEFAULT_HYPHY_BASEDIR,
               hyphy_libdir=settings.DEFAULT_HYPHY_LIBDIR,
               threads=1, debug=False):
     """
@@ -38,6 +51,8 @@ def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=settings.DEFAULT_HY
 
     :param str codon_fasta_filename:  path to multiple sequence aligned fasta file that starts at the beginning of a codon.
     :param str tree_filename: path to phylogenetic tree for sequences in fasta.
+    :param str hyphy_filename_prefix:  filepath and filename prefix of output files (*.codonmodelfit, *.dnds.tsv, *.codon.brlen.csv, *.anc.fasta).
+        If not specified, then uses the filename prefix of the codon fasta file (without the file suffix)
     :param str hyphy_exe:  path to multithreaded (but not MPI enabled) hyphy executable HYPHYMP.  If empty, uses HYPHYMP from PATH.
     :param str hyphy_basedir:  path to HyPhy TemplateBatchFiles directory.  If empty, uses /usr/local/lib/hyphy/TemplateBatchFiles
     :param str hyphy_libdir:  path to HyPhy Custom LIBDIR containing the out of box hyphy batch files.
@@ -48,7 +63,9 @@ def calc_dnds(codon_fasta_filename, tree_filename, hyphy_exe=settings.DEFAULT_HY
         Each row in the tab-separate output represents a codon site in the alignment.
     :rtype: str
     """
-    hyphy_filename_prefix = os.path.splitext(codon_fasta_filename)[0]  # Remove .fasta suffix
+    if not hyphy_filename_prefix:
+        hyphy_filename_prefix = os.path.splitext(codon_fasta_filename)[0]  # Remove .fasta suffix
+
     hyphy_modelfit_filename = hyphy_filename_prefix + ".codonmodelfit"
     hyphy_site_br_subs_tsv_filename = hyphy_filename_prefix + ".subst.tsv"  # TODO:  don't always output per-site-branch subs - get user input
     hyphy_dnds_tsv_filename = hyphy_filename_prefix + ".dnds.tsv"
