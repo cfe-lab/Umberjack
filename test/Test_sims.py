@@ -16,6 +16,11 @@ import shutil
 import ConfigParser
 import Bio.SeqIO as SeqIO
 from Bio.Align import MultipleSeqAlignment
+import simulations.recombination
+import tempfile
+import glob
+from cStringIO import StringIO
+from test_topology import TestTopology
 
 # Simulation Configs
 SIM_DIR = os.path.dirname(os.path.realpath(__file__)) + os.sep + "simulations"
@@ -34,17 +39,13 @@ class TestSims(unittest.TestCase):
 
     def setUp(self):
         """
-        Generate simulated data for unit tests unless it already exists (takes a long time to run)
+        Generate simulated data for unit tests.
+        The sim_pipeline.py should be smart enough not to regenerate files if they already exist to save time.
         """
         config.settings.setup_logging()
-
         self.configparser = ConfigParser.RawConfigParser()
         self.configparser.read(SIM_DATA_CONFIG_FILE)
-        filename_prefix = self.configparser.get(SECTION, "FILENAME_PREFIX")
-
-        final_popn_fasta = SIM_DATA_DIR + os.sep + "mixed" + os.sep + filename_prefix + ".mixed.fasta"
-        if not os.path.exists(final_popn_fasta) or not os.path.getsize(final_popn_fasta):
-            subprocess.check_call(["python", SIM_PIPELINE_PY, SIM_DATA_CONFIG_FILE])
+        subprocess.check_call(["python", SIM_PIPELINE_PY, SIM_DATA_CONFIG_FILE])
 
 
 
@@ -196,8 +197,201 @@ class TestSims(unittest.TestCase):
 
 
 
+    def test_prune_regraft(self):
+        """
+        Tests that the graft inserts grafted clade in correct position
+        :return:
+        """
+        treestr = "(((T1:0.1, T2:0.2)N3:0.35, (T3:0.3, T4:0.4)N4:0.45)N2:0.25, T5:0.5)N1;"
+        tree = Phylo.read(StringIO(treestr), "newick")
+
+        # Double check that the level order is correct
+        actual_breadthfirst_nodes = [node.name for node in tree.find_clades(order="level")]
+        expected_breadthfirst_nodes = ["N1", "N2", "T5", "N3", "N4", "T1", "T2", "T3", "T4"]
+        self.assertListEqual(actual_breadthfirst_nodes, expected_breadthfirst_nodes)
+
+        # Check that the prune_by_idx() actually pruned the right node
+        relocate_idx =  expected_breadthfirst_nodes.index("N3")
+        graft_clade = simulations.recombination.prune_by_idx(tree=tree, idx=relocate_idx, order="level")
+
+        # Expect that pruning clade N3 causes N2 to be a singleton node.
+        # N2 is then collapsed so that N1 children are N4 and T5
+        expected_prune_str = "((T3:0.3, T4:0.4)N4:0.70, T5:0.5)N1;"
+        actual_strio = StringIO()
+        Phylo.write(tree, actual_strio, "newick")
+        actual_strio.flush()
+        diff = TestTopology.get_weighted_rf_dist_from_str(expected_prune_str, actual_strio.getvalue())
+        self.assertEqual(diff, 0, msg="Pruned Tree not same as Expected Tree. Actual=" + actual_strio.getvalue() +
+                                             " expected=" + expected_prune_str)
+        actual_strio.close()
+
+        # Check that regrafting the pruned clade inserts it in the correct location
+        dest_sister_clade = tree.find_clades(name="T5").next()
+        dest_new_par_br_len = 0.2
+        tree = simulations.recombination.graft(tree=tree, src_subtree=graft_clade,
+                                               dest_sister_clade=dest_sister_clade,
+                                               dest_new_par_br_len=dest_new_par_br_len)
+
+        exp_graft_str = "((T3:0.3, T4:0.4)N4:0.70, ((T1:0.1, T2:0.2)N3:0.35, T5:0.3):0.2)N1;"
+        actual_strio = StringIO()
+        Phylo.write(tree, actual_strio, "newick")
+        actual_strio.flush()
+        diff = TestTopology.get_weighted_rf_dist_from_str(exp_graft_str, actual_strio.getvalue())
+
+        self.assertEqual(diff, 0, msg="Grafted Tree not same as Expected Tree. Actual=" + actual_strio.getvalue() +
+                                             " expected=" + exp_graft_str)
+
+        actual_strio.close()
 
 
+
+    def test_prune_regraft_polytomy(self):
+        """
+        Check that regrafting the pruned clade on top of existing node
+        inserts the pruned clade as a polytomy sister of the existing node
+        :return:
+        """
+        treestr = "(((T1:0.1, T2:0.2)N3:0.35, (T3:0.3, T4:0.4)N4:0.45)N2:0.25, T5:0.5)N1;"
+        tree = Phylo.read(StringIO(treestr), "newick")
+
+        # Double check that the level order is correct
+        expected_breadthfirst_nodes = ["N1", "N2", "T5", "N3", "N4", "T1", "T2", "T3", "T4"]
+
+        # Check that the prune_by_idx() actually pruned the right node
+        relocate_idx =  expected_breadthfirst_nodes.index("N3")
+        graft_clade = simulations.recombination.prune_by_idx(tree=tree, idx=relocate_idx, order="level")
+
+        # Expect that pruning clade N3 causes N2 to be a singleton node.
+        # N2 is then collapsed so that N1 children are N4 and T5
+        expected_prune_str = "((T3:0.3, T4:0.4)N4:0.70, T5:0.5)N1;"
+        actual_strio = StringIO()
+        Phylo.write(tree, actual_strio, "newick")
+        actual_strio.flush()
+        diff = TestTopology.get_weighted_rf_dist_from_str(expected_prune_str, actual_strio.getvalue())
+        self.assertEqual(diff, 0, msg="Pruned Tree not same as Expected Tree. Actual=" + actual_strio.getvalue() +
+                                             " expected=" + expected_prune_str)
+        actual_strio.close()
+
+        # Check that regrafting the pruned clade inserts it in the correct location
+        dest_sister_clade = tree.find_clades(name="T5").next()
+        dest_new_par_br_len = 0.0
+        tree = simulations.recombination.graft(tree=tree, src_subtree=graft_clade,
+                                               dest_sister_clade=dest_sister_clade,
+                                               dest_new_par_br_len=dest_new_par_br_len)
+
+        exp_graft_str = "((T3:0.3, T4:0.4)N4:0.70, (T1:0.1, T2:0.2)N3:0.35, T5:0.5)N1;"
+        actual_strio = StringIO()
+        Phylo.write(tree, actual_strio, "newick")
+        actual_strio.flush()
+        diff = TestTopology.get_weighted_rf_dist_from_str(exp_graft_str, actual_strio.getvalue())
+
+        self.assertEqual(diff, 0, msg="Grafted Tree not same as Expected Tree. Actual=" + actual_strio.getvalue() +
+                                             " expected=" + exp_graft_str)
+
+        actual_strio.close()
+
+
+    def test_regraft_root(self):
+        """
+        Check that you can't graft a clade as the new root
+        :return:
+        """
+
+        treestr = "((T3:0.3, T4:0.4)N4:0.70, T5:0.5)N1;"
+        tree = Phylo.read(StringIO(treestr), "newick")
+        dest_sister_clade = tree.find_clades(name="T5").next()
+        dest_new_par_br_len = 0.2
+
+        subtree_str = "(T3:0.3, T4:0.4)N4:0.45;"
+        subtree = Phylo.read(StringIO(subtree_str), "newick")
+
+        self.assertRaises(ValueError, simulations.recombination.graft,
+                          **dict(tree=tree, src_subtree=subtree,
+                                 dest_sister_clade=dest_sister_clade, dest_new_par_br_len=dest_new_par_br_len))
+
+
+
+    def test_recombination(self):
+        """
+        Test that simulating a recombination tree by randomly pruning and regraphing a clade works.
+        :return:
+        """
+
+        prev_brlen = None
+        prev_tips = None
+        prev_treefiles = []
+        for recombo_treefile in glob.glob(SIM_DATA_DIR + os.sep + "topology" + os.sep + "*.break.*.rename.nwk"):
+            tree = Phylo.read(recombo_treefile, "newick")
+
+            # Check that total branch length in each tree is the same in the umberjack unittest recombination trees
+            curr_brlen = tree.total_branch_length()
+            if prev_brlen is not None:
+                self.assertAlmostEqual(prev_brlen, curr_brlen,
+                                       msg="Expect all recombination trees to have same total branch length.  " +
+                                           "Difference in {}={} and {}={}".format(recombo_treefile, curr_brlen,
+                                                                                  prev_treefiles[-1], prev_brlen))
+
+            # Check that all the same tips exist in each tree
+            curr_tips = [tip.name for tip in tree.get_terminals()]
+            if prev_tips is not None:
+                self.assertItemsEqual(prev_tips, curr_tips,
+                                      msg="Expect all recombination trees to have same tips.  " +
+                                           "Difference in {}={} and {}={}".format(recombo_treefile, str(prev_tips),
+                                                                                  prev_treefiles[-1], str(curr_tips)))
+
+
+            # Check that each recombination tree is different from all other treefiles
+            for prev_treefile in prev_treefiles:
+                diff = TestTopology.get_weighted_rf_dist(recombo_treefile, prev_treefile)
+                self.assertNotEqual(diff, 0, msg="Recombination Tree is same as another tree. Current Tree=" + recombo_treefile +
+                                                 " Previous Tree =" + prev_treefile)
+
+            prev_brlen  = curr_brlen
+            prev_tips = curr_tips
+            prev_treefiles.append(recombo_treefile)
+
+
+    def test_recombo_tree(self):
+        """
+        Directly invoke recombination.recombo_tree() and check that the tips are the same but topology is different.
+        :return:
+        """
+        tmptree = tempfile.NamedTemporaryFile(mode="w+", delete=False)
+
+        treestr = "(((T1:0.1, T2:0.2)N3:0.35, (T3:0.3, T4:0.4)N4:0.45)N2:0.25, T5:0.5)N1;"
+        tmptree.write(treestr)
+        tmptree.flush()  # Flush to buffer
+        os.fsync(tmptree.file.fileno())  # flush to disk
+        tmptree.close()
+
+        graft_clade, recombo_tree = simulations.recombination.make_recombo_tree(in_treefile=tmptree.name,
+                                                             out_treefile=tmptree.name + ".recombo.nwk",
+                                                             seed=20)
+
+        # Check that the tree tips are the same
+        origtree = Phylo.read(StringIO(treestr), "newick")
+        orig_tips = [tip.name for tip in origtree.get_terminals()]
+        recombo_tips = [tip.name for tip in recombo_tree.get_terminals()]
+        self.assertItemsEqual(orig_tips, recombo_tips,
+                              msg="Recombination Tree should have same tips as the original tree.  " +
+                                  "Recombo tips=" + str(recombo_tips) +
+                                  "Orig tree tips=" + str(orig_tips))
+
+        # Check that the topology is different
+        recombo_strio = StringIO()
+        Phylo.write(recombo_tree, recombo_strio, "newick")
+        recombo_strio.flush()
+        diff = TestTopology.get_weighted_rf_dist_from_str(treestr, recombo_strio.getvalue())
+        self.assertNotEqual(diff, 0, msg="Recombination Tree should be different from original tree. " +
+                                      "Recombination Tree=" + recombo_strio.getvalue() +
+                                      " Orig tree =" + treestr)
+        recombo_strio.close()
+
+        # cleanup
+        if os.path.exists(tmptree.name):
+            os.remove(tmptree.name)
+        if os.path.exists(tmptree.name + ".recombo.nwk"):
+            os.remove(tmptree.name + ".recombo.nwk")
 
 
 

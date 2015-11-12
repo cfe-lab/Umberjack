@@ -26,6 +26,8 @@ from collections import defaultdict
 import logging
 import Utility
 import math
+import dendropy  # calculates weighted robinson foulds distance
+import dendropy.calculate.treecompare
 
 # Simulation Configs
 SIM_DIR = os.path.dirname(os.path.realpath(__file__)) + os.sep + "simulations"
@@ -130,6 +132,61 @@ class TestTopology(unittest.TestCase):
         ro.r("rf_dist <- RF.dist(expected_tree, actual_tree)")
         #print ro.r("rf_dist")
         rf_dist = ro.r("rf_dist")[0]
+        return rf_dist
+
+
+    @staticmethod
+    def get_weighted_rf_dist(expected_treefile, actual_treefile):
+        """
+        Used dendropy to find robinson foulds distance weighted by the branch length difference between trees
+        of the edge that defines a bifurcation in a tree.
+        If the bifurcation does not exist in the other tree, then the other tree's branch length is set to zero.
+        Allows for polytomies and unroots the trees by default before calculating bifurcations.
+
+        :param expected_treefile:
+        :param actual_treefile:
+        :return:
+        """
+        tns = dendropy.TaxonNamespace()  # both trees need to have the same taxons
+
+        expected_tree = dendropy.Tree.get(
+                path=expected_treefile,
+                schema='newick',
+                taxon_namespace=tns)
+        actual_tree = dendropy.Tree.get(
+                path=actual_treefile,
+                schema='newick',
+                taxon_namespace=tns)
+
+        rf_dist = dendropy.calculate.treecompare.weighted_robinson_foulds_distance(expected_tree, actual_tree)
+
+        return rf_dist
+
+    @staticmethod
+    def get_weighted_rf_dist_from_str(expected_treestr, actual_treestr):
+        """
+        Used dendropy to find robinson foulds distance weighted by the branch length difference between trees
+        of the edge that defines a bifurcation in a tree.
+        If the bifurcation does not exist in the other tree, then the other tree's branch length is set to zero.
+        Allows for polytomies and unroots the trees by default before calculating bifurcations.
+
+        :param str expected_treestr: newick string
+        :param str actual_treestr: newick string
+        :return:
+        """
+        tns = dendropy.TaxonNamespace()  # both trees need to have the same taxons
+
+        expected_tree = dendropy.Tree.get(
+                data=expected_treestr,
+                schema='newick',
+                taxon_namespace=tns)
+        actual_tree = dendropy.Tree.get(
+                data=actual_treestr,
+                schema='newick',
+                taxon_namespace=tns)
+
+        rf_dist = dendropy.calculate.treecompare.weighted_robinson_foulds_distance(expected_tree, actual_tree)
+
         return rf_dist
 
     def cmp_topology(self, expected_treefile, actual_treefile, is_reroot=False):
