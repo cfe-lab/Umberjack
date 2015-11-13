@@ -126,10 +126,31 @@ def get_fasta_headers(fasta_filename):
     headers = []
     with open(fasta_filename, 'r') as fasta_fh:
         for line in fasta_fh:
-            if line[0] == '>':
+            if line and line[0] == '>':
                 header = line[1:].rstrip().split()
                 headers.extend(header)
     return headers
+
+
+def get_first_last_headers(fasta_filename):
+    """
+    Gets the first and last header in a fasta
+    :return:
+    """
+    first_header = ""
+    last_header = ""
+    with open(fasta_filename, 'r') as fasta_fh:
+        for line in fasta_fh:
+            if line and line[0] == '>':
+                first_header = line[1:].rstrip().split()[0]
+                break
+
+    for line in reverse_readline(fasta_filename):
+        if line and line[0] == '>':
+            last_header = line[1:].rstrip().split()[0]
+            break
+
+    return first_header, last_header
 
 
 def get_longest_seq_size_from_fasta(fasta_filename):
@@ -1064,3 +1085,36 @@ def mask_stop_codon(seq):
     return seq
 
 
+
+def reverse_readline(filename, buf_size=8192):
+    """
+    a generator that returns the lines of a file in reverse order
+    Stolen from http://stackoverflow.com/questions/2301789/read-a-file-in-reverse-order-using-python
+    """
+    with open(filename) as fh:
+        segment = ""
+        offset = 0
+        fh.seek(0, os.SEEK_END)
+        total_size = remaining_size = fh.tell()
+        while remaining_size > 0:
+            offset = min(total_size, offset + buf_size)
+            fh.seek(-offset, os.SEEK_END)
+            buffer = fh.read(min(remaining_size, buf_size))
+            remaining_size -= buf_size
+            lines = buffer.split('\n')
+            # the first line of the buffer is probably not a complete line so
+            # we'll save it and append it to the last line of the next buffer
+            # we read
+            if segment is not None:
+                # if the previous chunk starts right from the beginning of line
+                # do not concact the segment to the last line of new chunk
+                # instead, yield the segment first
+                if buffer[-1] is not '\n':
+                    lines[-1] += segment
+                else:
+                    yield segment
+            segment = lines[0]
+            for index in range(len(lines) - 1, 0, -1):
+                if len(lines[index]):
+                    yield lines[index]
+        yield segment
