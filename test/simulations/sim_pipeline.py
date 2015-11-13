@@ -165,6 +165,14 @@ if __name__ == "__main__":
     INDELIBLE_BIN_DIR = get_path_str(cfgparser.get(SECTION, "INDELIBLE_BIN_DIR"), OUTDIR)
     INDELIBLE_SCALING_RATES = cfgparser.get(SECTION, "INDELIBLE_SCALING_RATES")
 
+    # For each recombinant section, divvy up again into different substitution rates.
+    # Each substitution rate is assigned to a contiguous block of codons whose size
+    # is drawn from a negative binomial with parameters  p=probability of success=1/(total distinct substitution rates),
+    # and n=number of trials = total genome codons.
+    # Each tree topology - substitution rate combination forms a distinct INDELible partition.
+
+
+
     indelible_partition_csv = OUT_FULL_POPN_DIR + os.sep +"partition.csv"
     # true alignment of entire extent population sequences
     full_popn_fasta = OUT_FULL_POPN_DIR + os.sep +"{}_TRUE.fasta".format(FILENAME_PREFIX)

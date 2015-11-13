@@ -4,6 +4,7 @@ from cStringIO import StringIO
 import Bio.Phylo as Phylo
 from collections import namedtuple
 import random
+from numpy.random import RandomState, multinomial
 
 # Keep track of Partitions for INDELible control.txt file
 Partition = namedtuple("Partition", field_names=["TreeFile", "TreeLen", "Codons"])
@@ -100,11 +101,16 @@ def write_partition_csv(partition_csv, treefile_to_codons, tree_scaling_rates, s
     Writes a Partition CSV with headers TreeFile, TreeLen, Codons
     which tells batch_indelible.py how to partition the genome by phylogenetic topology, mutation rate.
 
-    TODO:  allow multiple scaling rates per tree
+    For each contiguous genome section corresponding to a tree topology, divvy up the section into separate mutation rates.
+    The size of a subsection corresponding to a mutation rate is drawn
+    from a multinomial distro.
+    The order of the mutation rate subsections is also shuffed for each tree topology.
+
+    Each (tree topology,  mutation rate) combination forms a distinct INDELible partition.
 
     :param str partition_csv: filepath to output partition CSV
     :param OrderedDict treefile_to_codons: {str: int}  filepath to newick tree  ==> number of codons to apply to that tree topology
-    :param list tree_scaling_rates:  scaling rates to randomly apply to each tree
+    :param list tree_scaling_rates:  float scaling rates to randomly apply to each tree
     :param int seed:  random seed
     """
 
@@ -114,19 +120,22 @@ def write_partition_csv(partition_csv, treefile_to_codons, tree_scaling_rates, s
         writer.writeheader()
 
         randomizer = random.Random(seed)
+        np_rander = RandomState(seed)
+
+        genome_codons = sum(treefile_to_codons.values())
+        # assign equal probability of selecting each scaling rate
+        prob_scaling_rates = [1.0/len(tree_scaling_rates)]*len(tree_scaling_rates)
+
+
         # for each breakpoint tree & scaling rate combo, create a new genome partition
         for treefile, recombo_codons in treefile_to_codons.iteritems():
 
             # shuffle the scaling rates for each recombination partition
             randomizer.shuffle(tree_scaling_rates)  # shuffles in place
 
-            # Divvy up the codons evenly amongst the scaling rates.
-            # If can't divvy up evenly, just assign the remaining codons to the next scaling rate.
-            for codonpos in range(0, recombo_codons, recombo_codons/len(tree_scaling_rates)):
-                scaling_rate_idx = (codonpos / len(tree_scaling_rates))  % len(tree_scaling_rates)
-                scaling_rate = tree_scaling_rates[scaling_rate_idx]
+            # Select number of codons for each scaling rate
+            recombo_scale_partition_sizes = np_rander.multinomial(n=genome_codons, pvals=prob_scaling_rates, size=1)[0]
 
-                recombo_scale_codons = min(recombo_codons/len(tree_scaling_rates), recombo_codons - codonpos)
-
-                partition = Partition(TreeFile=treefile, TreeLen=scaling_rate, Codons=recombo_scale_codons)
+            for i, scaling_rate in enumerate(tree_scaling_rates):
+                partition = Partition(TreeFile=treefile, TreeLen=scaling_rate, Codons=recombo_scale_partition_sizes[i])
                 writer.writerow(partition._asdict())

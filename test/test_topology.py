@@ -10,7 +10,6 @@ import unittest
 from Bio import Phylo
 from Bio import Seq as Seq
 import simulations.indelible.indelible_handler as indelibler
-import simulations.phylo_dnds as phylo_dnds
 from cStringIO import StringIO
 import csv
 import os
