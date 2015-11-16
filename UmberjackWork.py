@@ -187,9 +187,9 @@ class UmberjackWork(object):
         Stuff that only the parent should do before child processes work.
         :return
         """
-
-        self.check_input()
-        self.make_outdir()
+        if self.pool.is_parent():
+            self.check_input()
+            self.make_outdir()
 
 
 
