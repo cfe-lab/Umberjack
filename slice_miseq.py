@@ -79,9 +79,11 @@ class SiteDnDsInfo:
 
 
         # Poor accuracy when site has ambiguous codons and all of its unambiguous codons are fully conserved.
-        # Hyphy averages substitutions over ambiguous codons.  If there are no or very few true substitutions,
+        # Hyphy averages substitutions over ambiguous codons.  If there are no substitutions between unambiguous codons,
         # any fluctation will greatly impact accuracy.
-        if syn_subs >= 1 and nonsyn_subs >= 1:
+        # However, there are are exactly zero synonymous substitutions and many nonsynonymous substitutions or vice versa,
+        # that is still informative.  We might not be able to calculate dN/dS, but we will be able to calculate dN-dS.
+        if (syn_subs == 0 or syn_subs >= 1) and (nonsyn_subs == 0 or nonsyn_subs >= 1):
             if dn_minus_ds is not None:
                 self.total_reads_nolowsub_for_dnminusds += reads
                 self.accum_win_dn_minus_ds_weightby_reads_nolowsub += (reads*dn_minus_ds)
@@ -98,6 +100,7 @@ class SiteDnDsInfo:
 
                 self.total_subs_nolowsub_for_dnds += (syn_subs + nonsyn_subs)
                 self.accum_win_dnds_weightby_subs_nolowsub += ((syn_subs + nonsyn_subs) * dnds)
+
 
     def get_ave_dnds_weightby_subs(self, is_exclude_low_sub=True):
         """
