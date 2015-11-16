@@ -122,7 +122,7 @@ def write_partition_csv(partition_csv, treefile_to_codons, tree_scaling_rates, s
         randomizer = random.Random(seed)
         np_rander = RandomState(seed)
 
-        genome_codons = sum(treefile_to_codons.values())
+
         # assign equal probability of selecting each scaling rate
         prob_scaling_rates = [1.0/len(tree_scaling_rates)]*len(tree_scaling_rates)
 
@@ -134,7 +134,7 @@ def write_partition_csv(partition_csv, treefile_to_codons, tree_scaling_rates, s
             randomizer.shuffle(tree_scaling_rates)  # shuffles in place
 
             # Select number of codons for each scaling rate
-            recombo_scale_partition_sizes = np_rander.multinomial(n=genome_codons, pvals=prob_scaling_rates, size=1)[0]
+            recombo_scale_partition_sizes = np_rander.multinomial(n=recombo_codons, pvals=prob_scaling_rates, size=1)[0]
 
             for i, scaling_rate in enumerate(tree_scaling_rates):
                 partition = Partition(TreeFile=treefile, TreeLen=scaling_rate, Codons=recombo_scale_partition_sizes[i])

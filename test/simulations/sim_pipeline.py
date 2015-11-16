@@ -237,10 +237,6 @@ if __name__ == "__main__":
     # Infer topology and site dN/dS from full population sequences actually generated from INDELible
     #################################
 
-    # TODO:
-    # Don't use FastTree to infer the true tree.
-    # We have the ancestral sequences.  Just count the substitutions between each parent-child.  Divide by sites.
-    # This is true branch length.
     if not os.path.exists(OUT_SUBS_DIR):
         os.makedirs(OUT_SUBS_DIR)
 
@@ -296,6 +292,7 @@ if __name__ == "__main__":
                 for inrow in reader:
                     codon_site_wrt_section_0based = int(inrow[hyphy_handler.HYPHY_TSV_SITE])
                     codon_site_wrt_genome_0based = codon_site_wrt_section_0based + ((section_nuc_start_base1 - 1) / 3)
+
 
                     outrow = inrow
                     outrow[hyphy_handler.HYPHY_TSV_SITE] = codon_site_wrt_genome_0based
