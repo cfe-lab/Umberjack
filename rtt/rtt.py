@@ -7,7 +7,7 @@ import logging
 import fasttree.fasttree_handler as fasttree
 import Bio.Phylo as Phylo
 import subprocess
-
+import Utility
 
 
 LOGGER = logging.getLogger(__name__)
@@ -19,9 +19,9 @@ def make_rooted_tree(unrooted_treefile, threads=1):
     :param unrooted_treefile:
     :return str:  path to rooted tree
     """
-
-    # Expand polytomies so that we get a bifurcating tree.  otherwise ape.rtt() and richard's RootToTip will crash.
-    bifurc_treefile = unrooted_treefile.replace(".nwk", ".2nary.nwk")
+    # Expand polytomies so that we get a bifurcating tree.  otherwise ape.rtt() and RootToTip will crash.
+    file_prefix = os.path.splitext(unrooted_treefile)[0]  # Remove the file suffix
+    bifurc_treefile = file_prefix + ".binary.nwk"
     LOGGER.debug("Removing polytomies in " + unrooted_treefile + " to " +  bifurc_treefile)
     if os.path.exists(bifurc_treefile) and os.path.getsize(bifurc_treefile):
         LOGGER.warn("Not regenerating " + bifurc_treefile)
@@ -34,10 +34,10 @@ def make_rooted_tree(unrooted_treefile, threads=1):
 
 
     # Custom RootToTip for rooting tree  (modified from the one from BEAST)
-    rooted_treefile = unrooted_treefile.replace(".nwk", ".rooted.nxs")
-    time_rooted_treefile = unrooted_treefile.replace(".nwk", ".rooted.time.nxs")
-    node_dates_csv = unrooted_treefile.replace(".nwk", ".nodedates.csv")
-    root_results_csv = unrooted_treefile.replace(".nwk", ".root.result.csv")
+    rooted_treefile = file_prefix + ".rooted.nxs"
+    time_rooted_treefile = file_prefix + ".rooted.time.nxs"
+    node_dates_csv = file_prefix + ".nodedates.csv"
+    root_results_csv = file_prefix + ".root.result.csv"
     LOGGER.debug("Rooting tree to " + rooted_treefile + " and " + time_rooted_treefile)
     if os.path.exists(rooted_treefile) and os.path.getsize(rooted_treefile) and os.path.exists(time_rooted_treefile) and os.path.getsize(time_rooted_treefile):
         LOGGER.warn("Not regenerating rooted trees " + rooted_treefile + " and " + time_rooted_treefile)
@@ -57,8 +57,8 @@ def make_rooted_tree(unrooted_treefile, threads=1):
     # when hyphy scales the tree branch lengths from nucleotide substitutions/site to codon substitutions/site,
     # it can set the zero-length branches to non-zero length codon branches, albeit with very very very small length.
     # In order to avoid this, we convert the binary tree back to polytomies before sending to hyphy to reconstruct ancestors.
-    named_rooted_treefile = rooted_treefile.replace(".nxs", ".named.nwk")
-    named_rooted_time_treefile = time_rooted_treefile.replace(".nxs", ".named.nwk")
+    named_rooted_treefile = file_prefix + ".named.nwk"
+    named_rooted_time_treefile = file_prefix + ".named.nwk"
     LOGGER.debug("Collapsing 0-length branches and adding inner node names to " + named_rooted_treefile + " and " + named_rooted_time_treefile)
     if (os.path.exists(named_rooted_treefile) and os.path.getsize(named_rooted_treefile) and
             os.path.exists(named_rooted_time_treefile) and os.path.getsize(named_rooted_time_treefile)):
@@ -115,3 +115,48 @@ def make_rooted_tree(unrooted_treefile, threads=1):
         # If we output in biopython 1.65 nexus format, it uses str(clade) to get taxa labels, which cuts off the names and appends "...",
         #   which screws up hyphy parsing.
     return named_rooted_treefile
+
+
+def is_timeable(msa_fasta):
+    """
+    Checks if the are multiple timepoints.
+    Reads should have "_<time from baseline>" in their names to specify the timepoint from which they came.
+    :param str msa_fasta:  filepath to multiple-sequence aligned fasta
+    :return bool:  whether the fasta contains reads from multiple timepoints
+    :raises ValueError:  if the file is missing or does not follow the required timepoint readname format.
+    """
+    if not os.path.exists(msa_fasta):
+        raise ValueError("Missing file " + msa_fasta)
+
+    elif not os.path.getsize(msa_fasta):
+        return False
+
+    # Assume that reads from the same timepoint are aggregated together in file.
+    # Read in first and last header so that we don't have to iterate through entire file to find different timepoints.
+    # If that fails, then read header by header.
+    first_header = Utility.get_first_header(msa_fasta)
+    last_header = Utility.get_last_header(msa_fasta)
+    if not first_header or not last_header:
+        raise ValueError("Invalid multiple-sequence alignment fasta format " + msa_fasta)
+
+    try:
+        first_timepoint = float(first_header.split("_")[-1])
+        last_timepoint = float(last_header.split("_")[-1])
+    except ValueError:
+        raise ValueError("Either first or last read do not follow required name format <name>_<time since baseline> in " + msa_fasta)
+
+    if first_timepoint != last_timepoint:
+        return True
+
+    prev_timepoint = None
+    for i, header in enumerate(Utility.get_fasta_headers(msa_fasta)):
+        try:
+            timepoint = float(header.split("_")[-1])
+        except ValueError:
+            raise ValueError("Read  " + str(i+1)  + " does not follow required name format <name>_<time since baseline> in " + msa_fasta)
+
+        if prev_timepoint is not None and timepoint != prev_timepoint:
+            return True
+        prev_timepoint = timepoint
+
+    return False

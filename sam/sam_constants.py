@@ -32,3 +32,7 @@ class SamHeader:
     TAG_REFSEQ_NAME_KEY = "SN"
     TAG_REFSEQ_LEN_KEY = "LN"
 
+# Mandatory fields in a sam file
+SAM_FIELDS = ["QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "SEQ", "QUAL"]
+SAM_FIELD_DELIM = "\t"
+

@@ -119,17 +119,44 @@ def get_fasta_headers(fasta_filename):
     """
     Gets a list of headers from the fasta.  Does not include the ">" header prefix.
     Does not include anything after the first whitespace in the header.
-    :return: list of headers
-    :rtype:  list[str]
+    :return: iterator over headers
+    :rtype:  iterator of str
     :param str fasta_filename : full file path to the fasta file
     """
-    headers = []
     with open(fasta_filename, 'r') as fasta_fh:
         for line in fasta_fh:
             if line and line[0] == '>':
                 header = line[1:].rstrip().split()
-                headers.extend(header)
-    return headers
+                yield header
+
+
+
+def get_first_header(fasta_filename):
+    """
+    :param str fasta_filename:  filepath to fasta
+    :return str:  Returns the first header in a fasta or None if there aren't any
+    """
+    first_header = ""
+    with open(fasta_filename, 'r') as fasta_fh:
+        for line in fasta_fh:
+            if line and line[0] == '>':
+                first_header = line[1:].rstrip().split()[0]
+                break
+    return first_header
+
+
+def get_last_header(fasta_filename):
+    """
+    :param str fasta_filename:  filepath to fasta
+    :return str:  Returns the last header in a fasta or None if there aren't any
+    """
+    last_header = None
+    for line in reverse_readline(fasta_filename):
+        if line and line[0] == '>':
+            last_header = line[1:].rstrip().split()[0]
+            break
+
+    return last_header
 
 
 def get_first_last_headers(fasta_filename):
@@ -137,18 +164,8 @@ def get_first_last_headers(fasta_filename):
     Gets the first and last header in a fasta
     :return:
     """
-    first_header = ""
-    last_header = ""
-    with open(fasta_filename, 'r') as fasta_fh:
-        for line in fasta_fh:
-            if line and line[0] == '>':
-                first_header = line[1:].rstrip().split()[0]
-                break
-
-    for line in reverse_readline(fasta_filename):
-        if line and line[0] == '>':
-            last_header = line[1:].rstrip().split()[0]
-            break
+    first_header = get_first_header(fasta_filename)
+    last_header = get_last_header(fasta_filename)
 
     return first_header, last_header
 
@@ -289,7 +306,7 @@ def get_len_1st_seq(msa_fasta_filename):
                     return seq_len
 
                 header = line[1:]
-            else:
+            elif header is not None:
                 seq_len += len(line)
     return 0
 

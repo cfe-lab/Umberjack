@@ -132,7 +132,7 @@ else:
 #############################################
 
 bwa_output_prefix = BWA_OUT_DIR + os.sep + os.path.basename(ART_OUTPUT_PREFIX)
-if os.path.exists(bwa_output_prefix + ".consensus.bwa.sam"):
+if os.path.exists(bwa_output_prefix + ".bwa.sam"):
     LOGGER.warn("Not realigning reads")
 else:
     if not os.path.exists(BWA_OUT_DIR):
@@ -151,8 +151,8 @@ else:
         LOGGER.debug( "About to execute " + " ".join(BWA_BUILD_CMD))
         subprocess.check_call(BWA_BUILD_CMD, env=os.environ, stdout=fh_log, stderr=fh_log)
 
-        for fq_prefix, output_sam in [(ART_OUTPUT_PREFIX, bwa_output_prefix + ".consensus.bwa.sam"),
-                               (ART_OUTPUT_PREFIX + ".errFree", bwa_output_prefix + ".errFree.consensus.bwa.sam")]:
+        for fq_prefix, output_sam in [(ART_OUTPUT_PREFIX, bwa_output_prefix + ".bwa.sam"),
+                               (ART_OUTPUT_PREFIX + ".errFree", bwa_output_prefix + ".errFree.bwa.sam")]:
             BWA_CMD = [BWA_BIN_DIR + os.sep + "bwa",
                   "mem",
                   "-t", "10", # threads
@@ -185,8 +185,8 @@ else:
         os.remove(picard_logfile)
     for input_sam, aln_ref_fasta in [(ART_OUTPUT_PREFIX + ".sam", REFERENCE_FASTA),
                                      (ART_OUTPUT_PREFIX + ".errFree.sam", REFERENCE_FASTA),
-                                     (bwa_output_prefix + ".consensus.bwa.sam", CONSENSUS_FASTA),
-                                     (bwa_output_prefix + ".errFree.consensus.bwa.sam", CONSENSUS_FASTA)]:
+                                     (bwa_output_prefix + ".bwa.sam", CONSENSUS_FASTA),
+                                     (bwa_output_prefix + ".errFree.bwa.sam", CONSENSUS_FASTA)]:
 
         output_sam = input_sam.replace(".sam", ".sort.sam")
         output_query_sam = input_sam.replace(".sam", ".sort.query.sam")
@@ -246,8 +246,8 @@ else:
         os.remove(samtools_logfile)
     for input_sam in [ART_OUTPUT_PREFIX + ".sort.sam",
                       ART_OUTPUT_PREFIX + ".errFree.sort.sam",
-                      bwa_output_prefix + ".consensus.bwa.sort.sam",
-                      bwa_output_prefix + ".errFree.consensus.bwa.sort.sam"]:
+                      bwa_output_prefix + ".bwa.sort.sam",
+                      bwa_output_prefix + ".errFree.bwa.sort.sam"]:
 
         output_bam = input_sam.replace(".sort.sam", ".sort.bam")
         SAMTOOLS_BAM_CMD = ["samtools", "view",
@@ -277,8 +277,8 @@ else:
     consensus_len = Utility.get_seq2len(CONSENSUS_FASTA)[CONSENSUS_NAME]
     for sam, ref in [(ART_OUTPUT_PREFIX + ".sort.query.sam", None),
                      (ART_OUTPUT_PREFIX + ".errFree.sort.query.sam", None),
-                     (bwa_output_prefix + ".consensus.bwa.sort.query.sam", CONSENSUS_NAME),
-                     (bwa_output_prefix + ".errFree.consensus.bwa.sort.query.sam", CONSENSUS_NAME)]:
+                     (bwa_output_prefix + ".bwa.sort.query.sam", CONSENSUS_NAME),
+                     (bwa_output_prefix + ".errFree.bwa.sort.query.sam", CONSENSUS_NAME)]:
         msa_fasta = sam.replace(".sort.query.sam", ".msa.fasta")
         sam_handler.create_msa_slice_from_sam(sam_filename=sam, ref=ref, out_fasta_filename=msa_fasta,
                                               mapping_cutoff=MIN_MAP_Q, read_qual_cutoff=MIN_BASE_Q,
@@ -291,8 +291,8 @@ else:
     for msa_fasta in [REFERENCE_FASTA,      # full population, no sequencing
                       ART_OUTPUT_PREFIX + ".msa.fasta",
                       ART_OUTPUT_PREFIX + ".errFree.msa.fasta",
-                      bwa_output_prefix + ".consensus.bwa.msa.fasta",
-                      bwa_output_prefix + ".errFree.consensus.bwa.msa.fasta"]:
+                      bwa_output_prefix + ".bwa.msa.fasta",
+                      bwa_output_prefix + ".errFree.bwa.msa.fasta"]:
         nuc_conserve_csv = msa_fasta.replace(".fasta", ".conserve.csv").replace(".msa", "")
 
         with open(nuc_conserve_csv, 'w') as fh_out:
@@ -320,8 +320,8 @@ else:
     for msa_fasta in [REFERENCE_FASTA,      # full population, no sequencing
                           ART_OUTPUT_PREFIX + ".msa.fasta",
                           ART_OUTPUT_PREFIX + ".errFree.msa.fasta",
-                          bwa_output_prefix + ".consensus.bwa.msa.fasta",
-                          bwa_output_prefix + ".errFree.consensus.bwa.msa.fasta"]:
+                          bwa_output_prefix + ".bwa.msa.fasta",
+                          bwa_output_prefix + ".errFree.bwa.msa.fasta"]:
             nuc_conserve_csv = msa_fasta.replace(".fasta", ".conserve.csv").replace(".msa", "")
 
 
@@ -362,8 +362,8 @@ else:
 
         for source, msa_fasta in [("Orig", ART_OUTPUT_PREFIX + ".msa.fasta"),
                                   ("OrigErrFree", ART_OUTPUT_PREFIX + ".errFree.msa.fasta"),
-                                  ("Aln", bwa_output_prefix + ".consensus.bwa.msa.fasta"),
-                                  ("AlnErrFree", bwa_output_prefix + ".errFree.consensus.bwa.msa.fasta")]:
+                                  ("Aln", bwa_output_prefix + ".bwa.msa.fasta"),
+                                  ("AlnErrFree", bwa_output_prefix + ".errFree.bwa.msa.fasta")]:
 
             # Count the number of mismatches.
             # Count number of N's
@@ -442,17 +442,17 @@ else:
 #         fh_out_rconfig.write("FULL_POPN_CONSERVE_CSV={}".format(REFERENCE_FASTA.replace(".fasta", ".conserve.csv")) + "\n")
 #         fh_out_rconfig.write("ART_FOLD_COVER={}".format(ART_FOLD_COVER) + "\n")
 #         fh_out_rconfig.write("ORIG_ERR_FREE_COV_TSV={}".format(ART_OUTPUT_PREFIX + ".errFree.cov.tsv") + "\n")
-#         fh_out_rconfig.write("ALN_ERR_FREE_COV_TSV={}".format(bwa_output_prefix + ".errFree.consensus.bwa.cov.tsv") + "\n")
+#         fh_out_rconfig.write("ALN_ERR_FREE_COV_TSV={}".format(bwa_output_prefix + ".errFree.bwa.cov.tsv") + "\n")
 #         fh_out_rconfig.write("ORIG_ERR_FREE_WGS_METRICS={}".format(ART_OUTPUT_PREFIX + ".errFree.picard.wgsmetrics") + "\n")
-#         fh_out_rconfig.write("ALN_ERR_FREE_WGS_METRICS={}".format(bwa_output_prefix + ".errFree.consensus.bwa.picard.wgsmetrics") + "\n")
+#         fh_out_rconfig.write("ALN_ERR_FREE_WGS_METRICS={}".format(bwa_output_prefix + ".errFree.bwa.picard.wgsmetrics") + "\n")
 #         fh_out_rconfig.write("ORIG_ERR_FREE_CONSERVE_CSV={}".format(ART_OUTPUT_PREFIX + ".errFree.conserve.csv") + "\n")
-#         fh_out_rconfig.write("ALN_ERR_FREE_CONSERVE_CSV={}".format(bwa_output_prefix + ".errFree.consensus.bwa.conserve.csv") + "\n")
+#         fh_out_rconfig.write("ALN_ERR_FREE_CONSERVE_CSV={}".format(bwa_output_prefix + ".errFree.bwa.conserve.csv") + "\n")
 #         fh_out_rconfig.write("ORIG_COV_TSV={}".format(ART_OUTPUT_PREFIX + ".cov.tsv") + "\n")
-#         fh_out_rconfig.write("ALN_COV_TSV={}".format(bwa_output_prefix + ".consensus.bwa.cov.tsv") + "\n")
+#         fh_out_rconfig.write("ALN_COV_TSV={}".format(bwa_output_prefix + ".bwa.cov.tsv") + "\n")
 #         fh_out_rconfig.write("ORIG_WGS_METRICS={}".format(ART_OUTPUT_PREFIX + ".picard.wgsmetrics") + "\n")
-#         fh_out_rconfig.write("ALN_WGS_METRICS={}".format(bwa_output_prefix + ".consensus.bwa.picard.wgsmetrics") + "\n")
+#         fh_out_rconfig.write("ALN_WGS_METRICS={}".format(bwa_output_prefix + ".bwa.picard.wgsmetrics") + "\n")
 #         fh_out_rconfig.write("ORIG_CONSERVE_CSV={}".format(ART_OUTPUT_PREFIX + ".conserve.csv") + "\n")
-#         fh_out_rconfig.write("ALN_CONSERVE_CSV={}".format(bwa_output_prefix + ".consensus.bwa.conserve.csv") + "\n")
+#         fh_out_rconfig.write("ALN_CONSERVE_CSV={}".format(bwa_output_prefix + ".bwa.conserve.csv") + "\n")
 #         fh_out_rconfig.write("INDELIBLE_RATES_CSV={}".format(INDELIBLE_RATES_CSV) + "\n")
 #         fh_out_rconfig.write("CMP_READ_ERR_CSV={}".format(output_cmp_msa_csv) + "\n")
 #

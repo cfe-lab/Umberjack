@@ -20,3 +20,10 @@ class BasePool(object):
         :return:
         """
         pass
+
+    def terminate(self):
+        """
+        Shutdown master and child processes
+        :return:
+        """
+        pass

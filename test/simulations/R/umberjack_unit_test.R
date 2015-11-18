@@ -22,21 +22,7 @@ expected_dnds_filename <-  config[config$key=="EXPECTED_DNDS_FILENAME",]$val
 #'  
 #'  EXPECTED_DNDS_FILENAME=`r expected_dnds_filename`
 #'  
-#'  INDELIBLE_DNDS_FILENAME=`r indelible_dnds_filename`
-#'  
-actual_dnds_file <- file(actual_dnds_filename, open="rt")
-comments <- readLines(actual_dnds_file, 1) # Read one line 
-close(actual_dnds_file)
 
-args <- unlist(strsplit(comments, ','))
-
-
-
-
-#' *`r comments`**
-#' -----------------------------
-#' 
-#' 
 actual_dnds <- read.table(actual_dnds_filename, header=TRUE, na.strings="None", comment.char = "#", sep=",")
 dim(actual_dnds)
 head(actual_dnds)
@@ -71,9 +57,6 @@ if (!all(expected_dnds$Site == actual_dnds$Site)) {
 fullDat <- merge(x=actual_dnds, 
                  y=expected_dnds[, c("Site", "Omega", "Scaled.dN.dS", "Observed.S.Changes", "Observed.NS.Changes")], 
                  by="Site", all=FALSE, sort=TRUE)
-fullDat <- merge(x=fullDat, 
-                 y=indelible_dnds[, c("Site", "ScalingRate")], 
-                 by="Site", all.x=TRUE, all.y=FALSE, sort=TRUE)
 colnames(fullDat)[grep("Omega", colnames(fullDat))] <- "Expected"
 colnames(fullDat)[grep("Scaled.dN.dS", colnames(fullDat))] <- "ExpectedMinus"
 colnames(fullDat)[grep("Observed.S.Changes", colnames(fullDat))] <- "ExpectedSyn"

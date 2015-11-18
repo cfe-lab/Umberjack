@@ -41,14 +41,18 @@ class MPIPool(BasePool):
     MPI implementation of work pool
     """
     PRIMARY_RANK = 0
-    TAG_WORK = 1
-    TAG_TERMINATE = 2
+    TAG_WORK = 1  # Tell Process do work
+    TAG_TERMINATE = 2  # Tell Process to die
+    TAG_WORK_DONE = 3  # Tell process that work is done, but there might be more work later on.  Don't die.
 
 
     def __init__(self, **kwargs):
         super(BasePool, self).__init__(**kwargs)
         self.rank = None
         self.results = []  # keep track of all the results from every replica
+
+        self.is_terminated = False  # When terminated, don't take on any more work
+
         try:
             self.rank = MPI.COMM_WORLD.Get_rank()
             LOGGER.debug("I am rank=" + str(self.rank))
@@ -67,6 +71,9 @@ class MPIPool(BasePool):
     def wait_replica_done(self, busy_replica_2_request, available_replicas, callback=None):
         """
         Waits for replicas to finish.  As soon as one finishes, then retrieve its results and execute the callback.
+        :param dict  busy_replica_2_request:  {int rank of busy replica : ReplicaInfo instance}
+        :param collections.deque available_replicas:  queue of int ranks of replicas that are free to do more work
+        :param function callback:  function pointer to callback function that replica should call when done work
         :return:
         """
         requests = [window_replica_info.mpi_rcv_request for window_replica_info in busy_replica_2_request.values()]
@@ -99,7 +106,6 @@ class MPIPool(BasePool):
         """
 
         try:
-
             if self.rank != MPIPool.PRIMARY_RANK:
                 raise ValueError("Only the Parent can launch child replicas")
 
@@ -137,15 +143,12 @@ class MPIPool(BasePool):
                                                                          mpi_rcv_request=rcv_request)
 
             # Sent out all work requests.  Wait until all work is done
-
             while busy_replica_2_request:
                 self.wait_replica_done(busy_replica_2_request, available_replicas, callback)
 
             # All the work is done.
-            LOGGER.debug("Terminating replicas...")
-            for replica_rank in range(1, pool_size):
-                MPI.COMM_WORLD.isend(obj=None, dest=replica_rank, tag=MPIPool.TAG_TERMINATE)
-            LOGGER.debug("Done terminating replicas.")
+            # Don't terminate the MPI environment yet until told to do so by MPIPool.terminate()
+            self.done_work()
 
         except Exception:
             LOGGER.exception("Uncaught Exception.  Aborting")
@@ -156,31 +159,38 @@ class MPIPool(BasePool):
         """
         This is a replica.  Waits for work from parent and does work.
         Tells parent when done.
+        Parent will send work arguments via a dict stored in the MPI message.
+        :param function pointer func: function to execute on the arguments sent by the parent.
         :return:
         """
-        
-
         try:
             LOGGER.debug("Waiting for work")
-            is_terminated = False
-            while not is_terminated:
+            is_done_work = False
+            while not self.is_terminated and not is_done_work:
                 try:
                     mpi_status = MPI.Status()
                     # block till the primary tells me to do something
                     work_args = MPI.COMM_WORLD.recv(source=MPIPool.PRIMARY_RANK, tag=MPI.ANY_TAG, status=mpi_status)
 
                     if mpi_status.Get_tag() == MPIPool.TAG_TERMINATE:
-                        is_terminated = True
                         LOGGER.debug("Replica of rank %d directed to terminate by primary" % self.rank)
+                        self.terminate()
+
+                    elif mpi_status.Get_tag() == MPIPool.TAG_WORK_DONE:
+                        is_done_work = True
+                        LOGGER.debug("Replica of rank %d told work is done but wait for more work" % self.rank)
+
                     else:
                         str_work_args = ', '.join('{}:{}'.format(key, val) for key, val in work_args.items())
                         LOGGER.debug("Received work_args=" + str_work_args)
                         result = func(**work_args)
                         MPI.COMM_WORLD.send(obj=result, dest=MPIPool.PRIMARY_RANK, tag=MPIPool.TAG_WORK)
+
                 except Exception:
                     LOGGER.exception("Failure in replica=" + str(self.rank))
                     err_msg = traceback.format_exc()
                     MPI.COMM_WORLD.send(obj=err_msg, dest=MPIPool.PRIMARY_RANK, tag=MPI.ERR_TAG)
+
         except Exception:
             LOGGER.exception("Uncaught Exception.  Aborting")
             MPI.COMM_WORLD.Abort()
@@ -190,17 +200,60 @@ class MPIPool(BasePool):
         """
         If parent process, then launches child replicas.
         If child replicas, then does work.
-        :return:
         """
         try:
+            # If user wants to terminate the MPI pool, do not launch or accept any more work.
+            # The MPI environment will only terminate when the python processes exit.
+            if self.is_terminated:
+                return
+
             if self.rank == MPIPool.PRIMARY_RANK:  # parent
                 self.launch_wait_replicas(work_args_iter, callback=callback)
             else:  # replica
                 self.replica_work(func)
+
+
         except Exception:
             LOGGER.exception("Uncaught Exception.  Aborting")
             MPI.COMM_WORLD.Abort()
 
 
+    def done_work(self):
+        """
+        Tell children that they are done working.  But they should wait for more work, possibly another type of job
+        (ie execute another function).  Children should not terminate yet.
+        :return:
+        """
+        try:
+            if self.rank == MPIPool.PRIMARY_RANK:  # parent
+                LOGGER.debug("Tell replicas done work...")
+                for replica_rank in range(1, MPI.COMM_WORLD.Get_size()):
+                    MPI.COMM_WORLD.isend(obj=None, dest=replica_rank, tag=MPIPool.TAG_WORK_DONE)
+                LOGGER.debug("Told replicas they're done work.  Not waiting for them.")
+
+        except Exception:
+            LOGGER.exception("Uncaught Exception.  Aborting")
+            MPI.COMM_WORLD.Abort()
 
 
+    def terminate(self):
+        """
+        Shutdown all processes whether they are done or not.
+        Parent tells children to terminate without waiting for them to respond.
+        :return:
+        """
+        try:
+            self.is_terminated = True
+
+            if self.rank == MPIPool.PRIMARY_RANK:  # parent
+                # In case the children are already waiting for work, they won't get the terminate call.
+                # The parent must message to the children that they should terminate.
+                LOGGER.debug("Terminating replicas...")
+                for replica_rank in range(1, MPI.COMM_WORLD.Get_size()):
+                    MPI.COMM_WORLD.isend(obj=None, dest=replica_rank, tag=MPIPool.TAG_TERMINATE)
+                LOGGER.debug("Told replicas to terminate.  Not waiting for them.")
+
+
+        except Exception:
+            LOGGER.exception("Uncaught Exception.  Aborting")
+            MPI.COMM_WORLD.Abort()

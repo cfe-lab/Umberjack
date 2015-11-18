@@ -201,6 +201,32 @@ def create_msa_slice_from_sam(sam_filename, ref, out_fasta_filename, mapping_cut
     return total_written
 
 
+def has_header(sam_filename):
+    """
+    :param str sam_filename: filepath to sam
+    :return bool:  whether the samfile has a header
+    """
+    with open(sam_filename, 'rU') as fh_in:
+        header = fh_in.next()  # header should be the first line if present
+        if header.startswith(SamHeader.TAG_HEADER_START):
+            return True
+    return False
+
+
+def has_samfields(sam_filename):
+    """
+    :param str sam_filename: filepath to sam
+    :return bool:  whether the samfile has at least 11 tab delimited sam fields. Ignores blank lines
+    """
+    with open(sam_filename, 'rU') as fh_in:
+        for line in fh_in:
+            if line.startswith(SamHeader.TAG_HEADER_START):
+                continue
+            if len(line.rstrip().lstrip()) > 0 and len(line.split(sam_constants.SAM_FIELD_DELIM)) >= len(sam_constants.SAM_FIELDS):
+                return True
+
+    return False
+
 
 def is_query_sort(sam_filename):
     """

@@ -1,5 +1,5 @@
-import unittest
 import os
+import unittest
 import subprocess
 import shutil
 import csv
@@ -104,8 +104,8 @@ class TestUmberjack(unittest.TestCase):
         Tests that umberjack parses the config file properly.
         """
         OUT_DIR =   SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + "Window" + str(WINDOW_SIZE) + ".fromconf"
-        SAM_FILENAME = SIM_DATA_DIR + os.sep +  "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.consensus.bwa.sort.query.sam"
-        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + 'actual_dnds_by_site.csv'
+        SAM_FILENAME = SIM_DATA_DIR + os.sep +  "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.bwa.sort.query.sam"
+        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + os.path.splitext(os.path.basename(SAM_FILENAME))[0] + ".dnds.csv"
         CONFIG_FILE = OUT_DIR + os.sep + 'umberjack_unittest.conf'
         if not os.path.exists(OUT_DIR):
             os.makedirs(OUT_DIR)
@@ -122,7 +122,6 @@ class TestUmberjack(unittest.TestCase):
             fh_config.write("--window_depth_cutoff  {}\n".format(MIN_WINDOW_DEPTH_COV))
             fh_config.write("--threads_per_window  {}\n".format(THREADS_PER_WINDOW))
             fh_config.write("--concurrent_windows  {}\n".format(WINDOW_PROCS))
-            fh_config.write("--output_csv_filename  {}\n".format(ACTUAL_DNDS_FILENAME))
             #fh_config.write("--hyphy_exe  {}\n".format(HYPHY_EXE))
             #fh_config.write("--hyphy_basedir  {}\n".format(HYPHY_BASEDIR))
             fh_config.write("--fastree_exe  {}\n".format(FASTTREE_EXE))
@@ -156,8 +155,8 @@ class TestUmberjack(unittest.TestCase):
         """
 
         OUT_DIR =   SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + "Window" + str(WINDOW_SIZE) + ".fromcmd"
-        SAM_FILENAME = SIM_DATA_DIR + os.sep +  "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.consensus.bwa.sort.query.sam"
-        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + 'actual_dnds_by_site.csv'
+        SAM_FILENAME = SIM_DATA_DIR + os.sep +  "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.bwa.sort.query.sam"
+        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + os.path.splitext(os.path.basename(SAM_FILENAME))[0] + ".dnds.csv"
         cmd = ["python", UMBERJACK_PY,
                "--sam_filename", SAM_FILENAME,
                "--ref", REF,
@@ -171,7 +170,6 @@ class TestUmberjack(unittest.TestCase):
                "--window_depth_cutoff", str(MIN_WINDOW_DEPTH_COV),
                "--threads_per_window", str(THREADS_PER_WINDOW),
                "--concurrent_windows", str(WINDOW_PROCS),
-               "--output_csv_filename", ACTUAL_DNDS_FILENAME,
                "--hyphy_exe", HYPHY_EXE,
                "--hyphy_basedir", HYPHY_BASEDIR,
                "--fastree_exe", FASTTREE_EXE,
@@ -198,16 +196,17 @@ class TestUmberjack(unittest.TestCase):
         self._is_good_concordance(concord_csv=concord_csv)
 
 
-    def test_eval_windows_async(self):
+    def test_eval_windows_async_sam(self):
         # ART generated reads aligned to population consensus
-        SAM_FILENAME = SIM_DATA_DIR + os.sep +  "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.consensus.bwa.sort.query.sam"
-        OUT_DIR =  SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + REF + os.sep + "window{}.breadth{}.depth{}".format(WINDOW_SIZE, MIN_WINDOW_BREADTH_COV_FRACTION, MIN_WINDOW_DEPTH_COV)
-        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + 'actual_dnds_by_site.csv'
+        SAM_FILENAME = SIM_DATA_DIR + os.sep +  "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.bwa.sort.query.sam"
+        OUT_DIR =  (SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX  + os.sep +
+                    "window{}.breadth{}.depth{}".format(WINDOW_SIZE, MIN_WINDOW_BREADTH_COV_FRACTION, MIN_WINDOW_DEPTH_COV))
+        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + os.path.splitext(os.path.basename(SAM_FILENAME))[0] + ".dnds.csv"
         START_NUCPOS = 1
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
 
         # i.e.  it's up to you to open up ./simulations/R/umberjack_unit_test.html and inspect the graphs/contents.
-        import UmberjackWork
+
         import pool.OneNodePool
         kwargs = dict(ref=REF,
                                          sam_filename=SAM_FILENAME,
@@ -249,13 +248,11 @@ class TestUmberjack(unittest.TestCase):
         self._is_good_concordance(concord_csv=concord_csv)
 
 
-
-
     def test_eval_windows_mpi(self):
         # ART generated reads aligned to population consensus
-        SAM_FILENAME = SIM_DATA_DIR + os.sep +  "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.consensus.bwa.sort.query.sam"
-        OUT_DIR =  SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + REF + os.sep + "window{}.breadth{}.depth{}.mpi".format(WINDOW_SIZE, MIN_WINDOW_BREADTH_COV_FRACTION, MIN_WINDOW_DEPTH_COV)
-        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + 'actual_dnds_by_site.csv'
+        SAM_FILENAME = SIM_DATA_DIR + os.sep +  "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.bwa.sort.query.sam"
+        OUT_DIR =  SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX  + os.sep + "window{}.breadth{}.depth{}.mpi".format(WINDOW_SIZE, MIN_WINDOW_BREADTH_COV_FRACTION, MIN_WINDOW_DEPTH_COV)
+        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + os.path.splitext(os.path.basename(SAM_FILENAME))[0] + ".dnds.csv"
         START_NUCPOS = 1
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
 
@@ -306,22 +303,19 @@ class TestUmberjack(unittest.TestCase):
         self._is_good_concordance(concord_csv=concord_csv)
 
 
-    def test_eval_windows_msa_fasta(self):
+    def test_msa_fasta(self):
 
-        OUT_DIR =  SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + REF + os.sep + "window{}.breadth{}.depth{}.msa_fasta".format(WINDOW_SIZE, MIN_WINDOW_BREADTH_COV_FRACTION, MIN_WINDOW_DEPTH_COV)
-        MSA_FASTA_LIST = OUT_DIR + os.sep + "msa_fasta_list.txt"
-        OUT_DIR_LIST = OUT_DIR + os.sep + "msa_fasta_outdir_list.txt"
-        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + "subs" + os.sep + "consensus" + os.sep + "umberjack_unittest.dnds.csv"
+        OUT_DIR =  (SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX  + os.sep +
+                    "window{}.breadth{}.depth{}.msa_fasta".format(WINDOW_SIZE, MIN_WINDOW_BREADTH_COV_FRACTION, MIN_WINDOW_DEPTH_COV))
+        # This is the pseudo msa fasta made from merged reads aligned against consensus using bwa
+        MSA_FASTA = SIM_DATA_DIR + os.sep + "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.bwa.msa.fasta"
+
+        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + os.path.splitext(os.path.basename(MSA_FASTA))[0] + ".dnds.csv"
         START_NUCPOS = 1
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
 
         if not os.path.exists(OUT_DIR):
             os.makedirs(OUT_DIR)
-
-        with open(MSA_FASTA_LIST, 'w') as fh_out:
-            fh_out.write(SIM_DATA_DIR + os.sep +  "umberjack_unittest.fasta")
-        with open(OUT_DIR_LIST, 'w') as fh_out:
-            fh_out.write(OUT_DIR + os.sep + "consensus")
 
         # Can't call umberjack.eval_windows_mpi() directly since we need to invoke it with mpirun
         subprocess.check_call(["mpirun",
@@ -340,11 +334,10 @@ class TestUmberjack(unittest.TestCase):
                                "--start_nucpos", str(START_NUCPOS),
                                "--end_nucpos", str(END_NUCPOS),
                                "--threads_per_window", str(THREADS_PER_WINDOW),
-                               "--output_csv_filename",  ACTUAL_DNDS_FILENAME,
                                "--mode",  "DNDS",
                                "--mpi",
-                               "--msa_fasta_list",  MSA_FASTA_LIST,
-                               "--out_dir_list",  OUT_DIR_LIST,
+                               "--msa_fasta",  MSA_FASTA,
+                               "--out_dir",  OUT_DIR,
                                "--debug"])
 
 
@@ -368,42 +361,6 @@ class TestUmberjack(unittest.TestCase):
         self._is_good_concordance(concord_csv=concord_csv)
 
 
-    # TODO:  check the output
-    def test_count_subs_multi(self):
-        """
-        Tests that umberjack runs properly from commandline.  Also tests no debug option.
-        """
-        OUT_DIR =   SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + "Window" + str(WINDOW_SIZE) + ".checksubsmulti"
-        SAM_FILENAME = SIM_DATA_DIR + os.sep +  "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.consensus.bwa.sort.query.sam"
-        ERR_FREE_SAM_FILENAME = SIM_DATA_DIR + os.sep +  "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.errFree.consensus.bwa.sort.query.sam"
-
-        SAMFILE_LIST = SAM_FILENAME.replace(".sam", ".samlist.txt")
-        with open(SAMFILE_LIST, "w") as fh_list:
-            fh_list.write(SAM_FILENAME + "\n")
-            fh_list.write(ERR_FREE_SAM_FILENAME + "\n")
-        START_NUCPOS = 0
-        END_NUCPOS = 0
-
-        cmd = ["python", UMBERJACK_PY,
-               "--sam_filename_list", SAMFILE_LIST,
-               "--out_dir", OUT_DIR,
-               "--map_qual_cutoff", str(MAPQ_CUTOFF),
-               "--read_qual_cutoff", str(READ_QUAL_CUTOFF),
-               "--max_prop_n", str(MAX_PROP_N),
-               "--window_size", str(WINDOW_SIZE),
-               "--window_slide", str(WINDOW_SLIDE),
-               "--window_breadth_cutoff", str(MIN_WINDOW_BREADTH_COV_FRACTION),
-               "--window_depth_cutoff", str(MIN_WINDOW_DEPTH_COV),
-               "--threads_per_window", str(THREADS_PER_WINDOW),
-               "--concurrent_windows", str(WINDOW_PROCS),
-               "--hyphy_exe", HYPHY_EXE,
-               "--hyphy_basedir", HYPHY_BASEDIR,
-               "--fastree_exe", FASTTREE_EXE,
-               "--mode", UmberjackWork.MODE_COUNT_SUBS]
-        subprocess.check_call(cmd, env=os.environ)
-
-
-
     def test_count_subs(self):
         """
         Tests that umberjack runs properly from commandline.  Also tests no debug option.
@@ -411,7 +368,7 @@ class TestUmberjack(unittest.TestCase):
         """
 
         OUT_DIR =   SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + "Window" + str(WINDOW_SIZE) + ".checksubs"
-        SAM_FILENAME = SIM_DATA_DIR + os.sep +  "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.consensus.bwa.sort.query.sam"
+        SAM_FILENAME = SIM_DATA_DIR + os.sep +  "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.bwa.sort.query.sam"
         OUT_CSV_FILENAME = OUT_DIR + os.sep + 'site_branch_sub.csv'
         cmd = ["python", UMBERJACK_PY,
                "--sam_filename", SAM_FILENAME,
@@ -426,7 +383,6 @@ class TestUmberjack(unittest.TestCase):
                "--window_depth_cutoff", str(MIN_WINDOW_DEPTH_COV),
                "--threads_per_window", str(THREADS_PER_WINDOW),
                "--concurrent_windows", str(WINDOW_PROCS),
-               "--output_csv_filename", OUT_CSV_FILENAME,
                "--hyphy_exe", HYPHY_EXE,
                "--hyphy_basedir", HYPHY_BASEDIR,
                "--fastree_exe", FASTTREE_EXE,
