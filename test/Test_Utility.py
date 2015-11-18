@@ -32,6 +32,44 @@ class MyTestCase(unittest.TestCase):
 
         os.remove(tmp_msa_fasta.name)
 
+    def test_letter_freq(self):
+        # The last codon is incomplete
+        tmp_msa_fasta = tempfile.NamedTemporaryFile(delete=False)
+        #ACT AC- NNN NCG T-T ---
+        #XXX GGT AC- TCT --A CC-
+        #XN- GG- ACN --N --A TN-
+        #XXX GGT AC- TCT --A CC-
+        #XXX GG- AC- TCT --A CCC
+        tmp_msa_fasta.write(">test1\n")
+        tmp_msa_fasta.write("ACTAC-NNNNCGT-T---\n")
+        tmp_msa_fasta.write(">test2\n")
+        tmp_msa_fasta.write("---GGTAC-TCT--AC--\n")
+        tmp_msa_fasta.write(">test3\n")
+        tmp_msa_fasta.write("-N-GG-ACN--N--ATN-\n")
+        tmp_msa_fasta.write(">test4\n")
+        tmp_msa_fasta.write("---GGTAC-TCT--ACC-\n")
+        tmp_msa_fasta.write(">test4\n")
+        tmp_msa_fasta.write("---GG-AC-TCT--ACCC\n")
+        tmp_msa_fasta.flush()
+        os.fsync(tmp_msa_fasta.file.fileno())
+        tmp_msa_fasta.close()
+
+        aln = Utility.Consensus()
+        aln.parse(msa_fasta_filename=tmp_msa_fasta.name)
+
+        expected_freq = {"ACT":1, "XXX":3, "XN-":1}
+        actual_freq = aln.get_codon_freq(0)
+        self.assertDictEqual(expected_freq, actual_freq, "Expected freq = " + str(expected_freq) + " but got " + str(actual_freq))
+
+        expected_freq = {"AC-":1, "GGT":2, "GG-":2}
+        actual_freq = aln.get_codon_freq(1)
+        self.assertDictEqual(expected_freq, actual_freq, "Expected freq = " + str(expected_freq) + " but got " + str(actual_freq))
+
+        expected_freq = {"XXX":1, "CXX":1, "CCX": 1, "CCC": 1, "TNX":1}
+        actual_freq = aln.get_codon_freq(5)
+        self.assertDictEqual(expected_freq, actual_freq, "Expected freq = " + str(expected_freq) + " but got " + str(actual_freq))
+
+
 
     def test_get_depth_incomplete_codon(self):
         # The last codon is incomplete
@@ -282,12 +320,76 @@ class MyTestCase(unittest.TestCase):
         os.remove(tmpfile.name)
 
 
+    def test_codon_shannon_entropy(self):
+        tmpfile = tempfile.NamedTemporaryFile(delete=False)
+        # --- GTN ACT
+        # -NT GCG ---
+        # NNN GTG ACG
+        tmpfile.write(">seq1\n")
+        tmpfile.write("---GTNACT\n")
+        tmpfile.write(">seq2\n")
+        tmpfile.write("-NTGCG---\n")
+        tmpfile.write(">seq3\n")
+        tmpfile.write("NNNGTGACG\n")
+        tmpfile.flush()
+        os.fsync(tmpfile.file.fileno())
+        tmpfile.close()
+
+        cons = Utility.Consensus()
+        cons.parse(tmpfile.name)
+
+
+        expected = [None,
+                    -2 * (1.0/2) * math.log(1.0/2, 2),
+                    -2 * (1.0/2) * math.log(1.0/2, 2)]
+
+        for pos in range (0, len(expected)/3):
+            actual = cons.get_codon_shannon_entropy(pos, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
+            self.assertEqual(expected[pos], actual, "Pos={} expected={} actual={}".format(pos, expected[pos], actual))
+
+
+        expected = [
+            # 1st codon
+            # Total symbols = 3.  Not all symbols have weight of 1.0.
+            # Each possible codon for an ambiguous codon is worth 1/(total possible codons) of the ambiguous codon.
+            # 2 symbol = ???
+            #       Total permutations per symbol = 64
+            #           Total permutations per symbol that match ??T = 16
+            #           Total permutations per symbol that match ??[ACG] = 48
+            #       Each permutation of ??? worth 1/64
+            # 1 symbol = ??T
+            #       Total permutations per symbol = 16
+            #       Each permutation of ??T worth 1/16
+            - 16 * ((1.0/3)*(1.0/16) + (2.0/3)*(1.0/64)) * math.log((1.0/3)*(1.0/16) + (2.0/3)*(1.0/64), 2) - # ??T
+            48 * (2.0/3)*(1.0/64) * math.log((2.0/3)*(1.0/64), 2), # ??[ACG]
+
+            # 2nd codon
+            -((1.0 + 0.25)/3) * math.log((1.0 + 0.25)/3, 2) -  # GTG + 1/4 GTG (resolved from GTN)
+            (0.25/3) * math.log(0.25/3, 2) - # 1/4 GTA (resolved from GTN)
+            (0.25/3) * math.log(0.25/3, 2) - # 1/4 GTC (resolved from GTN)
+            (0.25/3) * math.log(0.25/3, 2) - # 1/4 GTG (resolved from GTN)
+            (1.0/3) * math.log(1.0/3, 2),   # GCG
+
+            # 3rd codon
+            -((1.0/3) + (1.0/3)*(1.0/64)) * math.log((1.0/3) + (1.0/3)*(1.0/64), 2) -   # ACT
+            ((1.0/3) + (1.0/3)*(1.0/64)) * math.log((1.0/3) + (1.0/3)*(1.0/64), 2) -   # ACG
+            62 * (1.0/3)*(1.0/64) * math.log((1.0/3)*(1.0/64), 2) # not ACT, not ACG
+        ]
+
+        for pos in range (0, len(expected)/3):
+            actual = cons.get_codon_shannon_entropy(pos, is_count_ambig=True, is_count_gaps=True, is_count_pad=True)
+            self.assertAlmostEqual(expected[pos], actual, places=7, msg="Pos={} expected={} actual={}".format(pos, expected[pos], actual))
+
+        os.remove(tmpfile.name)
+
+
+
     def test_calc_metric_entropy(self):
 
         symbol_to_count = dict(A=1, G=2, C=0, T=0)
         actual = Utility.calc_metric_entropy(symbol_to_count)
         expected = -(1.0/3 * math.log(1.0/3, 2) + 2.0/3 * math.log(2.0/3, 2))/math.log(2, 2)
-        self.assertEqual(expected, actual, "expected={} actual={}".format( expected, actual))
+        self.assertEqual(expected, actual, msg="expected={} actual={}".format( expected, actual))
 
 
         symbol_to_count = dict(AAA=1, GGC=0, CTX=2, GTT=1)

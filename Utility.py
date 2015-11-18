@@ -483,17 +483,12 @@ class Consensus:
             for i in range(new_codon_width):
                 self.codon_seq.append(defaultdict(int))
 
-
-        # # Find the position of the first non-gap char.  Anything before this is a left-pad gap.
-        # truebase_start = re.search(r"[^X\-]", seq).start()
-        # # Find the position of the last non-gap char.  Anything after this is a right-pad gap.
-        # truebase_end = re.search(r"[^X\-][X\-]*$", seq).start()
-
         seq = seq.upper()
         truebase_end = len(seq) - 1
-        codon =  Consensus.PAD_CHAR *  (NUC_PER_CODON - (len(seq) % NUC_PER_CODON))
+        codon =  Consensus.PAD_CHAR *  ((NUC_PER_CODON - (len(seq) % NUC_PER_CODON)) % NUC_PER_CODON)
+        #codon =  Consensus.PAD_CHAR *  (NUC_PER_CODON - (len(seq) % NUC_PER_CODON))
         # go backwards to count right pads.  Avoid regex because slow.
-        for nucpos_0based in range(len(seq)-1, 0, -1):
+        for nucpos_0based in xrange(len(seq)-1, 0, -1):
             if seq[nucpos_0based] != Consensus.PAD_CHAR and seq[nucpos_0based] != Consensus.GAP_CHAR:
                 truebase_end = nucpos_0based
                 break
@@ -768,11 +763,42 @@ class Consensus:
         return total_entropy
 
 
+    @staticmethod
+    def resolve_codon(codon):
+        """
+        Resolves ambiguous codons
+        TODO:  allow mixtures
+        :return list:  list of string codons that could result from ambiguous bases in codon
+        """
+        if len(codon) != NUC_PER_CODON:
+            raise ValueError("There should only be 3 bases per codon.  Instead got " + str(codon))
+
+        poss_bases = []  # 3 elements, each element contains list of possible bases at that codon position
+        for base in codon:
+            if base not in Consensus.TRUE_BASES and base not in Consensus.NON_BASES:
+                raise ValueError("Must be true base or N, -, X.  Does not handle mixtures")
+            elif base in Consensus.TRUE_BASES:
+                poss_bases.append([base])
+            elif base in Consensus.NON_BASES:
+                poss_bases.append(Consensus.TRUE_BASES)
+
+        resolved_codons = []
+        for pos0_base in poss_bases[0]:
+            for pos1_base in poss_bases[1]:
+                for pos2_base in poss_bases[2]:
+                    resolved_codons.extend([pos0_base + pos1_base + pos2_base])
+
+        return resolved_codons
+
+
+
     def get_codon_shannon_entropy(self, codon_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False):
         """
         Gets the Shannon Entropy (measure of bits required to represent each symbol) at the given codon site.
+        When ambiguous, pad or gap characters are used, then each character is converted to A, C, G, T.
+        The resolved codons are counted as 1/(total of original ambiguous codon).
         :param int codon_pos_0based: 0-based codon position in the multiple sequence alignment
-        :param bool is_count_ambig:  whether to codons with N's
+        :param bool is_count_ambig:  whether to include codons with N's
         :param bool is_count_gaps:  whether to include codons with "-"  (inner gaps)
         :param bool is_count_pad:  whether to include codons with "X" (outer gaps or left/right padding)
         :return: Shannon Entropy.  Log2 based.
@@ -780,24 +806,31 @@ class Consensus:
         """
 
         codon_to_count = self.get_codon_freq(codon_pos_0based)
-        unambig_codon_count = {}
+        unambig_codon_count = defaultdict(int)
+        total_symbols = 0.0  # each codon is a symbol.  I.e. 1 symbol is comprised of 3 nucleotide characters.
         for codon, count in codon_to_count.iteritems():
             if ((not is_count_ambig and codon.find("N")) or
                 (not is_count_gaps and codon.find("-")) or
                     (not is_count_pad and codon.find("X"))):
                 continue
 
-            unambig_codon_count[codon] = count
+            if codon.find("N") or codon.find("-") or codon.find("X"):
+                unambig_codons = Consensus.resolve_codon(codon)
+                for unambig_codon in unambig_codons:
+                    unambig_codon_count[unambig_codon] += count * (1.0/len(unambig_codons))
+            else:
+                unambig_codon_count[codon] += count
 
-        total_seqs = len(unambig_codon_count)
-        if not total_seqs:
+            total_symbols += count
+
+        if not total_symbols:
             total_entropy = None
         else:
             total_entropy = 0.0
             for codon, count  in unambig_codon_count.iteritems():
 
                 if count:
-                    p_symbol = count / total_seqs  # probability of this symbol (aka codon) occuring at this position
+                    p_symbol = count / total_symbols  # probability of this symbol (aka codon) occuring at this position
                     log_p_symbol = math.log(p_symbol, 2)  # Log2  probability of symbol
                     total_entropy -= (p_symbol * log_p_symbol)
 
