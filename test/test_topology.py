@@ -450,17 +450,11 @@ class TestTopology(unittest.TestCase):
     def resample_tree_from_fasta(treefile, fastafile, out_treefile):
         """
         Fasta contains resampled tips, renamed with format [tipname]_read[num].
-
         Resample the tips in the tree according to the resampled seq in the fasta.
+        Write out to out_treefile
         :param str treefile:  filepath to newick population tree
         :param str fastafile:  filepath to population sequences in fasta format
-        :param float sample_fraction:  fraction of population to sample
-        :param bool replace:  whether to sample with replacement
-        :param int seed:  the random seed to randomly select individuals.
-        :param float miss_fraction:  fraction of sequence to turn into gaps or N's.
-        :param bool removedup:  whether to remove duplicated sequences from the output tree.
-            NB:  Duplicated sequences will always be output in output fasta.
-        :return [str]:  list of sequence names selected. Renames sequences to  "<name>_read<copy">
+        :param str out_treefile:  filepath to output newick tree
         """
         # NB:  ART read simulator generates read with names like otu1-read2.  Use underscore instead of hyphen to make HyPhy friendly.
         tree = Phylo.read(treefile, "newick")
