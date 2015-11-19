@@ -35,17 +35,17 @@ class MyTestCase(unittest.TestCase):
     def test_letter_freq(self):
         # The last codon is incomplete
         tmp_msa_fasta = tempfile.NamedTemporaryFile(delete=False)
-        #ACT AC- NNN NCG T-T ---
+        #ACT AC- NNN NCT T-T ---
         #XXX GGT AC- TCT --A CC-
-        #XN- GG- ACN --N --A TN-
+        #XN- GG- ACN TN- --A TN-
         #XXX GGT AC- TCT --A CC-
         #XXX GG- AC- TCT --A CCC
         tmp_msa_fasta.write(">test1\n")
-        tmp_msa_fasta.write("ACTAC-NNNNCGT-T---\n")
+        tmp_msa_fasta.write("ACTAC-NNNNCTT-T---\n")
         tmp_msa_fasta.write(">test2\n")
         tmp_msa_fasta.write("---GGTAC-TCT--AC--\n")
         tmp_msa_fasta.write(">test3\n")
-        tmp_msa_fasta.write("-N-GG-ACN--N--ATN-\n")
+        tmp_msa_fasta.write("-N-GG-ACNTN---ATN-\n")
         tmp_msa_fasta.write(">test4\n")
         tmp_msa_fasta.write("---GGTAC-TCT--ACC-\n")
         tmp_msa_fasta.write(">test4\n")
@@ -57,17 +57,33 @@ class MyTestCase(unittest.TestCase):
         aln = Utility.Consensus()
         aln.parse(msa_fasta_filename=tmp_msa_fasta.name)
 
+        # Check all codons, including ambiguous codons
         expected_freq = {"ACT":1, "XXX":3, "XN-":1}
-        actual_freq = aln.get_codon_freq(0)
+        actual_freq = aln.get_codon_freq(0, is_count_pad=True, is_count_gaps=True, is_count_ambig=True, is_convert=False)
         self.assertDictEqual(expected_freq, actual_freq, "Expected freq = " + str(expected_freq) + " but got " + str(actual_freq))
 
         expected_freq = {"AC-":1, "GGT":2, "GG-":2}
-        actual_freq = aln.get_codon_freq(1)
+        actual_freq = aln.get_codon_freq(1, is_count_pad=True, is_count_gaps=True, is_count_ambig=True, is_convert=False)
         self.assertDictEqual(expected_freq, actual_freq, "Expected freq = " + str(expected_freq) + " but got " + str(actual_freq))
 
         expected_freq = {"XXX":1, "CXX":1, "CCX": 1, "CCC": 1, "TNX":1}
-        actual_freq = aln.get_codon_freq(5)
+        actual_freq = aln.get_codon_freq(5, is_count_pad=True, is_count_gaps=True, is_count_ambig=True, is_convert=False)
         self.assertDictEqual(expected_freq, actual_freq, "Expected freq = " + str(expected_freq) + " but got " + str(actual_freq))
+
+        # No ambiguous codons
+        expected_freq = {"ACT":1}
+        actual_freq = aln.get_codon_freq(0, is_count_pad=False, is_count_gaps=False, is_count_ambig=False, is_convert=False)
+        self.assertDictEqual(expected_freq, actual_freq, "Expected freq = " + str(expected_freq) + " but got " + str(actual_freq))
+
+        expected_freq = {"CCC": 1}
+        actual_freq = aln.get_codon_freq(5, is_count_pad=False, is_count_gaps=False, is_count_ambig=False, is_convert=False)
+        self.assertDictEqual(expected_freq, actual_freq, "Expected freq = " + str(expected_freq) + " but got " + str(actual_freq))
+
+        # Convert ambig codons with Ns, exclude codons with pads
+        expected_freq = {"TCT":3.25, "ACT":0.25, "CCT":0.25, "GCT":0.25}
+        actual_freq = aln.get_codon_freq(3, is_count_pad=False, is_count_gaps=False, is_count_ambig=True, is_convert=True)
+        self.assertDictEqual(expected_freq, actual_freq, "Expected freq = " + str(expected_freq) + " but got " + str(actual_freq))
+
 
 
 
@@ -381,6 +397,42 @@ class MyTestCase(unittest.TestCase):
             self.assertAlmostEqual(expected[pos], actual, places=7, msg="Pos={} expected={} actual={}".format(pos, expected[pos], actual))
 
         os.remove(tmpfile.name)
+
+
+    def test_codon_conserve(self):
+        tmpfile = tempfile.NamedTemporaryFile(delete=False)
+        # --- GTN ACT
+        # -NT GCG ---
+        # NNN GTG ACG
+        tmpfile.write(">seq1\n")
+        tmpfile.write("---GTNACT\n")
+        tmpfile.write(">seq2\n")
+        tmpfile.write("-NTGCG---\n")
+        tmpfile.write(">seq3\n")
+        tmpfile.write("NNNGTGACG\n")
+        tmpfile.flush()
+        os.fsync(tmpfile.file.fileno())
+        tmpfile.close()
+
+        cons = Utility.Consensus()
+        cons.parse(tmpfile.name)
+
+        # No ambiguous codons
+        expected = [None,
+                    0.5,
+                    0.5]
+        for pos in range (0, len(expected)/3):
+            actual = cons.get_codon_conserve(pos, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
+            self.assertEqual(expected[pos], actual, "Pos={} expected={} actual={}".format(pos, expected[pos], actual))
+
+
+        # Exclude ambiguous codons with N's, convert gaps to bases
+        expected = [1.0/64,
+                    0.5,
+                    0.5]
+        for pos in range (0, len(expected)/3):
+            actual = cons.get_codon_conserve(pos, is_count_ambig=False, is_count_gaps=True, is_count_pad=True)
+            self.assertEqual(expected[pos], actual, "Pos={} expected={} actual={}".format(pos, expected[pos], actual))
 
 
 

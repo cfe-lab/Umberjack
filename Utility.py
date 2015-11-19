@@ -664,28 +664,26 @@ class Consensus:
         else:
             return None
 
+
     def get_codon_conserve(self, codon_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False):
         """
         :param int codon_pos_0based: 0-based position in the multiple sequence alignment
-        :param bool is_count_ambig:  whether to include N as 0.25 of A, C, G, T
-        :param bool is_count_gaps:  whether to include inner "-" as 0.25 of A, C, G, T
-        :param bool is_count_pad:  whether to include outer - as 0.25 of A, C, G, T
+        :param bool is_count_ambig:  whether to include N as 0.25 of A, C, G, T, or ignore ambiguous codon altogheter
+        :param bool is_count_gaps:  whether to include inner "-" as 0.25 of A, C, G, T, or ignore gap codon altogheter
+        :param bool is_count_pad:  whether to include outer - as 0.25 of A, C, G, T, or to ignore pad codon altogether
         :return: the fraction of conserved sequences at every position in the multiple sequence alignment or None if there are no valid characters
         :rtype float
         """
         conserve_count = 0.0
         total_count = 0.0
 
-        codon_to_count = self.get_codon_freq(codon_pos_0based)
-        for codon, count in codon_to_count.iteritems():
-            if ((not is_count_ambig and codon.find("N")) or
-                (not is_count_gaps and codon.find("-")) or
-                    (not is_count_pad and codon.find("X"))):
-                continue
+        unambig_codon_to_count = self.get_codon_freq(codon_pos_0based, is_count_ambig=is_count_ambig, is_count_gaps=is_count_gaps, is_count_pad=is_count_pad,
+                                                  is_convert=True)
 
-            total_count += 1
+        for codon, count in unambig_codon_to_count.iteritems():
             if conserve_count < count:
                 conserve_count = count
+            total_count += count
 
         if total_count:
             return conserve_count/total_count
@@ -797,6 +795,7 @@ class Consensus:
         Gets the Shannon Entropy (measure of bits required to represent each symbol) at the given codon site.
         When ambiguous, pad or gap characters are used, then each character is converted to A, C, G, T.
         The resolved codons are counted as 1/(total of original ambiguous codon).
+        EG)  ACN resolved to 0.25 ACA, 0.25 ACC, 0.25 ACG, 0.25 ACT
         :param int codon_pos_0based: 0-based codon position in the multiple sequence alignment
         :param bool is_count_ambig:  whether to include codons with N's
         :param bool is_count_gaps:  whether to include codons with "-"  (inner gaps)
@@ -804,30 +803,18 @@ class Consensus:
         :return: Shannon Entropy.  Log2 based.
         :rtype float
         """
+        unambig_codon_to_count = self.get_codon_freq(codon_pos_0based, is_count_ambig=is_count_ambig,
+                                                     is_count_gaps=is_count_gaps,
+                                                     is_count_pad=is_count_pad,
+                                                     is_convert=True)
 
-        codon_to_count = self.get_codon_freq(codon_pos_0based)
-        unambig_codon_count = defaultdict(int)
-        total_symbols = 0.0  # each codon is a symbol.  I.e. 1 symbol is comprised of 3 nucleotide characters.
-        for codon, count in codon_to_count.iteritems():
-            if ((not is_count_ambig and codon.find("N")) or
-                (not is_count_gaps and codon.find("-")) or
-                    (not is_count_pad and codon.find("X"))):
-                continue
-
-            if codon.find("N") or codon.find("-") or codon.find("X"):
-                unambig_codons = Consensus.resolve_codon(codon)
-                for unambig_codon in unambig_codons:
-                    unambig_codon_count[unambig_codon] += count * (1.0/len(unambig_codons))
-            else:
-                unambig_codon_count[codon] += count
-
-            total_symbols += count
+        total_symbols  = float(sum(unambig_codon_to_count.values()))
 
         if not total_symbols:
             total_entropy = None
         else:
             total_entropy = 0.0
-            for codon, count  in unambig_codon_count.iteritems():
+            for codon, count  in unambig_codon_to_count.iteritems():
 
                 if count:
                     p_symbol = count / total_symbols  # probability of this symbol (aka codon) occuring at this position
@@ -1029,16 +1016,39 @@ class Consensus:
         return aa_to_count
 
 
-    def get_codon_freq(self, codon_pos_0based):
+    def get_codon_freq(self, codon_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False, is_convert=False):
         """
-        Returns the depth of each AA at the codon position.
+        Returns the depth of each codon at the codon position.
         Mixtures are allowed as long as the resulting amino acid is unambiguous.
+
         NB:  N's are the only allowed mixture code right now.
 
         :param codon_pos_0based: 0-based codon position in the multiple sequence alignment.  Assumes sequences start on ORF.
+        :param bool is_count_ambig:  whether to include codons with ambiguous bases
+        :param bool is_count_gaps:  whether to include codons with gaps
+        :param bool is_count_pad:  whether to include codons with pads
+        :param bool is_convert:  if include codons with ambiguous bases, gaps, or pads, then whether to resolve the ambiguous codons
+            such that every position in the resolved codon has A, C, G, or T.
+            EG)  ACN  will be resolved to 0.25 ACA, 0.25 ACC, 0.25 ACG, 0.25 ACT
         :return float:  total codons at the codon position
         """
-        return self.codon_seq[codon_pos_0based]
+        unambig_codon_count = defaultdict(int)
+        codon_to_count = self.codon_seq[codon_pos_0based]
+
+        for codon, count in codon_to_count.iteritems():
+            if ((not is_count_ambig and codon.find("N") >=0) or
+                    (not is_count_gaps and codon.find("-") >= 0) or
+                        (not is_count_pad and codon.find("X") >= 0)):
+                continue
+
+            if is_convert and (codon.find("N") >= 0 or codon.find("-") >= 0 or codon.find("X") >= 0):
+                unambig_codons = Consensus.resolve_codon(codon)
+                for unambig_codon in unambig_codons:
+                    unambig_codon_count[unambig_codon] += count * (1.0/len(unambig_codons))
+            else:
+                unambig_codon_count[codon] += count
+
+        return unambig_codon_count
 
 
 
