@@ -28,12 +28,14 @@ LOGGER = logging.getLogger(__name__)
 MAX_SEED = math.pow(2, 32)-1  # internally asg_driver.py used numpy random generator which can only take up to 32bit seeds
 
 
-def make_tree(treefile_prefix, total_tips, seed):
+def make_tree(treefile_prefix, total_tips, seed, selection_rate, generations):
     """
     Invoke asg_driver to make tree
     :param str treefile_prefix:  filepath to treefile without the .nwk suffix
     :param int total_tips:  total tips in the tree
     :param int seed:  random seed
+    :param float selection_rate:  rate that dominant allele is selected  (assuming 2 allele model in ancestral selection graph.  [0, 1]
+    :param int generations:  total generations in which new individuals are introduced into the population.  Must be > 0
     :return str:  treefile name
     """
     treefile = treefile_prefix + ".nwk"
@@ -43,9 +45,12 @@ def make_tree(treefile_prefix, total_tips, seed):
     else:
         asg_driver_exe = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + os.sep + "asg_driver.py")
         asg_driver_cmd = ["python", asg_driver_exe,
-                      treefile_prefix,
-                      str(total_tips),
-                      str(seed)]
+                      "-f", treefile_prefix,
+                      "-n", str(total_tips),
+                      "-r", str(seed),
+                      "-s", str(selection_rate),
+                      "-g", str(generations)
+                      ]
 
         LOGGER.debug("About to execute " + " ".join(asg_driver_cmd))
         subprocess.check_call(asg_driver_cmd, env=os.environ)
@@ -110,7 +115,7 @@ def format_tree(format_treefile, treefile=None, tree=None):
     return t
 
 
-def make_format_trees(treefile_prefixes, total_tips, seed=None):
+def make_format_trees(treefile_prefixes, total_tips, selection_rate, generations, seed=None):
     """
     For each treefile, generate a separate tree.
     Format each tree so that it plays nice with INDELible.
@@ -133,7 +138,8 @@ def make_format_trees(treefile_prefixes, total_tips, seed=None):
     # As long as the tree_randomizer instance is initialized with the same seed, we will always get the same set of new random ints
     # and thus the same set of new trees.
     treeseed = tree_randomizer.randint(0, MAX_SEED)
-    unformat_treefile = make_tree(treefile_prefix=treefile_prefixes[0], total_tips=total_tips, seed=treeseed)
+    unformat_treefile = make_tree(treefile_prefix=treefile_prefixes[0], total_tips=total_tips, seed=treeseed,
+                                  selection_rate=selection_rate, generations=generations)
 
     # format newick files for INDELible compatibility
     format_treefile = unformat_treefile.replace(".nwk", ".rename.nwk")
@@ -166,11 +172,13 @@ if __name__ == "__main__":
                                    "Generates a new tree for each output file. "
                                    "For the unformatted trees, adds .nwk suffix.  For the formatted trees, adds .rename.nwk suffix")
     parser.add_argument("-t", help="Number of tips in each tree", type=int)
-    parser.add_argument("-s", help="Integer to seed randomization of tree topology and branch length. " +
+    parser.add_argument("-r", help="Integer to seed randomization of tree topology and branch length. " +
                                    "Each tree generated will be different from the previous, "
                                    "but the sequence of trees generated will be deterministic " +
                                    "between multiple processes running this script as long " +
                                    "as the seed used by each process is the same.", type=int, default=None)
+    parser.add_argument("-s", help="selection rate used in ancestral selection graph to create tree.  Must be in [0, 1]", type=float)
+    parser.add_argument("-g", help="generations used in ancestral selection graph to create tree.  Must be > 0", type=int)
 
 
     args = parser.parse_args()
@@ -180,7 +188,8 @@ if __name__ == "__main__":
 
     treefiles = args.f.split(",")
 
-    make_format_trees(treefile_prefixes=treefiles, total_tips=args.t, seed=args.s)
+    make_format_trees(treefile_prefixes=treefiles, total_tips=args.t, seed=args.r,
+                      selection_rate=args.s, generations=args.g)
 
 
 

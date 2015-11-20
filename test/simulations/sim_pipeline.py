@@ -97,11 +97,9 @@ if __name__ == "__main__":
     FILENAME_PREFIX = cfgparser.get(SECTION, "FILENAME_PREFIX")
     NUM_CODON_SITES = cfgparser.getint(SECTION, "NUM_CODON_SITES")
     NUM_INDIV = cfgparser.getint(SECTION, "NUM_INDIV")
-    if cfgparser.has_option(SECTION, "NUM_BREAKPOINTS"):
-        NUM_BREAKPOINTS = cfgparser.getint(SECTION, "NUM_BREAKPOINTS")
-    else:
-        NUM_BREAKPOINTS = 0
-
+    NUM_BREAKPOINTS = cfgparser.getint(SECTION, "NUM_BREAKPOINTS") if cfgparser.has_option(SECTION, "NUM_BREAKPOINTS") else 0
+    SELECTION_RATE = cfgparser.getfloat(SECTION, "SELECTION_RATE")
+    GENERATIONS = cfgparser.getint(SECTION, "GENERATIONS")
 
     OUT_TOPOLOGY_DIR = OUTDIR + os.sep + "topology"
     OUT_FULL_POPN_DIR =OUTDIR + os.sep + "fullpopn"
@@ -153,7 +151,9 @@ if __name__ == "__main__":
     relabel_phylogeny_cmd = ["python", relabel_phylogeny_exe,
                              "-f", ",".join(break_treefile_prefixes),
                              "-t", str(NUM_INDIV),
-                             "-s", str(SEED)]
+                             "-r", str(SEED),
+                             "-s", str(SELECTION_RATE),
+                             "-g", str(GENERATIONS)]
     call_cmd(cmd=relabel_phylogeny_cmd, prereqs=[], outputs=renamed_treefiles)
 
 
