@@ -10,8 +10,18 @@ library(plyr)
 
 source("plot_helper.R")
 
+
 # Read locations of input files from local umberjack_unit_test.config file
-CONFIG_FILENAME <- "./umberjack_unit_test.config"
+if (!exists("CONFIG_FILENAME")) {
+  CONFIG_FILENAME <- "umberjack_unit_test.config"  
+}
+
+if (!exists("REPORT_OUT_DIR")) {
+  REPORT_OUT_DIR <- getwd()
+}
+
+
+
 config<-read.table(CONFIG_FILENAME, sep="=", col.names=c("key","value"), as.is=c(1,2))
 
 actual_dnds_filename <- config[config$key=="ACTUAL_DNDS_FILENAME",]$val
@@ -321,9 +331,8 @@ table_corr <- print_table_corr()
 kable(table_corr, format="html", caption="Concordance Correlation")
 
 # Write out the concordance for validating in python unit tests
-write.table(table_corr, file="./umberjack_unit_test.concordance.csv", row.names=FALSE, sep=",")
+write.table(table_corr, file=paste0(REPORT_OUT_DIR, .Platform$file.sep, "umberjack_unit_test.concordance.csv"), row.names=FALSE, sep=",")
 
-kable(table_corr, format="html", caption="Concordance Correlation")
 
 #' **Find concordance at varying substitution rates**
 #' 

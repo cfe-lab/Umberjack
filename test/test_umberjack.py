@@ -73,6 +73,7 @@ class TestUmberjack(unittest.TestCase):
                     self.assertGreaterEqual(float(row["Concordance"]), MIN_CONCORD,
                                         "Expect concordance >=" + str(MIN_CONCORD) + " but got " +
                                         row["Concordance"] + " for metric " + row["Metric"])
+                print row["Metric"] + " concordance=" + row["Concordance"]
 
     def setUp(self):
         """
@@ -85,8 +86,8 @@ class TestUmberjack(unittest.TestCase):
                 full_dirpath = dirpar + os.sep + dirname
                 shutil.rmtree(full_dirpath)
                 print ("Removed " + full_dirpath)
-            for file in files:
-                full_filepath = dirpar + os.sep + file
+            for f in files:
+                full_filepath = dirpar + os.sep + f
                 if full_filepath != SIM_DATA_CONFIG_FILE:
                     os.remove(full_filepath)
                     print ("Removed " + full_filepath)
@@ -260,7 +261,7 @@ class TestUmberjack(unittest.TestCase):
         # Can't call umberjack.eval_windows_mpi() directly since we need to invoke it with mpirun
         subprocess.check_call(["mpirun",
                                "-H", "localhost",  # host
-                               "-n", "2",  # copies of program per node
+                               "-n", str(WINDOW_PROCS),  # copies of program per node
                                "-output-filename", OUT_DIR + os.sep + "Test_umberjack.log",  # stdout, stderr logfile
 
                                "python", UMBERJACK_PY,
@@ -275,7 +276,6 @@ class TestUmberjack(unittest.TestCase):
                                "--start_nucpos", str(START_NUCPOS),
                                "--end_nucpos", str(END_NUCPOS),
                                "--threads_per_window", str(THREADS_PER_WINDOW),
-                               "--output_csv_filename",  ACTUAL_DNDS_FILENAME,
                                "--mode",  "DNDS",
                                "--mpi",
                                "--sam_filename",  SAM_FILENAME,
@@ -310,7 +310,8 @@ class TestUmberjack(unittest.TestCase):
         # This is the pseudo msa fasta made from merged reads aligned against consensus using bwa
         MSA_FASTA = SIM_DATA_DIR + os.sep + "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.bwa.msa.fasta"
 
-        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + os.path.splitext(os.path.basename(MSA_FASTA))[0] + ".dnds.csv"
+        ACTUAL_DNDS_FILENAME = (OUT_DIR + os.sep + os.path.splitext(os.path.basename(MSA_FASTA))[0] + os.sep +
+                               os.path.splitext(os.path.basename(MSA_FASTA))[0] + ".dnds.csv")
         START_NUCPOS = 1
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
 
@@ -320,7 +321,7 @@ class TestUmberjack(unittest.TestCase):
         # Can't call umberjack.eval_windows_mpi() directly since we need to invoke it with mpirun
         subprocess.check_call(["mpirun",
                                "-H", "localhost",  # host
-                               "-n", "2",  # copies of program per node
+                               "-n", str(WINDOW_PROCS),  # copies of program per node
                                "-output-filename", OUT_DIR + os.sep + "Test_umberjack.log",  # stdout, stderr logfile
 
                                "python", UMBERJACK_PY,
@@ -341,23 +342,22 @@ class TestUmberjack(unittest.TestCase):
                                "--debug"])
 
 
-        rconfig_file = os.path.dirname(__file__) + os.sep +"simulations" + os.sep + "R" + os.sep + "umberjack_unit_test.config"
+        rconfig_file = OUT_DIR + os.sep + "umberjack_unit_test.config"
         with open(rconfig_file, 'w') as fh_out_config:
             fh_out_config.write("ACTUAL_DNDS_FILENAME=" + ACTUAL_DNDS_FILENAME + "\n")
             fh_out_config.write("EXPECTED_DNDS_FILENAME=" + EXPECTED_DNDS_FILENAME + "\n")
             fh_out_config.write("INDELIBLE_DNDS_FILENAME=" + INDELIBLE_DNDS_FILENAME + "\n")
 
-        subprocess.check_call(["Rscript", "-e", "library(knitr); " +
-                               "setwd('" + R_DIR + "'); " +
-                               "spin('umberjack_unit_test.R', knit=FALSE);" +
-                               "knit2html('./umberjack_unit_test.Rmd', stylesheet='./markdown_bigwidth.css');"],
-                              shell=False, env=os.environ)
-        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.html",
-                    OUT_DIR + os.sep + "umberjack_unit_test.html")
+        subprocess.check_call(["Rscript",
+                               "launch_umberjack_unittest_report.R",
+                               rconfig_file,
+                               OUT_DIR
+                              ],
+                              shell=False, env=os.environ, cwd=R_DIR)
 
         concord_csv = OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv"
-        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.concordance.csv",
-                    OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv")
+        #shutil.copy(R_DIR + os.sep + "umberjack_unit_test.concordance.csv",
+        #            OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv")
         self._is_good_concordance(concord_csv=concord_csv)
 
 
