@@ -41,34 +41,28 @@ def choose_breakpoints(genome_codons, num_breaks, seed=None):
     randomizer = random.Random(seed)
     LOGGER.info("Randomly selecting breakpoints with seed " + str(seed))
 
-    sections = []
-    if num_breaks == 0:
-        sectn_start_nuc_base1 = 1
-        sectn_end_nuc_base1 = genome_codons * 3
-        sections.append((sectn_start_nuc_base1, sectn_end_nuc_base1))
 
-    # We define break_site as the codon position immediately before the strand switch in recombination
-    # last position can't be breakpoint because there is no position immediately after it to switch strands to
-    # 0-based positions
+    # We define breakpoint as the 0-based codon start position of the strand switch in recombination.
+    # First position in genome can't be breakpoint because there are no positions before it to switch strands from.
     breakpt_codons = sorted(randomizer.sample(range(1, genome_codons), num_breaks))
 
-    for b, breakpt_codon_base0 in enumerate(breakpt_codons):
-        # Although breakpoints are given in 0-based codon positions,
-        # we follow the Umbjerack custom of specifying genome partitions within filenames with 1-based nucleotide positions
-        breakpt_nuc_base1 = (breakpt_codon_base0 * 3) + 1
-        if b == 0:  # first breakpoint
-            sectn_start_nuc_base1 = 1
-        else:
-            sectn_start_nuc_base1 = breakpt_nuc_base1
+    # Go through the breakpoints and append the previous section into the list
+    # Although breakpoints are given in 0-based codon positions,
+    # we follow the Umbjerack custom of specifying genome partitions within filenames with 1-based nucleotide positions
+    sections = []
+    prev_sectn_start_nuc_base1 = 1
+    for b in xrange(num_breaks):
+        # Breakpoint indicates the start of another strand, aka another section
+        breakpt_codon_base0 = breakpt_codons[b]
+        sectn_start_nuc_base1 = (breakpt_codon_base0 * 3) + 1
 
-        if b == len(breakpt_codons) - 1:  # last breakpoint
-            sectn_end_nuc_base1 = genome_codons * 3
-        else:
-            next_breakpt_codon_base0 = breakpt_codons[b+1]
-            next_breakpoint_nuc_base1 = (next_breakpt_codon_base0 * 3) + 1
-            sectn_end_nuc_base1 = next_breakpoint_nuc_base1 - 1
+        prev_sectn_end_nuc_base1 = sectn_start_nuc_base1 - 1
+        sections.append((prev_sectn_start_nuc_base1, prev_sectn_end_nuc_base1))
 
-        sections.append((sectn_start_nuc_base1,  sectn_end_nuc_base1))
+        prev_sectn_start_nuc_base1 = sectn_start_nuc_base1
+
+    prev_sectn_end_nuc_base1 = genome_codons * 3  # Append the section that starts from the last breakpoint and ends at genome-end
+    sections.append((prev_sectn_start_nuc_base1, prev_sectn_end_nuc_base1))
 
     return sections
 
