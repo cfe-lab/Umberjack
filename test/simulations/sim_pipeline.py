@@ -98,6 +98,8 @@ if __name__ == "__main__":
     NUM_CODON_SITES = cfgparser.getint(SECTION, "NUM_CODON_SITES")
     NUM_INDIV = cfgparser.getint(SECTION, "NUM_INDIV")
     NUM_BREAKPOINTS = cfgparser.getint(SECTION, "NUM_BREAKPOINTS") if cfgparser.has_option(SECTION, "NUM_BREAKPOINTS") else 0
+    BREAKPOINTS = cfgparser.get(SECTION, "BREAKPOINTS") if cfgparser.has_option(SECTION, "BREAKPOINTS") else None
+
     SELECTION_RATE = cfgparser.getfloat(SECTION, "SELECTION_RATE")
     GENERATIONS = cfgparser.getint(SECTION, "GENERATIONS")
 
@@ -113,7 +115,11 @@ if __name__ == "__main__":
     ########################
 
     # 1-based nucleotide positions of each contiguous DNA strands separated by recombination breakpoint
-    recombo_sections = recombination.choose_breakpoints(genome_codons=NUM_CODON_SITES, num_breaks=NUM_BREAKPOINTS, seed=SEED)
+    if BREAKPOINTS:
+        breakpoints = [int(x) for x in BREAKPOINTS.split(",")]
+        recombo_sections = recombination.get_sections_from_breakpoints(breakpoints=breakpoints, genome_codons=NUM_CODON_SITES)
+    else:
+        recombo_sections = recombination.choose_breakpoints(genome_codons=NUM_CODON_SITES, num_breaks=NUM_BREAKPOINTS, seed=SEED)
 
 
     #######################
