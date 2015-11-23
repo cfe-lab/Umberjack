@@ -42,45 +42,32 @@ def choose_breakpoints(genome_codons, num_breaks, seed=None):
     LOGGER.info("Randomly selecting breakpoints with seed " + str(seed))
 
 
-    # We define breakpoint as the 0-based codon start position of the strand switch in recombination.
+    # We define breakpoint as the 1-based codon start position of the strand switch in recombination.
     # First position in genome can't be breakpoint because there are no positions before it to switch strands from.
-    breakpt_codons = sorted(randomizer.sample(range(1, genome_codons), num_breaks))
+    breakpt_codons = sorted(randomizer.sample(range(2, genome_codons+1), num_breaks))
 
 
     # Go through the breakpoints and append the previous section into the list
-    # Although breakpoints are given in 0-based codon positions,
+    # Although breakpoints are given in 1-based codon positions,
     # we follow the Umbjerack custom of specifying genome partitions within filenames with 1-based nucleotide positions
-    sections = []
-    prev_sectn_start_nuc_base1 = 1
-    for b in xrange(num_breaks):
-        # Breakpoint indicates the start of another strand, aka another section
-        breakpt_codon_base0 = breakpt_codons[b]
-        sectn_start_nuc_base1 = (breakpt_codon_base0 * 3) + 1
-
-        prev_sectn_end_nuc_base1 = sectn_start_nuc_base1 - 1
-        sections.append((prev_sectn_start_nuc_base1, prev_sectn_end_nuc_base1))
-
-        prev_sectn_start_nuc_base1 = sectn_start_nuc_base1
-
-    prev_sectn_end_nuc_base1 = genome_codons * 3  # Append the section that starts from the last breakpoint and ends at genome-end
-    sections.append((prev_sectn_start_nuc_base1, prev_sectn_end_nuc_base1))
+    sections = get_sections_from_breakpoints(breakpoints=breakpt_codons, genome_codons=genome_codons)
 
     return sections
 
 
 def get_sections_from_breakpoints(breakpoints, genome_codons):
     """
-    Returns the section nuc 1based start and ends given the breakpoint 0-based codon positions.
+    Returns the section nuc 1based start and ends given the breakpoint 1-based codon positions.
     :param list breakpoints:  list of integer breakpoints
     :param int genome_codons:  total genome codons
-    :return:
+    :return list: list of tuples [(section nuc start 1based, section nuc end 1 based)]
     """
     sections = []
     prev_sectn_start_nuc_base1 = 1
     for b in xrange(len(breakpoints)):
         # Breakpoint indicates the start of another strand, aka another section
-        breakpt_codon_base0 = breakpoints[b]
-        sectn_start_nuc_base1 = (breakpt_codon_base0 * 3) + 1
+        breakpt_codon_base1 = breakpoints[b]
+        sectn_start_nuc_base1 = ((breakpt_codon_base1-1) * 3) + 1
 
         prev_sectn_end_nuc_base1 = sectn_start_nuc_base1 - 1
         sections.append((prev_sectn_start_nuc_base1, prev_sectn_end_nuc_base1))
