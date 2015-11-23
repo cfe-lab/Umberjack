@@ -17,6 +17,8 @@ from collections import namedtuple
 import csv
 import sam.sam_handler
 import sys
+import itertools
+
 
 config.settings.setup_logging()
 LOGGER = logging.getLogger(__name__)
@@ -281,17 +283,25 @@ class UmberjackWork(object):
         :yields iterator of dict: For each (samfile, ref, output prefix) or (msa fasta, ref, output prefix) combination,
             iterates over all the windows and creates dict arguments that can be passed to eval_window()
         """
+        generators = []
         if self.input_csv:
             with open(self.input_csv, 'rU') as fh_in:
                 reader = csv.DictReader(fh_in)
+
                 for row in reader:
                     filename = row["File"]
                     ref = row["Ref"]
                     output_prefix = row["OutputPrefix"]
                     if UmberjackWork.is_sam(filename):
-                        yield self.sam_ref_window_iter(samfile=filename, ref=ref, output_prefix=output_prefix)
+                        generator = self.sam_ref_window_iter(samfile=filename, ref=ref, output_prefix=output_prefix)
+                        generators.extend([generator])
+
+
                     elif UmberjackWork.is_msa_fasta(filename):
-                        yield self.msa_fasta_window_iter(msa_fasta=filename, ref=ref, output_prefix=output_prefix)
+                        generator =  self.msa_fasta_window_iter(msa_fasta=filename, ref=ref, output_prefix=output_prefix)
+                        generators.extend([generator])
+
+        return itertools.chain(*generators)
 
 
     def input_csv_iter(self):
@@ -725,22 +735,29 @@ class UmberjackWork(object):
             raise ValueError("Nothing to iterate over.  Must define sam_filename or input_csv")
 
 
+
+    def sam_ref_job_iter(self):
+        for samfile, ref in self.sam_ref_iter():
+                output_prefix = UmberjackWork.get_auto_outprefix(pardir=self.out_dir, input_file=samfile, ref=ref)
+                yield UmberjackWork.Job(File=samfile, Ref=ref, OutputPrefix=output_prefix, FileType=UmberjackWork.InputFileTypes.SAM)
+
+    def msa_fasta_job_iter(self):
+        output_prefix = UmberjackWork.get_auto_outprefix(pardir=self.out_dir, input_file=self.msa_fasta, ref=self.ref)
+        yield UmberjackWork.Job(File=self.msa_fasta, Ref=self.ref, OutputPrefix=output_prefix, FileType=UmberjackWork.InputFileTypes.MSA)
+
     def job_iter(self):
         """
         Iterates through all the (sam, ref, output prefix) or (msa fasta, ref, output prefix) combinations.
         :return iterator of Job namedtuples:
         """
         if self.sam_filename:
-            for samfile, ref in self.sam_ref_iter():
-                output_prefix = UmberjackWork.get_auto_outprefix(pardir=self.out_dir, input_file=samfile, ref=ref)
-                yield UmberjackWork.Job(File=samfile, Ref=ref, OutputPrefix=output_prefix, FileType=UmberjackWork.InputFileTypes.SAM)
+            return self.sam_ref_job_iter()
 
         elif self.msa_fasta:
-            output_prefix = UmberjackWork.get_auto_outprefix(pardir=self.out_dir, input_file=self.msa_fasta, ref=self.ref)
-            yield UmberjackWork.Job(File=self.msa_fasta, Ref=self.ref, OutputPrefix=output_prefix, FileType=UmberjackWork.InputFileTypes.MSA)
+            return self.msa_fasta_job_iter()
 
         elif self.input_csv:
-            yield self.input_csv_iter()
+            return self.input_csv_iter()
 
 
     def tabulate_results(self):
