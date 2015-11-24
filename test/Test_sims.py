@@ -21,6 +21,7 @@ import glob
 from cStringIO import StringIO
 from test_topology import TestTopology
 
+
 # Simulation Configs
 SIM_DIR = os.path.dirname(os.path.realpath(__file__)) + os.sep + "simulations"
 SIM_BIN_DIR = SIM_DIR + os.sep + "bin"
@@ -390,6 +391,54 @@ class TestSims(unittest.TestCase):
         if os.path.exists(tmptree.name + ".recombo.nwk"):
             os.remove(tmptree.name + ".recombo.nwk")
 
+    @staticmethod
+    def hamming_distance(s1, s2):
+        """
+        Gets number of bases different between sequences
+        :return int:
+        """
+        diffs = 0
+        for i, letter1 in enumerate(s1):
+            if i >= len(s2):
+                diffs += 1
+            elif letter1 != s2[i]:
+                diffs += 1
+
+        return diffs
+
+
+
+    def test_reconstruct_full_popn(self):
+        """
+        How faithfully does HyPhy reconstruct the INDELible ancestral sequences given
+        the topology and FastTree reconstructed branch lengths, and INDELible tip sequences?
+        :return:
+        """
+
+        indelible_anc_fasta = SIM_DATA_DIR + os.sep + "fullpopn" + os.sep + SIM_DATA_FILENAME_PREFIX + "_ANCESTRAL.fasta"
+        indelible_aln =SeqIO.to_dict(SeqIO.parse(indelible_anc_fasta, "fasta"))
+
+
+        # If there are recombination breaks, just take the first section
+        hyphy_anc_fasta = glob.glob(SIM_DATA_DIR + os.sep + "subs" + os.sep + SIM_DATA_FILENAME_PREFIX + ".break.1_*.anc.fasta")[0]
+        hyphy_aln = SeqIO.to_dict(SeqIO.parse(hyphy_anc_fasta, "fasta"))
+
+        # compare hyphy sequence against indelible sequence
+        total_dist = 0.0
+        total_seq = 0.0
+
+        for anc_id in hyphy_aln.keys():
+            if anc_id.find("otu") >= 0:
+                continue  # Don't include tips in calculations
+            hyphy_seq = hyphy_aln[anc_id].seq
+            indelible_seq = indelible_aln[anc_id].seq
+            dist = TestSims.hamming_distance(hyphy_seq, indelible_seq)
+            total_dist += dist
+            total_seq += 1
+
+            print "Ancestor ID = " + anc_id + " dist=" + str(dist)
+
+        print "average hamming distance = " + str(total_dist) + "/" + str(total_seq) + " = " + str(total_dist/total_seq)
 
 
 

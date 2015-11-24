@@ -16,7 +16,7 @@ from collections import OrderedDict
 import pool.pool_traceback
 import recombination
 import functools
-
+import treename
 
 LOGGER = logging.getLogger(__name__)
 SECTION = "sim"
@@ -106,9 +106,19 @@ def calc_full_popn_section_dnds(section_range, outdir, filename_prefix):
                                      fastree_exe=FASTTREE_EXE)
 
 
+    # Rename FastTree inner nodes to match up with the inner node names used by INDELible.
+    # FastTree maintains the same topology as the asg_driver.py tree except that the FastTree tree is unrooted
+    # whereas the asg_driver.py tree is rooted.
+    # HyPhy will keep the inner node names of its input tree
+    indelible_treefile = outdir + os.sep + "fullpopn" + os.sep + "trees.txt"
+    indelible_treeio = indelible.indelible_handler.get_tree_stringio(indelible_treefile)
+
+    renamed_out_inferred_nwk = out_inferred_nwk.replace(".nwk", ".rename.nwk")
+    treename.copy_node_names(src_treefile=indelible_treeio, dest_treefile=out_inferred_nwk, out_treefile=renamed_out_inferred_nwk)
+
     # Calculate HyPhy dN/dS for the full population fasta recombinant section
     hyphy_handler.calc_dnds(codon_fasta_filename=full_popn_section_fasta,
-                            tree_filename=out_inferred_nwk,
+                            tree_filename=renamed_out_inferred_nwk,
                             hyphy_filename_prefix=out_hyphy_prefix,
                             threads=PROCS)
 
@@ -154,6 +164,7 @@ if __name__ == "__main__":
         recombo_sections = recombination.get_sections_from_breakpoints(breakpoints=breakpoints, genome_codons=NUM_CODON_SITES)
     else:
         recombo_sections = recombination.choose_breakpoints(genome_codons=NUM_CODON_SITES, num_breaks=NUM_BREAKPOINTS, seed=SEED)
+
 
 
     #######################

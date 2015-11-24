@@ -75,6 +75,32 @@ class TestUmberjack(unittest.TestCase):
                                         row["Concordance"] + " for metric " + row["Metric"])
                 print row["Metric"] + " concordance=" + row["Concordance"]
 
+
+    def check_concordance(self, out_dir, actual_dnds_filename, expected_dnds_filename):
+        """
+        Sets up the config files for R scripts and checks whether dnds concordance is good.
+        :param out_dir:
+        :param actual_dnds_filename:
+        :param expected_dnds_filename:
+        :return:
+        """
+        rconfig_file = out_dir + os.sep + "umberjack_unit_test.config"
+        with open(rconfig_file, 'w') as fh_out_config:
+            fh_out_config.write("ACTUAL_DNDS_FILENAME=" + actual_dnds_filename + "\n")
+            fh_out_config.write("EXPECTED_DNDS_FILENAME=" + expected_dnds_filename + "\n")
+
+
+        subprocess.check_call(["Rscript",
+                               "launch_umberjack_unittest_report.R",
+                               rconfig_file,
+                               out_dir
+                              ],
+                              shell=False, env=os.environ, cwd=R_DIR)
+
+        concord_csv = out_dir + os.sep + "umberjack_unit_test.concordance.csv"
+        self._is_good_concordance(concord_csv=concord_csv)
+
+
     def setUp(self):
         """
         Generate simulated data for unit tests
@@ -283,24 +309,7 @@ class TestUmberjack(unittest.TestCase):
                                "--debug"])
 
 
-        rconfig_file = os.path.dirname(__file__) + os.sep +"simulations" + os.sep + "R" + os.sep + "umberjack_unit_test.config"
-        with open(rconfig_file, 'w') as fh_out_config:
-            fh_out_config.write("ACTUAL_DNDS_FILENAME=" + ACTUAL_DNDS_FILENAME + "\n")
-            fh_out_config.write("EXPECTED_DNDS_FILENAME=" + EXPECTED_DNDS_FILENAME + "\n")
-            fh_out_config.write("INDELIBLE_DNDS_FILENAME=" + INDELIBLE_DNDS_FILENAME + "\n")
-
-        subprocess.check_call(["Rscript", "-e", "library(knitr); " +
-                               "setwd('" + R_DIR + "'); " +
-                               "spin('umberjack_unit_test.R', knit=FALSE);" +
-                               "knit2html('./umberjack_unit_test.Rmd', stylesheet='./markdown_bigwidth.css');"],
-                              shell=False, env=os.environ)
-        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.html",
-                    OUT_DIR + os.sep + "umberjack_unit_test.html")
-
-        concord_csv = OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv"
-        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.concordance.csv",
-                    OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv")
-        self._is_good_concordance(concord_csv=concord_csv)
+        self.check_concordance(OUT_DIR, ACTUAL_DNDS_FILENAME, EXPECTED_DNDS_FILENAME)
 
 
     def test_msa_fasta(self):
@@ -314,6 +323,7 @@ class TestUmberjack(unittest.TestCase):
                                os.path.splitext(os.path.basename(MSA_FASTA))[0] + ".dnds.csv")
         START_NUCPOS = 1
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
+
 
         if not os.path.exists(OUT_DIR):
             os.makedirs(OUT_DIR)
@@ -341,24 +351,8 @@ class TestUmberjack(unittest.TestCase):
                                "--out_dir",  OUT_DIR,
                                "--debug"])
 
+        self.check_concordance(OUT_DIR, ACTUAL_DNDS_FILENAME, EXPECTED_DNDS_FILENAME)
 
-        rconfig_file = OUT_DIR + os.sep + "umberjack_unit_test.config"
-        with open(rconfig_file, 'w') as fh_out_config:
-            fh_out_config.write("ACTUAL_DNDS_FILENAME=" + ACTUAL_DNDS_FILENAME + "\n")
-            fh_out_config.write("EXPECTED_DNDS_FILENAME=" + EXPECTED_DNDS_FILENAME + "\n")
-            fh_out_config.write("INDELIBLE_DNDS_FILENAME=" + INDELIBLE_DNDS_FILENAME + "\n")
-
-        subprocess.check_call(["Rscript",
-                               "launch_umberjack_unittest_report.R",
-                               rconfig_file,
-                               OUT_DIR
-                              ],
-                              shell=False, env=os.environ, cwd=R_DIR)
-
-        concord_csv = OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv"
-        #shutil.copy(R_DIR + os.sep + "umberjack_unit_test.concordance.csv",
-        #            OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv")
-        self._is_good_concordance(concord_csv=concord_csv)
 
 
     def test_count_subs(self):

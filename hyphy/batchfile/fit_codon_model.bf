@@ -55,6 +55,7 @@ fprintf(stdout, "Codon Data File=", LAST_FILE_PATH, "\n");
 /* read in tree from file */
 ACCEPT_BRANCH_LENGTHS 	= 1;
 ACCEPT_ROOTED_TREES		= 1;
+IGNORE_INTERNAL_NODE_LABELS = 0;
 SetDialogPrompt ("Please select a file containing a tree with branch lengths: ");
 fscanf(PROMPT_FOR_FILE, "String", tree_string);
 fprintf(stdout, "Tree File=", LAST_FILE_PATH, "\n");
