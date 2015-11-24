@@ -25,7 +25,7 @@ def get_tree_string(tree_txt):
     small_population.50.0	bigtree	100	1	1	50	1.1657	2.25102	((((((otu1:0.688568,....)ROOT;
 
     :param str tree_txt: full filepath of trees.txt file
-    :return str:  tree string
+    :return str:  first tree string encountered
     """
     with open(tree_txt, 'rU') as fh_in:
         # Skip the comments
