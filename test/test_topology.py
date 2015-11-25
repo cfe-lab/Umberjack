@@ -487,6 +487,10 @@ class TestTopology(unittest.TestCase):
                 newtip_name = tipbasename_to_newtips[tip.name][i]
                 dup_tip.name = newtip_name
 
+            # If we split new tips and the previous tip has zero branch length, then collapse it
+            if dup_count >= 2 and tip.branch_length == 0:
+                tree.collapse(tip)
+
         Phylo.write(tree, out_treefile, "newick")
 
 
