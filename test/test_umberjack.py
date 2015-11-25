@@ -24,7 +24,7 @@ SIM_PIPELINE_PY = os.path.dirname(os.path.realpath(__file__)) + os.sep + "simula
 UMBERJACK_PY = os.path.dirname(os.path.realpath(__file__)) + os.sep + os.pardir + os.sep + "umberjack.py"
 HYPHY_EXE = SIM_BIN_DIR + os.sep + "hyphy" + os.sep + "hyphy_2.2.3" + os.sep + "linux_x64" + os.sep + "HYPHYMP"
 HYPHY_LIBDIR = SIM_BIN_DIR + os.sep + "hyphy" + os.sep + "hyphy_2.2.3" + os.sep + "res" + os.sep + "TemplateBatchFiles"
-HYPHY_BASEDIR = os.path.abspath(os.path.realpath(__file__) + os.sep + os.pardir + os.sep + os.pardir + "hyphy" + os.sep + "batchfile")
+HYPHY_BASEDIR = os.path.abspath(os.path.realpath(__file__) + os.sep + os.pardir + os.sep + os.pardir + os.sep +  "hyphy" + os.sep + "batchfile")
 FASTTREE_EXE = SIM_BIN_DIR + os.sep + "fasttree" + os.sep + "fasttree_2.1.7" + os.sep + "linux_x64" + os.sep + "FastTree"
 
 # INDELible dN/dS values that INDELible is aiming to simulate
@@ -132,7 +132,8 @@ class TestUmberjack(unittest.TestCase):
         """
         OUT_DIR =   SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + "Window" + str(WINDOW_SIZE) + ".fromconf"
         SAM_FILENAME = SIM_DATA_DIR + os.sep +  "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.bwa.sort.query.sam"
-        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + os.path.splitext(os.path.basename(SAM_FILENAME))[0] + ".dnds.csv"
+        SAM_PREFIX = os.path.splitext(os.path.basename(SAM_FILENAME))[0]
+        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + SAM_PREFIX + os.sep + REF + os.sep  +  "{}.{}.dnds.csv".format(SAM_PREFIX, REF)
         CONFIG_FILE = OUT_DIR + os.sep + 'umberjack_unittest.conf'
         if not os.path.exists(OUT_DIR):
             os.makedirs(OUT_DIR)
@@ -156,24 +157,7 @@ class TestUmberjack(unittest.TestCase):
             fh_config.write("--debug  \n")
         subprocess.check_call(["python", UMBERJACK_PY, "-f", CONFIG_FILE], env=os.environ)
 
-        rconfig_file = R_DIR + os.sep + "umberjack_unit_test.config"
-        with open(rconfig_file, 'w') as fh_out_config:
-            fh_out_config.write("ACTUAL_DNDS_FILENAME=" + ACTUAL_DNDS_FILENAME + "\n")
-            fh_out_config.write("EXPECTED_DNDS_FILENAME=" + EXPECTED_DNDS_FILENAME + "\n")
-            fh_out_config.write("INDELIBLE_DNDS_FILENAME=" + INDELIBLE_DNDS_FILENAME + "\n")
-
-        subprocess.check_call(["Rscript", "-e", "library(knitr); " +
-                               "setwd('" + R_DIR + "'); " +
-                               "spin('umberjack_unit_test.R', knit=FALSE);" +
-                               "knit2html('./umberjack_unit_test.Rmd', stylesheet='./markdown_bigwidth.css');"],
-                              shell=False, env=os.environ)
-        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.html",
-                    OUT_DIR + os.sep + "umberjack_unit_test.html")
-
-        concord_csv = OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv"
-        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.concordance.csv",
-                    concord_csv)
-        self._is_good_concordance(concord_csv=concord_csv)
+        self.check_concordance(OUT_DIR, ACTUAL_DNDS_FILENAME, EXPECTED_DNDS_FILENAME)
 
 
     def test_umberjack_cmd_line(self):
@@ -183,7 +167,8 @@ class TestUmberjack(unittest.TestCase):
 
         OUT_DIR =   SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + "Window" + str(WINDOW_SIZE) + ".fromcmd"
         SAM_FILENAME = SIM_DATA_DIR + os.sep +  "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.bwa.sort.query.sam"
-        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + os.path.splitext(os.path.basename(SAM_FILENAME))[0] + ".dnds.csv"
+        SAM_PREFIX = os.path.splitext(os.path.basename(SAM_FILENAME))[0]
+        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + SAM_PREFIX + os.sep + REF + os.sep  +  "{}.{}.dnds.csv".format(SAM_PREFIX, REF)
         cmd = ["python", UMBERJACK_PY,
                "--sam_filename", SAM_FILENAME,
                "--ref", REF,
@@ -203,24 +188,7 @@ class TestUmberjack(unittest.TestCase):
                "--mode", MODE]
         subprocess.check_call(cmd, env=os.environ)
 
-        rconfig_file = R_DIR + os.sep + "umberjack_unit_test.config"
-        with open(rconfig_file, 'w') as fh_out_config:
-            fh_out_config.write("ACTUAL_DNDS_FILENAME=" + ACTUAL_DNDS_FILENAME + "\n")
-            fh_out_config.write("EXPECTED_DNDS_FILENAME=" + EXPECTED_DNDS_FILENAME + "\n")
-            fh_out_config.write("INDELIBLE_DNDS_FILENAME=" + INDELIBLE_DNDS_FILENAME + "\n")
-
-        subprocess.check_call(["Rscript", "-e", "library(knitr); " +
-                               "setwd('" + R_DIR + "'); " +
-                               "spin('umberjack_unit_test.R', knit=FALSE);" +
-                               "knit2html('./umberjack_unit_test.Rmd', stylesheet='./markdown_bigwidth.css');"],
-                              shell=False, env=os.environ)
-        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.html",
-                    OUT_DIR + os.sep + "umberjack_unit_test.html")
-
-        concord_csv = OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv"
-        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.concordance.csv",
-                    concord_csv)
-        self._is_good_concordance(concord_csv=concord_csv)
+        self.check_concordance(OUT_DIR, ACTUAL_DNDS_FILENAME, EXPECTED_DNDS_FILENAME)
 
 
     def test_eval_windows_async_sam(self):
@@ -228,7 +196,9 @@ class TestUmberjack(unittest.TestCase):
         SAM_FILENAME = SIM_DATA_DIR + os.sep +  "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.bwa.sort.query.sam"
         OUT_DIR =  (SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX  + os.sep +
                     "window{}.breadth{}.depth{}".format(WINDOW_SIZE, MIN_WINDOW_BREADTH_COV_FRACTION, MIN_WINDOW_DEPTH_COV))
-        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + os.path.splitext(os.path.basename(SAM_FILENAME))[0] + ".dnds.csv"
+        SAM_PREFIX = os.path.splitext(os.path.basename(SAM_FILENAME))[0]
+
+        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + SAM_PREFIX + os.sep + REF + os.sep  +  "{}.{}.dnds.csv".format(SAM_PREFIX, REF)
         START_NUCPOS = 1
         END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
 
@@ -255,33 +225,18 @@ class TestUmberjack(unittest.TestCase):
         worker = UmberjackWork.UmberjackWork(**kwargs)
         worker.start()
 
-        rconfig_file = R_DIR + os.sep + "umberjack_unit_test.config"
-        with open(rconfig_file, 'w') as fh_out_config:
-            fh_out_config.write("ACTUAL_DNDS_FILENAME=" + ACTUAL_DNDS_FILENAME + "\n")
-            fh_out_config.write("EXPECTED_DNDS_FILENAME=" + EXPECTED_DNDS_FILENAME + "\n")
-            fh_out_config.write("INDELIBLE_DNDS_FILENAME=" + INDELIBLE_DNDS_FILENAME + "\n")
-
-        subprocess.check_call(["Rscript", "-e", "library(knitr); " +
-                               "setwd('" + R_DIR + "'); " +
-                               "spin('umberjack_unit_test.R', knit=FALSE);" +
-                               "knit2html('./umberjack_unit_test.Rmd', stylesheet='./markdown_bigwidth.css');"],
-                              shell=False, env=os.environ)
-        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.html",
-                    OUT_DIR + os.sep + "umberjack_unit_test.html")
-
-        concord_csv = OUT_DIR + os.sep + "umberjack_unit_test.concordance.csv"
-        shutil.copy(R_DIR + os.sep + "umberjack_unit_test.concordance.csv",
-                    concord_csv)
-        self._is_good_concordance(concord_csv=concord_csv)
+        self.check_concordance(OUT_DIR, ACTUAL_DNDS_FILENAME, EXPECTED_DNDS_FILENAME)
 
 
     def test_eval_windows_mpi(self):
         # ART generated reads aligned to population consensus
         SAM_FILENAME = SIM_DATA_DIR + os.sep +  "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.bwa.sort.query.sam"
         OUT_DIR =  SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX  + os.sep + "window{}.breadth{}.depth{}.mpi".format(WINDOW_SIZE, MIN_WINDOW_BREADTH_COV_FRACTION, MIN_WINDOW_DEPTH_COV)
-        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + os.path.splitext(os.path.basename(SAM_FILENAME))[0] + ".dnds.csv"
+        SAM_PREFIX = os.path.splitext(os.path.basename(SAM_FILENAME))[0]
+
+        ACTUAL_DNDS_FILENAME = OUT_DIR + os.sep + SAM_PREFIX + os.sep + REF + os.sep  +  "{}.{}.dnds.csv".format(SAM_PREFIX, REF)
         START_NUCPOS = 1
-        END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA)
+        END_NUCPOS = Utility.get_longest_seq_size_from_fasta(POPN_CONSENSUS_FASTA) - 3
 
 
         # Can't call umberjack.eval_windows_mpi() directly since we need to invoke it with mpirun
@@ -363,7 +318,6 @@ class TestUmberjack(unittest.TestCase):
 
         OUT_DIR =   SIM_DIR + os.sep + "out" + os.sep + SIM_DATA_FILENAME_PREFIX + os.sep + "Window" + str(WINDOW_SIZE) + ".checksubs"
         SAM_FILENAME = SIM_DATA_DIR + os.sep +  "aln" + os.sep + SIM_DATA_FILENAME_PREFIX + ".reads.bwa.sort.query.sam"
-        OUT_CSV_FILENAME = OUT_DIR + os.sep + 'site_branch_sub.csv'
         cmd = ["python", UMBERJACK_PY,
                "--sam_filename", SAM_FILENAME,
                "--ref", REF,
