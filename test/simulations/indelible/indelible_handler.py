@@ -137,5 +137,7 @@ def write_partition_csv(partition_csv, treefile_to_codons, tree_scaling_rates, s
             recombo_scale_partition_sizes = np_rander.multinomial(n=recombo_codons, pvals=prob_scaling_rates, size=1)[0]
 
             for i, scaling_rate in enumerate(tree_scaling_rates):
+                if recombo_scale_partition_sizes[i] == 0:
+                    continue
                 partition = Partition(TreeFile=treefile, TreeLen=scaling_rate, Codons=recombo_scale_partition_sizes[i])
                 writer.writerow(partition._asdict())
