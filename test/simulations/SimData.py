@@ -12,13 +12,20 @@ class SimData:
 
     def __init__(self, config_file):
         self.config_file = config_file
-        self.sim_data_dir = os.path.abspath(os.path.dirname(config_file))
+        self.__sim_data_dir = os.path.abspath(os.path.dirname(config_file))
 
         config = RawConfigParser()
         config.read(config_file)
 
         self.name = config.get(SimData.SECTION, "FILENAME_PREFIX")
 
+    @property
+    def sim_data_dir(self):
+        """
+        Full path to directory containing simulated dataset
+        :return:
+        """
+        return self.__sim_data_dir
 
     @staticmethod
     def get_recombo_breaks_from_file(filename):
