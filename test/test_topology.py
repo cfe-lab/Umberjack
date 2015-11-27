@@ -188,6 +188,7 @@ class TestTopology(unittest.TestCase):
 
         return rf_dist
 
+
     def cmp_topology(self, expected_treefile, actual_treefile, is_reroot=False):
         """
         Compares the topology of the trees.  Asserts if there is non-zero Robinson Foulds distance.
@@ -201,6 +202,142 @@ class TestTopology(unittest.TestCase):
                      expected_treefile + ". Instead robinson foulds distance =" + str(rf_dist))
 
 
+
+
+
+    @staticmethod
+    def intersect_size(range_start1, range_end1, range_start2, range_end2):
+        """
+        :param int range_start1:  first range start position
+        :param int range_end1:  first range end position
+        :param int range_start2:  2nd range start position
+        :param int range_end2:  2nd range end position
+        :return int : Size of the intersection or negative number of they don't intersect
+        """
+        return min(range_end1, range_end2) - max(range_start1, range_start2)
+
+
+    @staticmethod
+    def intersect_range(range_start1, range_end1, range_start2, range_end2):
+        """
+        :param int range_start1:  first range start position
+        :param int range_end1:  first range end position
+        :param int range_start2:  2nd range start position
+        :param int range_end2:  2nd range end position
+        :return int, int : start and end position of the intersection
+        """
+        return max(range_start1, range_start2), min(range_end1, range_end2)
+
+
+    @staticmethod
+    def resample_fasta_from_seq(src_fasta, dest_fasta, out_fasta, slice_range=None):
+        """
+        Takes the sequence names from src_fasta.
+        Then resamples the sequences in dest_fasta so that they correspond to src_fasta.
+        Slices dest_fasta according to the slice coordinates.
+        Writes the resampled dest_fasta to out_fasta.
+
+        Assumes that
+        - the names in src_fasta follow format [base name]_read[num].
+        - the names in dest_fasta follow format [base name]
+
+        :param str src_fasta:   fasta containing the sequence names to copy from
+        :param str dest_fasta: fasta containing the sequence names to modify to match src_fasta
+        :param str out_fasta:   output fasta to write modified dest_fasta
+        :param tuple slice_range:  (int 1-based start wrt dest_fasta, int 1-based end wrt fasta)
+        If not supplied, then entire dest_fasta written to out_fasta.
+        """
+        with open(out_fasta, 'w') as fh_out:
+            dest_recs = SeqIO.to_dict(SeqIO.parse(dest_fasta, "fasta"))
+            for src_rec in SeqIO.parse(src_fasta, "fasta"):
+                rec_basename = src_rec.id.split("_")[0]
+                fh_out.write(">" + src_rec.id + "\n")
+
+                dest_rec = dest_recs.get(rec_basename)
+
+                if slice_range:
+                    slice_start_base1, slice_end_base1 = slice_range
+                    fh_out.write(str(dest_rec.seq[slice_start_base1-1:slice_end_base1]) + "\n")
+                else:
+                    fh_out.write(str(dest_rec.seq) + "\n")
+
+
+    @staticmethod
+    def calc_window_tree_dist(sim_data, window_fasta, window_treefile,
+                              win_start, win_end):
+        """
+        Calculates the distance between a window tree and the recombinant trees in the sections that overlap the window
+        as the weighted average robinson folds - branchlength distance.
+        :param SimData sim_data:  simulated data instance
+        :param str window_fasta: filepath to umberjack window fasta
+        :param str window_treefile: filepath to umberjack window tree
+        :param int win_start:  1 based nucleotide start position of window
+        :param int win_end:  1 based nucleotide end position of window
+        :return float:  weighted average robinson foulds-branchlength distance between the window tree
+        and all full population recombinant trees that overlap the window
+        """
+
+        full_popn_fasta = sim_data.get_fasta()
+
+        # Make a temp directory in the umberjack output directory to hold the expected trees for the recombinant section-window overlap
+        expected_dir = os.path.dirname(window_treefile) + os.sep + "expected"
+        if not os.path.exists(expected_dir):
+            os.makedirs(expected_dir)
+
+        expected_prefix = expected_dir + os.sep + os.path.splitext(os.path.basename(full_popn_fasta))[0]
+
+        weighted_ave_dist = 0.0
+        for full_popn_recombo_treefile in sim_data.get_recombo_trees():
+            recomb_start, recomb_end = sim_data.get_recombo_breaks_from_file(full_popn_recombo_treefile)
+
+            if recomb_start > win_end or recomb_end < win_start:
+                continue
+
+            recomb_win_start, recomb_win_end = TestTopology.intersect_range(recomb_start, recomb_end, win_start, win_end)
+
+            # Full population Treefile with tips resampled according to the read sequences used in the window fasta
+            # Branch lengths can't be trusted if the recombinant-window overlap sequences
+            # are different from the recombinant sequences.  In which case, only used as for topology guide.
+            expected_topology_treefile = expected_prefix + ".expected.topology.{}_{}.nwk".format(recomb_win_start, recomb_win_end)
+            # Full population Treefile with tips resampled according to the read sequences used in the window fasta
+            # Branch lengths rescaled to fit the sequences in recombinant section-window overlap
+            expected_treefile = expected_prefix + ".expected.{}_{}.nwk".format(recomb_win_start, recomb_win_end)
+
+            # For each read in the window, make a copy of the individual's tip in the full population tree
+            TestTopology.resample_tree_from_fasta(treefile=full_popn_recombo_treefile,
+                                                  out_treefile=expected_topology_treefile,
+                                                  fastafile=window_fasta)
+
+            # If the recombinant-window overlap is the same as the recombinant section,
+            # then we can trust the recombinant-window branch lengths
+            recombo_win_size = recomb_win_end - recomb_win_start + 1
+            win_size = win_end - win_start + 1
+            if recomb_win_start == recomb_start and recomb_win_end == recomb_end:
+                shutil.move(expected_topology_treefile, expected_treefile)
+            else:
+
+                # For each read in the window, make a copy of the individual's sequence from the full population fasta
+                expected_fasta = expected_prefix + ".expected.{}_{}.fasta".format(recomb_win_start, recomb_win_end)
+                TestTopology.resample_fasta_from_seq(src_fasta=window_fasta, dest_fasta=full_popn_fasta,
+                                                     out_fasta=expected_fasta,
+                                                     slice_range=(recomb_win_start, recomb_win_end))
+
+                # Recalculate branch lengths but constrain topology
+                # since the recombinant-window overlap sequences different from the recombinant section sequences
+                fasttree.fasttree_handler.make_tree_repro(fasta_fname=expected_fasta,
+                                             intree_fname=expected_topology_treefile,
+                                             outtree_fname=expected_treefile)
+
+            rf_dist = TestTopology.get_weighted_rf_dist(expected_treefile, window_treefile)
+
+            weighted_ave_dist +=  (recombo_win_size/float(win_size)) * rf_dist
+
+        # Clean up if we haven't encountered any errors.  Leave the expected files there for debugging if we crash before this.
+        if os.path.exists(expected_dir):
+            shutil.rmtree(expected_dir)
+
+
+        return weighted_ave_dist
 
 
 

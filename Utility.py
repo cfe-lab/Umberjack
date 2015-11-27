@@ -436,6 +436,7 @@ class Consensus:
     def __init__(self):
         self.seq = []
         self.codon_seq = []  # Assumes that the sequence starts on ORF
+        self.total_seq = 0  # total sequences added to the alignment
 
     def parse(self, msa_fasta_filename):
         """
@@ -568,7 +569,7 @@ class Consensus:
             self.codon_seq[codon_pos_0based][codon] += occur
 
 
-
+        self.total_seq += occur
 
 
 
@@ -935,6 +936,14 @@ class Consensus:
         if is_count_pad:
             total_seqs += self.seq[pos_0based]["X"]
         return total_seqs
+
+
+    def get_total_seqs(self):
+        """
+        Finds total sequences in the alignment
+        :rtype: int
+        """
+        return self.total_seq
 
 
     def get_ambig_count(self, pos_0based):
