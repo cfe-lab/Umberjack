@@ -72,7 +72,7 @@ MAX_PROP_N = 0.1
 # Simulate reads with ART
 #############################################
 
-if os.path.exists(ART_OUTPUT_PREFIX + ".sam"):
+if os.path.exists(ART_OUTPUT_PREFIX + ".sam") and os.path.getsize(ART_OUTPUT_PREFIX + ".sam"):
     LOGGER.warn("Not regenerating ART simulated reads")
 else:
 
@@ -132,7 +132,7 @@ else:
 #############################################
 
 bwa_output_prefix = BWA_OUT_DIR + os.sep + os.path.basename(ART_OUTPUT_PREFIX)
-if os.path.exists(bwa_output_prefix + ".bwa.sam"):
+if os.path.exists(bwa_output_prefix + ".bwa.sam") and os.path.getsize(bwa_output_prefix + ".bwa.sam"):
     LOGGER.warn("Not realigning reads")
 else:
     if not os.path.exists(BWA_OUT_DIR):
@@ -173,7 +173,7 @@ else:
 # Get Coverage Stats
 ####################################################################
 
-if os.path.exists(ART_OUTPUT_PREFIX + ".cov.tsv"):
+if os.path.exists(ART_OUTPUT_PREFIX + ".cov.tsv") and os.path.getsize(ART_OUTPUT_PREFIX + ".cov.tsv"):
     LOGGER.warn("Not regenerating coverage stats")
 else:
 
@@ -269,7 +269,7 @@ else:
 # Get Conservation And Entropy Stats for Multiple Sequence Alignment
 ####################################################################
 
-if os.path.exists(ART_OUTPUT_PREFIX + ".conserve.csv"):
+if os.path.exists(ART_OUTPUT_PREFIX + ".conserve.csv") and os.path.getsize(ART_OUTPUT_PREFIX + ".conserve.csv"):
     LOGGER.warn("Not regenerating conservation & entropy stats for MSA")
 else:
     # Create a multiple sequence alignment for the full population and entire genome from the aligned reads.
