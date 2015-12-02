@@ -237,8 +237,9 @@ function printSubTSV(outPerSiteBrSubFile, outPerSiteDnDsFile)
 	numBranch = Columns (branchNames);	
 
 
-	/* maps branch post order to sequence name in filteredDataJoint*/
+	/* maps branch post order to sequence index in filteredDataJoint and vice versa*/
 	branchToSeqMap = {numBranch, 1};  // maps post traversal index to sequence index
+	seqToBranchMap = {filteredDataJoint.species, 1};  // maps sequence index to post traversal index
 	for (v=0; v<numBranch; v=v+1)
 	{
 		for (k=0; k<filteredDataJoint.species && !isFound; k=k+1)  
@@ -247,6 +248,7 @@ function printSubTSV(outPerSiteBrSubFile, outPerSiteDnDsFile)
 			if (branchNames[v] % seqName)  // % means case insensitive string match
 			{
 				branchToSeqMap[v] = k;
+				seqToBranchMap[k] = v;
 			}
 		}
 	}
@@ -264,22 +266,25 @@ function printSubTSV(outPerSiteBrSubFile, outPerSiteDnDsFile)
 
 
 	// Multiply matrixTrick by a column vector to extract the index of non-zero values
+	// stateCharCount:  the total number of character states.  Defined in /TemplateBatchFiles/Distances/CodonToolsMain.def
 	matrixTrick  = {1,stateCharCount};
 	matrixTrick  = matrixTrick["_MATRIX_ELEMENT_COLUMN_"];
 	// Multiply matrixTrickSummer by column vector to sum all the contents of column vector
 	matrixTrickSummer = {1,stateCharCount};
 	matrixTrickSummer = matrixTrickSummer["1"];  
 
-	/* get codon matrix */
-	rSeq_cUniqSite_2iCdn = {filteredDataJoint.species, filteredDataJoint.unique_sites}; // [0-based ancestor index in filteredDataJoint, unique codon site index] = codon code from 0-61
+	/* get  [0-based ancestor index in filteredDataJoint, unique codon site index] = codon code from 0-61, or -(total possible codons) if ambiguous codon codon */
+	//matrix
+	rSeq_cUniqSite_2iCdn = {filteredDataJoint.species, filteredDataJoint.unique_sites}; 
 	for (k=0; k<filteredDataJoint.species;k=k+1)
 	{
 		for (v=0; v<filteredDataJoint.unique_sites;v=v+1)
 		{
 			GetDataInfo (siteInfo, filteredDataJoint, k, v);
-			if ((matrixTrickSummer*siteInfo)[0] > 1)  // >1  possible codon at site v for this sequence
+			totalPossCodons = matrixTrickSummer*siteInfo)[0];
+			if ((totalPossCodons > 1)  // >1  possible codon at site v for this sequence
 			{
-				rSeq_cUniqSite_2iCdn[k][v] = -1;
+				rSeq_cUniqSite_2iCdn[k][v] = -1 * totalPossCodons;
 			}
 			else  // only 1 possible codon at site v
 			{
@@ -303,12 +308,35 @@ function printSubTSV(outPerSiteBrSubFile, outPerSiteDnDsFile)
 	for (iSite=0; iSite<filteredDataJoint.sites;iSite=iSite+1)
 	{
 	
+		iUniqSite = site2uniqSite[iSite];
+
+		// Find the sequences that have completely ambiguous codons.  We don't want to include these in the codon frequencies
+		// used to weight each potential codon when resolving potential codons.
+		unambig_hor_filter = "";
+		for (iChildPostOrder=0; iChildPostOrder < numBranch; iChildPostOrder = iChildPostOrder+1) // branches are in Post-Order
+		{
+			iChildSeq = branchToSeqMap[iChildPostOrder];
+			//[0-based ancestor index in filteredDataJoint, unique codon site index] = codon code from 0-61, or -(total possible codons) if ambiguous codon
+			iChildCdn = rSeq_cUniqSite_2iCdn[iChildSeq][iUniqSite];
+		
+			if  (iChildCdn >= 0)  // exclude ambiguous codons from codon frequency calculations
+			{
+				if (unambig_sites == "")
+				{
+					unambig_hor_filter = iChildSeq;
+				}
+				else
+				{
+					unambig_hor_filter = unambig_sites + "," + iChildSeq;
+				}
+			}
+		}
+
 		totalSiteOS = 0;
 		totalSiteON = 0;
 		totalSiteES = 0;
 		totalSiteEN = 0;
-			
-		iUniqSite = site2uniqSite[iSite];
+
 		for (iChildPostOrder=0; iChildPostOrder<numBranch; iChildPostOrder=iChildPostOrder+1) // branches are in Post-Order
 		{
 			_SITEBR_ES_COUNT = {stateCharCount,stateCharCount};
@@ -366,7 +394,25 @@ function printSubTSV(outPerSiteBrSubFile, outPerSiteDnDsFile)
 				{
 					// Count codon frequencies for this site only
 					siteFilter = ""+(iSite*3)+"-"+(iSite*3+2);
-					DataSetFilter filteredDataSite = CreateFilter (dsJoint,3,siteFilter,"",GeneticCodeExclusions);  // Remove any site where either inner node or leaf has stop codon
+					// Exclude all ambiguous codons in the codon frequency with the exception of the current parent and child ambiguous codons
+					curr_unambig_hor_filter = unambig_hor_filter;
+					if (curr_unambig_hor_filter == "" && totalPossParCodons > 1)
+					{
+						curr_unambig_hor_filter = "" + iParentSeq;
+					}
+					else if (curr_unambig_hor_filter != "" && totalPossParCodons > 1)
+					{
+						curr_unambig_hor_filter = curr_unambig_hor_filter + "," + iParentSeq;
+					}
+					if (curr_unambig_hor_filter == "" && totalPossChildCodons > 1)
+					{
+						curr_unambig_hor_filter = "" + iChildSeq;
+					}
+					else if (curr_unambig_hor_filter != "" && totalPossChildCodons > 1)
+					{
+						curr_unambig_hor_filter = curr_unambig_hor_filter + "," + iChildSeq;
+					}
+					DataSetFilter filteredDataSite = CreateFilter (dsJoint,3,siteFilter, curr_unambig_hor_filter,GeneticCodeExclusions);  // Remove any site where either inner node or leaf has stop codon
 					// Count all codon frequencies, including stop codons.  
 					// Frequencies will total to 1.
 					// All the possible codons corresponding to an ambiguous codon count as a fraction of a codon.  EG)  GGN => GGA=0.25, GGC=0.25, GGT=0.25, GGG=0.25
