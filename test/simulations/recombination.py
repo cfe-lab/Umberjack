@@ -98,16 +98,31 @@ def get_section_sizes(nuc_sections, is_codon_size=False):
     return sizes
 
 
+def filter_clades(tree, exclude_clades, order="postorder"):
+    """
+    Iterates through tree clades, excluding specified clades
+    :param Bio.Phylo.Tree tree: tree instance
+    :param list exclude_clades:  list of Bio.Phylo.Clade instances
+    :param str order:  order to traverse
+    :return Iterator: Bio.Phylo.Clade  generator
+    """
+    for clade in tree.find_clades(order=order):
+        if clade not in exclude_clades:
+            yield clade
+
+
 
 def make_recombo_tree(in_treefile, out_treefile=None, seed=None):
     """
     Simulates topology from recombination.
     Randomly selects a clade to prune and regraph to another randomly selected position in the tree.
-
+    Will not regraft to original sister, but can regraft to original ancestor or descendent of original sister.
+    Will not regraft above root.
     :param str in_treefile:  filepath to newick tree to be manipulated
     :param str out_treefile:  filepath to newick tree file to write to if given.  Uses Bio.Phylo to write tree to newick file.
     :param int seed:  random seed
-    :return Bio.Phylo.TreeMixin:  pruned and regrafted clade, revised tree
+    :return Bio.Phylo.Tree, Bio.Phylo.TreeMixin, Bio.Phylo.TreeMixin, float:  revised tree, pruned and regrafted clade,
+        destination sister clade, branch length of new intermediate node
     """
     if not seed:
         seed = random.randint(0, MAX_SEED)
@@ -121,25 +136,54 @@ def make_recombo_tree(in_treefile, out_treefile=None, seed=None):
     # Don't select the root clade (or the clade with all the tips), since it pretty much contains the entire tree.
     tree = Bio.Phylo.read(in_treefile, "newick")
     total_nodes = len(list(tree.find_clades()))
-    relocate_clade_idx = randomizer.randint(1, total_nodes-1)  # in level (breadthfirst) order, the first node is the root node
 
-    relocate_clade = prune_by_idx(tree=tree, idx=relocate_clade_idx, order="level")
+    if total_nodes <= 3:
+        raise ValueError("Unable to prune and regraft.  Insufficient nodes.  Must have > 3")
 
-    # Randomly select a remaining node to become the new sister of the pruned clade
-    total_remaining_nodes = len(list(tree.find_clades()))
-    # in level (breadthfirst) order, the first node is the root node
-    # Don't regraft the pruned clade as root because that would mean
-    # that the pruned clade is a recombinant of its previous parent and an ancestor even earlier than the previous root.
-    dest_sister_idx = randomizer.randint(1, total_remaining_nodes-1)
-    dest_sister_clade = list(tree.find_clades(order="level"))[dest_sister_idx]
+    # If we prune a clade and the only node left in the tree to regraft onto is its original sister, then we can't
+    # complete the prune and regraft since we are not allowed to regraft onto the original sister.
+    # Repeat the random selection process until we get a proper pruned clade and destination sister clade.
+    dest_sister_clade = None
+    relocate_clade = None
+    while relocate_clade is None and dest_sister_clade is None:
+        relocate_clade_idx = randomizer.randint(1, total_nodes-1)  # in level (breadthfirst) order, the first node is the root node
+
+        LOGGER.debug("Removing clade " + str(relocate_clade_idx) + " 0based breadthfirst index")
+
+        relocate_clade = list(tree.find_clades(order="level"))[relocate_clade_idx]
+        path = tree.get_path(relocate_clade)  # path from (root, clade].  Ie exclude root, but include clade.
+        if len(path) < 2:
+            parent = tree.root  # parent is root
+        else:
+            parent = path[-2]
+        orig_sisters = [clade for clade in parent.clades if clade != relocate_clade]
+
+
+        relocate_clade = prune_by_idx(tree=tree, idx=relocate_clade_idx, order="level")
+
+
+        # Randomly select a remaining node to become the new sister of the pruned clade.
+        # Do not allow original sister as destination sister
+        total_remaining_nodes = len(list(filter_clades(tree=tree, exclude_clades=orig_sisters, order="level")))
+
+        if total_remaining_nodes <= 2:  # if only root and original sister tip remaining, then must repeat prune selection
+            dest_sister_clade = None
+            relocate_clade = None
+            tree = Bio.Phylo.read(in_treefile, "newick")  # reread in tree to get original topology back
+        else:
+            # in level (breadthfirst) order, the first node is the root node
+            # Don't regraft the pruned clade as root because that would mean
+            # that the pruned clade is a recombinant of its previous parent and an ancestor even earlier than the previous root.
+            dest_sister_idx = randomizer.randint(1, total_remaining_nodes-1)
+            dest_sister_clade = list(list(filter_clades(tree=tree, exclude_clades=orig_sisters, order="level")))[dest_sister_idx]
+
     dest_new_par_br_len = randomizer.random() * dest_sister_clade.branch_length
-
     graft(tree=tree, src_subtree=relocate_clade, dest_sister_clade=dest_sister_clade, dest_new_par_br_len=dest_new_par_br_len)
 
     if out_treefile:
         Bio.Phylo.write(tree, out_treefile, "newick")
 
-    return relocate_clade, tree
+    return tree, relocate_clade, dest_sister_clade, dest_new_par_br_len
 
 
 def prune_by_idx(tree, idx, order):
@@ -159,7 +203,7 @@ def prune_by_idx(tree, idx, order):
             pruned_clade = clade
             path = tree.get_path(clade)  # path from (root, clade].  Ie exclude root, but include clade.
             if len(path) < 2:
-                parent = path[-1]  # parent is root
+                parent = tree.root  # parent is root
             else:
                 parent = path[-2]
 
@@ -173,7 +217,7 @@ def prune_by_idx(tree, idx, order):
                     # If we're at the root, sister clade becomes new root
                     old_root_brlen = tree.root.branch_length
                     tree.root = parent.clades[0]
-                    tree.root.branch_length += old_root_brlen
+                    tree.root.branch_length += (old_root_brlen or 0.0)
                 else:
                     # If we're not at the root, collapse this parent
                     child = parent.clades[0]
@@ -241,9 +285,7 @@ def graft(tree, src_subtree, dest_sister_clade, dest_new_par_br_len):
     if dest_sister_clade == tree.root:
         raise ValueError("Grafting to root branch not allowed")
     if dest_new_par_br_len >= dest_sister_clade.branch_length:
-        raise ValueError("New intermediate node not allowed to be on top or past destination sister node. "
-                         "Instead specify the child of dest_sister_clade and " +
-                         "specify dest_br_len in between [0, branch length of that child)")
+        raise ValueError("New intermediate node not allowed to same or longer branch length as destination sister. ")
     if dest_new_par_br_len < 0:
         raise ValueError("New intermediate node branch length must be within [0, dest_sister_clade branch length)")
 

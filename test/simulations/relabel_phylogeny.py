@@ -151,7 +151,7 @@ def make_format_trees(treefile_prefixes, total_tips, selection_rate, generations
     for treefile_prefix in treefile_prefixes[1:]:
         treeseed = tree_randomizer.randint(0, MAX_SEED)
 
-        graft_clade, recombo_tree = recombination.make_recombo_tree(in_treefile=prev_treefile, out_treefile=None, seed=treeseed)
+        recombo_tree, _, _, _ = recombination.make_recombo_tree(in_treefile=prev_treefile, out_treefile=None, seed=treeseed)
 
         recombo_treefile = treefile_prefix + ".rename.nwk"
         format_tree(tree=recombo_tree, format_treefile=recombo_treefile)

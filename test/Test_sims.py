@@ -194,6 +194,70 @@ class TestSims(unittest.TestCase):
                                      " to originate from " + orig_anc_popn_fasta)
 
 
+    def test_prune(self):
+        """
+        Test edge cases for pruning
+        :return:
+        """
+        treestr = "(((T1:0.1, T2:0.2)N3:0.35, (T3:0.3, T4:0.4)N4:0.45)N2:0.25, T5:0.5)N1;"
+        tree = Phylo.read(StringIO(treestr), "newick")
+
+        # Double check that the level order is correct
+        actual_breadthfirst_nodes = [node.name for node in tree.find_clades(order="level")]
+        expected_breadthfirst_nodes = ["N1", "N2", "T5", "N3", "N4", "T1", "T2", "T3", "T4"]
+        self.assertListEqual(actual_breadthfirst_nodes, expected_breadthfirst_nodes)
+
+
+        # TestCase:  parent is root, tip
+        prune_idx =  expected_breadthfirst_nodes.index("T5")
+        prune_clade = simulations.recombination.prune_by_idx(tree=tree, idx=prune_idx, order="level")
+
+        self.assertEqual(prune_clade.name, "T5", msg="Expected T5 pruned but instead pruned " + str(prune_clade.name))
+        expected_pruned_nodes = ["N2", "N3", "N4", "T1", "T2", "T3", "T4"]
+        actual_pruned_nodes = [node.name for node in tree.find_clades(order="level")]
+        self.assertListEqual(actual_pruned_nodes, expected_pruned_nodes,
+                             msg="Actual=" + str(actual_pruned_nodes) +
+                                 " Expected=" + str(expected_pruned_nodes))
+
+        # TestCase:  parent is root, inner node
+        tree = Phylo.read(StringIO(treestr), "newick")
+        prune_idx =  expected_breadthfirst_nodes.index("N2")
+        prune_clade = simulations.recombination.prune_by_idx(tree=tree, idx=prune_idx, order="level")
+
+        self.assertEqual(prune_clade.name, "N2", msg="Expected N2 pruned but instead pruned " + str(prune_clade.name))
+        expected_pruned_nodes = ["T5"]
+        actual_pruned_nodes = [node.name for node in tree.find_clades(order="level")]
+        self.assertListEqual(actual_pruned_nodes, expected_pruned_nodes,
+                             msg="Actual=" + str(actual_pruned_nodes) +
+                                 " Expected=" + str(expected_pruned_nodes))
+
+
+        # TestCase:  parent is not root, inner node
+        tree = Phylo.read(StringIO(treestr), "newick")
+        prune_idx =  expected_breadthfirst_nodes.index("N3")
+        prune_clade = simulations.recombination.prune_by_idx(tree=tree, idx=prune_idx, order="level")
+
+        self.assertEqual(prune_clade.name, "N3", msg="Expected N2 pruned but instead pruned " + str(prune_clade.name))
+        expected_pruned_nodes = ["N1", "N4", "T5", "T3", "T4"]
+        actual_pruned_nodes = [node.name for node in tree.find_clades(order="level")]
+        self.assertListEqual(actual_pruned_nodes, expected_pruned_nodes,
+                             msg="Actual=" + str(actual_pruned_nodes) +
+                                 " Expected=" + str(expected_pruned_nodes))
+
+        # TestCase:  parent is not root, tip
+        tree = Phylo.read(StringIO(treestr), "newick")
+        prune_idx =  expected_breadthfirst_nodes.index("T4")
+        prune_clade = simulations.recombination.prune_by_idx(tree=tree, idx=prune_idx, order="level")
+
+        self.assertEqual(prune_clade.name, "T4", msg="Expected N2 pruned but instead pruned " + str(prune_clade.name))
+        expected_pruned_nodes = ["N1", "N2", "T5", "N3", "T3", "T1", "T2"]
+        actual_pruned_nodes = [node.name for node in tree.find_clades(order="level")]
+        self.assertListEqual(actual_pruned_nodes, expected_pruned_nodes,
+                             msg="Actual=" + str(actual_pruned_nodes) +
+                                 " Expected=" + str(expected_pruned_nodes))
+
+
+
 
     def test_prune_regraft(self):
         """
@@ -239,6 +303,28 @@ class TestSims(unittest.TestCase):
         self.assertEqual(diff, 0, msg="Grafted Tree not same as Expected Tree. Actual=" + actual_strio.getvalue() +
                                              " expected=" + exp_graft_str)
 
+        actual_strio.close()
+
+
+        # TestCase:  Check destination sister branch length where pruned clade collapsed destination sister parent
+        treestr = "(((T1:0.1, T2:0.2)N3:0.35, (T3:0.3, T4:0.4)N4:0.45)N2:0.25, T5:0.5)N1;"
+        tree = Phylo.read(StringIO(treestr), "newick")
+        prune_idx = expected_breadthfirst_nodes.index("N3")
+        dest_sister_clade = tree.find_any(name="N4")
+        dest_new_par_br_len = 0.248459005204
+        relocate_clade = simulations.recombination.prune_by_idx(tree=tree, idx=prune_idx, order="level")
+        tree = simulations.recombination.graft(tree=tree, src_subtree=relocate_clade,
+                                               dest_sister_clade=dest_sister_clade,
+                                               dest_new_par_br_len=dest_new_par_br_len)
+
+        exp_graft_str = "(((T3:0.3, T4:0.4)N4:0.451540995,(T1:0.1, T2:0.2)N3:0.35)N40:0.248459005204, T5:0.5)N1;"
+        actual_strio = StringIO()
+        Phylo.write(tree, actual_strio, "newick", format_branch_length='%1.9f')
+        actual_strio.flush()
+        diff = TestTopology.get_weighted_rf_dist_from_str(exp_graft_str, actual_strio.getvalue())
+        self.assertAlmostEqual(diff, 0, places=7,
+                               msg="Grafted Tree not same as Expected Tree. Actual=" + actual_strio.getvalue() +
+                                   " expected=" + exp_graft_str + " RF=" + str(diff))
         actual_strio.close()
 
 
@@ -349,9 +435,42 @@ class TestSims(unittest.TestCase):
             prev_treefiles.append(recombo_treefile)
 
 
+    @staticmethod
+    def get_parent(tree, target=None, **kwargs):
+        """
+        Helper method to get parent from tree and node
+        :param Bio.Phylo.Tree tree:  tree
+        :param Bio.Phylo.TreeMixin node:  node
+        :return:
+        """
+
+        node_path = tree.get_path(target, **kwargs)
+
+        if len(node_path) >= 2:
+            parent = node_path[-2]
+        else:
+            parent = tree.root  #  parent is root
+
+        return parent
+
+    @staticmethod
+    def get_sisters(tree, target=None, **kwargs):
+        """
+        Helper method to get sisters from tree and node
+        :param Bio.Phylo.Tree tree:  tree
+        :param Bio.Phylo.TreeMixin node:  node
+        :return:
+        """
+        parent = TestSims.get_parent(tree=tree, target=target, **kwargs)
+        curr_clade = tree.find_any(target, **kwargs)
+        sisters = [clade for clade in parent.clades if clade != curr_clade]
+        return sisters
+
+
     def test_recombo_tree(self):
         """
         Directly invoke recombination.recombo_tree() and check that the tips are the same but topology is different.
+        Check that the grafted clade is in the right place.
         :return:
         """
         tmptree = tempfile.NamedTemporaryFile(mode="w+", delete=False)
@@ -362,9 +481,30 @@ class TestSims(unittest.TestCase):
         os.fsync(tmptree.file.fileno())  # flush to disk
         tmptree.close()
 
-        graft_clade, recombo_tree = simulations.recombination.make_recombo_tree(in_treefile=tmptree.name,
-                                                             out_treefile=tmptree.name + ".recombo.nwk",
-                                                             seed=20)
+
+        # origtree = Phylo.read(StringIO(treestr), "newick")
+        # expected_breadthfirst_nodes = ["N1", "N2", "T5", "N3", "N4", "T1", "T2", "T3", "T4"]
+        # src_prune_id = expected_breadthfirst_nodes.index("T5")
+        # dest_sister_clade = origtree.find_any(name="T3")
+        # dest_new_par_br_len = 0.184629237455
+        # # T5
+        # # T3
+        # # 0.184629237455
+        #
+        # graft_clade = simulations.recombination.prune_by_idx(tree=origtree, idx=src_prune_id, order="level")
+        # recombo_tree = simulations.recombination.graft(tree=origtree,
+        #                                                src_subtree=graft_clade,
+        #                                                dest_sister_clade=dest_sister_clade,
+        #                                                dest_new_par_br_len=dest_new_par_br_len)
+
+
+        recombo_tree, graft_clade, dest_sister_clade, dest_new_par_br_len = simulations.recombination.make_recombo_tree(in_treefile=tmptree.name,
+                                                            out_treefile=tmptree.name + ".recombo.nwk")
+
+
+        print graft_clade.name
+        print dest_sister_clade.name
+        print dest_new_par_br_len
 
         # Check that the tree tips are the same
         origtree = Phylo.read(StringIO(treestr), "newick")
@@ -377,19 +517,111 @@ class TestSims(unittest.TestCase):
 
         # Check that the topology is different
         recombo_strio = StringIO()
-        Phylo.write(recombo_tree, recombo_strio, "newick")
+        Phylo.write(recombo_tree, recombo_strio, "newick", format_branch_length='%1.9f')
         recombo_strio.flush()
         diff = TestTopology.get_weighted_rf_dist_from_str(treestr, recombo_strio.getvalue())
         self.assertNotEqual(diff, 0, msg="Recombination Tree should be different from original tree. " +
                                       "Recombination Tree=" + recombo_strio.getvalue() +
                                       " Orig tree =" + treestr)
-        recombo_strio.close()
+
+
+        # Check that grafted clade is grafted as a sister to dest_sister_clade
+        recombo_dest_sis_parent = TestSims.get_parent(recombo_tree, target=graft_clade)
+        sister_clade_names = [clade.name for clade in recombo_dest_sis_parent.clades]
+        self.assertIn(dest_sister_clade.name, sister_clade_names,
+                      msg="Expect clades " + str(dest_sister_clade.name) + " and " + str(graft_clade.name) + " to be sisters")
+
+
+        # Check that destination sister clade's branch length has been updated
+        orig_dest_sister = origtree.find_any(name=dest_sister_clade.name)
+        # if the destination sister's original parent in the original tree was collapsed after pruning,
+        # then the destination sister's branch is elongated by the original destination parent's branch length.
+        orig_dest_sis_par = TestSims.get_parent(origtree, name=dest_sister_clade.name)
+        if orig_dest_sis_par.branch_length is None:
+            orig_dest_sis_par.branch_length = 0.0
+        if recombo_tree.find_any(name=orig_dest_sis_par.name):
+            expected_orig_sis_len = orig_dest_sister.branch_length - dest_new_par_br_len
+        else:
+            expected_orig_sis_len = orig_dest_sister.branch_length + orig_dest_sis_par.branch_length - dest_new_par_br_len
+
+        self.assertEqual(expected_orig_sis_len, dest_sister_clade.branch_length,
+                         msg="Expect destination sister clade to have branch length = " +
+                             str(expected_orig_sis_len) +
+                             " but got " + str(dest_sister_clade.branch_length) +
+                             ".  Original destination sister branch len=" + str(orig_dest_sister.branch_length))
+
+
+        # Check that robinson foulds distance is as expected
+        expected_rf = 0.0
+
+        orig_src_sister = TestSims.get_sisters(tree=origtree, name=graft_clade.name)[0]
+        orig_src_par = TestSims.get_parent(tree=origtree, name=graft_clade.name)
+
+        # Bipartition in original tree formed by source ancestors of pruned clade:
+        # After pruning, the original source ancestors of the pruned clade will have fewer descendents
+        # unless the pruned clade was regrafted as a descendent in the recombo tree
+        orig_src_ancs = origtree.get_path(name=graft_clade.name)  # Traverse original ancestors of pruned clade, [just before root, curr clade]
+        for orig_src_anc in orig_src_ancs[:-1]:
+            # Check if the pruned clade was regrafted as another descendent in the recombo tree.
+            # Add the ancestor clade's branch length if its descendents no longer include the pruned+regrafted clade
+            # in the recombo tree.
+            # if the pruned clade was regrafted as a sister in the recombo tree, handle it when we iterate through the destination sister ancestors.
+            recombo_src_anc = recombo_tree.find_any(name=orig_src_anc.name)
+            if recombo_src_anc and not recombo_src_anc.is_parent_of(name=graft_clade.name) and not orig_src_anc.name == dest_sister_clade.name:
+                expected_rf += (orig_src_anc.branch_length or 0.0)
+                expected_rf += (recombo_src_anc.branch_length or 0.0)
+
+
+            # If original source parent only had 1 child after pruning, the original source parent collapses (ie no longer exists in recombo tree).
+            # The original source sister will extend by the length of the parent in the recombo tree.
+            # But the partition defined by the original source parent might still exist in the recombo tree if the pruned clade
+            # was regrafted as a descendent of the original source sister.
+            elif not recombo_src_anc and not orig_src_anc.is_parent_of(name=dest_sister_clade.name):
+                expected_rf += 2 * (orig_src_anc.branch_length or 0.0)
+
+
+        # Bipartition in recombination formed by ancestors of destination sister clade:
+        # After regrafting, the original ancestors of the destination sister clade will have extra descendents
+        # unless the regrafted clade was already a descendent.
+        # Take on the root of the recombo tree since it's possible that the pruned clade is a child of the root, which causes
+        # the original root to collapse and the original source sister to become the new root in the recombo tree
+        recombo_dest_ancs = [recombo_tree.root] + recombo_tree.get_path(name=dest_sister_clade.name)   # Traverse original ancestors of destination sister clade
+        for recombo_dest_anc in recombo_dest_ancs[:-1]:
+            # We've already accounted bipartitions formed by the ancestors of the grafted clade
+            orig_dest_anc = origtree.find_any(name=recombo_dest_anc.name)
+            if orig_dest_anc and not orig_dest_anc.is_parent_of(name=graft_clade.name):
+                # If the recombo destination ancestor is the original source sister, then we need to take into account
+                # that the the original source parent was collapsed and its branch length added onto the original source sister.
+                # Also the bipartition formed by original source parent is now formed by by the original sister.
+                if orig_dest_anc.name == orig_src_sister.name:
+                    expected_rf += (orig_dest_anc.branch_length or 0.0)
+                    expected_rf += abs((orig_src_par.branch_length or 0.0) - (recombo_dest_anc.branch_length or 0.0))
+                else:
+                    # Add the original destination ancestor clade's branch length if its descendents
+                    # didn't include the pruned+regrafted clade in the original tree.
+                    expected_rf += (orig_dest_anc.branch_length or 0.0)
+                    expected_rf += (recombo_dest_anc.branch_length or 0.0)
+            elif not orig_dest_anc:
+                # New intermediate node as new parent of recombo tree destination sister clade
+                # If the destination sister is an ancestor of the source,
+                # then the bipartition formed by the destination sister is now formed by the new intermediate node.
+                if orig_dest_sister.is_parent_of(name=graft_clade.name):
+                    expected_rf += 2*abs((orig_dest_sister.branch_length or 0.0) - (recombo_dest_anc.branch_length or 0.0))
+                else:
+                    expected_rf += 2*(recombo_dest_anc.branch_length or 0.0)
+
+
+        self.assertAlmostEqual(expected_rf, diff, places=7, msg="Expect rf=" + str(expected_rf) + " but got " + str(diff) +
+                                                                " RecomboTree=" + recombo_strio.getvalue())
+
 
         # cleanup
+        recombo_strio.close()
         if os.path.exists(tmptree.name):
             os.remove(tmptree.name)
         if os.path.exists(tmptree.name + ".recombo.nwk"):
             os.remove(tmptree.name + ".recombo.nwk")
+
 
     @staticmethod
     def hamming_distance(s1, s2):
