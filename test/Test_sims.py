@@ -45,7 +45,7 @@ class TestSims(unittest.TestCase):
         config.settings.setup_logging()
         self.configparser = ConfigParser.RawConfigParser()
         self.configparser.read(SIM_DATA_CONFIG_FILE)
-        subprocess.check_call(["python", SIM_PIPELINE_PY, SIM_DATA_CONFIG_FILE])
+        # subprocess.check_call(["python", SIM_PIPELINE_PY, SIM_DATA_CONFIG_FILE])
 
 
     @staticmethod
@@ -467,89 +467,24 @@ class TestSims(unittest.TestCase):
         return sisters
 
 
-    def test_recombo_tree(self):
+    @staticmethod
+    def calc_recombo_rf(origtree, recombo_tree, graft_clade, dest_sister_clade, dest_new_par_br_len):
         """
-        Directly invoke recombination.recombo_tree() and check that the tips are the same but topology is different.
-        Check that the grafted clade is in the right place.
-        :return:
+        Calculate expected robinson foulds distance from the recombination tree
+        :param Bio.Phylo.Tree origtree:  original tree instance
+        :param Bio.Phylo.Tree recombo_tree:  recombination tree made from pruning and regrafting a clade
+        :param Bio.Phylo.Clade graft_clade:  clade from recombination tree instance that has been pruned and regrafted
+        :param Bio.Phylo.Clade dest_sister_clade: clade from recombination tree instance is the end sister of the regrafted clade
+        :param float dest_new_par_br_len:  branch length of new intermediate node in recombination tree
+            used to graft the pruned clade under
+        :return float:  expected robinson foulds distance between the original and recombination tree
         """
-        tmptree = tempfile.NamedTemporaryFile(mode="w+", delete=False)
-
-        treestr = "(((T1:0.1, T2:0.2)N3:0.35, (T3:0.3, T4:0.4)N4:0.45)N2:0.25, T5:0.5)N1;"
-        tmptree.write(treestr)
-        tmptree.flush()  # Flush to buffer
-        os.fsync(tmptree.file.fileno())  # flush to disk
-        tmptree.close()
-
-
-        # origtree = Phylo.read(StringIO(treestr), "newick")
-        # expected_breadthfirst_nodes = ["N1", "N2", "T5", "N3", "N4", "T1", "T2", "T3", "T4"]
-        # src_prune_id = expected_breadthfirst_nodes.index("T5")
-        # dest_sister_clade = origtree.find_any(name="T3")
-        # dest_new_par_br_len = 0.184629237455
-        # # T5
-        # # T3
-        # # 0.184629237455
-        #
-        # graft_clade = simulations.recombination.prune_by_idx(tree=origtree, idx=src_prune_id, order="level")
-        # recombo_tree = simulations.recombination.graft(tree=origtree,
-        #                                                src_subtree=graft_clade,
-        #                                                dest_sister_clade=dest_sister_clade,
-        #                                                dest_new_par_br_len=dest_new_par_br_len)
-
-
-        recombo_tree, graft_clade, dest_sister_clade, dest_new_par_br_len = simulations.recombination.make_recombo_tree(in_treefile=tmptree.name,
-                                                            out_treefile=tmptree.name + ".recombo.nwk")
-
-
         print graft_clade.name
         print dest_sister_clade.name
         print dest_new_par_br_len
 
-        # Check that the tree tips are the same
-        origtree = Phylo.read(StringIO(treestr), "newick")
-        orig_tips = [tip.name for tip in origtree.get_terminals()]
-        recombo_tips = [tip.name for tip in recombo_tree.get_terminals()]
-        self.assertItemsEqual(orig_tips, recombo_tips,
-                              msg="Recombination Tree should have same tips as the original tree.  " +
-                                  "Recombo tips=" + str(recombo_tips) +
-                                  "Orig tree tips=" + str(orig_tips))
-
-        # Check that the topology is different
-        recombo_strio = StringIO()
-        Phylo.write(recombo_tree, recombo_strio, "newick", format_branch_length='%1.9f')
-        recombo_strio.flush()
-        diff = TestTopology.get_weighted_rf_dist_from_str(treestr, recombo_strio.getvalue())
-        self.assertNotEqual(diff, 0, msg="Recombination Tree should be different from original tree. " +
-                                      "Recombination Tree=" + recombo_strio.getvalue() +
-                                      " Orig tree =" + treestr)
-
-
-        # Check that grafted clade is grafted as a sister to dest_sister_clade
-        recombo_dest_sis_parent = TestSims.get_parent(recombo_tree, target=graft_clade)
-        sister_clade_names = [clade.name for clade in recombo_dest_sis_parent.clades]
-        self.assertIn(dest_sister_clade.name, sister_clade_names,
-                      msg="Expect clades " + str(dest_sister_clade.name) + " and " + str(graft_clade.name) + " to be sisters")
-
-
         # Check that destination sister clade's branch length has been updated
         orig_dest_sister = origtree.find_any(name=dest_sister_clade.name)
-        # if the destination sister's original parent in the original tree was collapsed after pruning,
-        # then the destination sister's branch is elongated by the original destination parent's branch length.
-        orig_dest_sis_par = TestSims.get_parent(origtree, name=dest_sister_clade.name)
-        if orig_dest_sis_par.branch_length is None:
-            orig_dest_sis_par.branch_length = 0.0
-        if recombo_tree.find_any(name=orig_dest_sis_par.name):
-            expected_orig_sis_len = orig_dest_sister.branch_length - dest_new_par_br_len
-        else:
-            expected_orig_sis_len = orig_dest_sister.branch_length + orig_dest_sis_par.branch_length - dest_new_par_br_len
-
-        self.assertEqual(expected_orig_sis_len, dest_sister_clade.branch_length,
-                         msg="Expect destination sister clade to have branch length = " +
-                             str(expected_orig_sis_len) +
-                             " but got " + str(dest_sister_clade.branch_length) +
-                             ".  Original destination sister branch len=" + str(orig_dest_sister.branch_length))
-
 
         # Check that robinson foulds distance is as expected
         expected_rf = 0.0
@@ -610,6 +545,78 @@ class TestSims(unittest.TestCase):
                 else:
                     expected_rf += 2*(recombo_dest_anc.branch_length or 0.0)
 
+        return expected_rf
+
+
+
+    def test_recombo_tree(self):
+        """
+        Directly invoke recombination.recombo_tree() and check that the tips are the same but topology is different.
+        Check that the grafted clade is in the right place.
+        :return:
+        """
+        tmptree = tempfile.NamedTemporaryFile(mode="w+", delete=False)
+
+        treestr = "(((T1:0.1, T2:0.2)N3:0.35, (T3:0.3, T4:0.4)N4:0.45)N2:0.25, T5:0.5)N1;"
+        tmptree.write(treestr)
+        tmptree.flush()  # Flush to buffer
+        os.fsync(tmptree.file.fileno())  # flush to disk
+        tmptree.close()
+
+        recombo_tree, graft_clade, dest_sister_clade, dest_new_par_br_len = simulations.recombination.make_recombo_tree(in_treefile=tmptree.name,
+                                                            out_treefile=tmptree.name + ".recombo.nwk")
+
+
+        print graft_clade.name
+        print dest_sister_clade.name
+        print dest_new_par_br_len
+
+        # Check that the tree tips are the same
+        origtree = Phylo.read(StringIO(treestr), "newick")
+        orig_tips = [tip.name for tip in origtree.get_terminals()]
+        recombo_tips = [tip.name for tip in recombo_tree.get_terminals()]
+        self.assertItemsEqual(orig_tips, recombo_tips,
+                              msg="Recombination Tree should have same tips as the original tree.  " +
+                                  "Recombo tips=" + str(recombo_tips) +
+                                  "Orig tree tips=" + str(orig_tips))
+
+        # Check that the topology is different
+        recombo_strio = StringIO()
+        Phylo.write(recombo_tree, recombo_strio, "newick", format_branch_length='%1.9f')
+        recombo_strio.flush()
+        diff = TestTopology.get_weighted_rf_dist_from_str(treestr, recombo_strio.getvalue())
+        self.assertNotEqual(diff, 0, msg="Recombination Tree should be different from original tree. " +
+                                      "Recombination Tree=" + recombo_strio.getvalue() +
+                                      " Orig tree =" + treestr)
+
+
+        # Check that grafted clade is grafted as a sister to dest_sister_clade
+        recombo_dest_sis_parent = TestSims.get_parent(recombo_tree, target=graft_clade)
+        sister_clade_names = [clade.name for clade in recombo_dest_sis_parent.clades]
+        self.assertIn(dest_sister_clade.name, sister_clade_names,
+                      msg="Expect clades " + str(dest_sister_clade.name) + " and " + str(graft_clade.name) + " to be sisters")
+
+
+        # Check that destination sister clade's branch length has been updated
+        orig_dest_sister = origtree.find_any(name=dest_sister_clade.name)
+        # if the destination sister's original parent in the original tree was collapsed after pruning,
+        # then the destination sister's branch is elongated by the original destination parent's branch length.
+        orig_dest_sis_par = TestSims.get_parent(origtree, name=dest_sister_clade.name)
+        if orig_dest_sis_par.branch_length is None:
+            orig_dest_sis_par.branch_length = 0.0
+        if recombo_tree.find_any(name=orig_dest_sis_par.name):
+            expected_orig_sis_len = orig_dest_sister.branch_length - dest_new_par_br_len
+        else:
+            expected_orig_sis_len = orig_dest_sister.branch_length + orig_dest_sis_par.branch_length - dest_new_par_br_len
+
+        self.assertEqual(expected_orig_sis_len, dest_sister_clade.branch_length,
+                         msg="Expect destination sister clade to have branch length = " +
+                             str(expected_orig_sis_len) +
+                             " but got " + str(dest_sister_clade.branch_length) +
+                             ".  Original destination sister branch len=" + str(orig_dest_sister.branch_length))
+
+        expected_rf = TestSims.calc_recombo_rf(origtree=origtree, recombo_tree=recombo_tree, graft_clade=graft_clade,
+                                 dest_sister_clade=dest_sister_clade, dest_new_par_br_len=dest_new_par_br_len)
 
         self.assertAlmostEqual(expected_rf, diff, places=7, msg="Expect rf=" + str(expected_rf) + " but got " + str(diff) +
                                                                 " RecomboTree=" + recombo_strio.getvalue())
