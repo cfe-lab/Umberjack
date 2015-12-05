@@ -86,3 +86,29 @@ class SimData:
             raise ValueError("Must execute sim_pipeline.py.  The dataset is not yet done.")
 
         return self.sim_data_dir + os.sep + "fullpopn" + os.sep + self.name + "_TRUE.fasta"
+
+
+    def get_dnds(self):
+        """
+        Gets the dnds csv for the full population
+        :return str: full filepath to csv
+        """
+        if not os.path.exists(self.sim_data_dir + os.sep + "subs"):
+            raise ValueError("Must execute sim_pipeline.py.  The dataset is not yet done.")
+
+        return self.sim_data_dir + os.sep + "subs" + os.sep + self.name + ".dnds.tsv"
+
+
+    def get_art_sam(self, is_errfree=False):
+        """
+        Returns the filepath to the ART generated SAM file, query sorted.
+        :param bool is_errfree: whether to return the error free sam
+        :return str:
+        """
+        if not os.path.exists(self.sim_data_dir + os.sep + "reads"):
+            raise ValueError("Must execute sim_pipeline.py.  The ART read generation is not yet done.")
+
+        if is_errfree:
+            return self.sim_data_dir + os.sep + "reads" + os.sep + self.name + ".reads.errFree.sort.query.sam"
+        else:
+            return self.sim_data_dir + os.sep + "reads" + os.sep + self.name + ".reads.sort.query.sam"
