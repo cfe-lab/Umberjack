@@ -281,8 +281,8 @@ function printSubTSV(outPerSiteBrSubFile, outPerSiteDnDsFile)
 		for (v=0; v<filteredDataJoint.unique_sites;v=v+1)
 		{
 			GetDataInfo (siteInfo, filteredDataJoint, k, v);
-			totalPossCodons = matrixTrickSummer*siteInfo)[0];
-			if ((totalPossCodons > 1)  // >1  possible codon at site v for this sequence
+			totalPossCodons = (matrixTrickSummer*siteInfo)[0];
+			if (totalPossCodons > 1)  // >1  possible codon at site v for this sequence
 			{
 				rSeq_cUniqSite_2iCdn[k][v] = -1 * totalPossCodons;
 			}
@@ -413,6 +413,7 @@ function printSubTSV(outPerSiteBrSubFile, outPerSiteDnDsFile)
 						curr_unambig_hor_filter = curr_unambig_hor_filter + "," + iChildSeq;
 					}
 					DataSetFilter filteredDataSite = CreateFilter (dsJoint,3,siteFilter, curr_unambig_hor_filter,GeneticCodeExclusions);  // Remove any site where either inner node or leaf has stop codon
+					//DataSetFilter filteredDataSite = CreateFilter (dsJoint,3,siteFilter, "",GeneticCodeExclusions);  // Remove any site where either inner node or leaf has stop codon
 					// Count all codon frequencies, including stop codons.  
 					// Frequencies will total to 1.
 					// All the possible codons corresponding to an ambiguous codon count as a fraction of a codon.  EG)  GGN => GGA=0.25, GGC=0.25, GGT=0.25, GGG=0.25
@@ -452,6 +453,7 @@ function printSubTSV(outPerSiteBrSubFile, outPerSiteDnDsFile)
 					{
 						continue;
 					}
+					
 					
 					for (iPossParCdn=0; iPossParCdn<stateCharCount; iPossParCdn=iPossParCdn+1)
 					{
