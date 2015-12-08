@@ -72,7 +72,9 @@ MAX_PROP_N = 0.1
 # Simulate reads with ART
 #############################################
 
-if os.path.exists(ART_OUTPUT_PREFIX + ".sam") and os.path.getsize(ART_OUTPUT_PREFIX + ".sam"):
+if (os.path.exists(ART_OUTPUT_PREFIX + ".sam") and os.path.getsize(ART_OUTPUT_PREFIX + ".sam") and
+        os.path.exists(ART_OUTPUT_PREFIX + ".reads.1.fq") and os.path.getsize(ART_OUTPUT_PREFIX + ".reads.1.fq") and
+        os.path.exists(ART_OUTPUT_PREFIX + ".reads.2.fq") and os.path.getsize(ART_OUTPUT_PREFIX + ".reads.2.fq")):
     LOGGER.warn("Not regenerating ART simulated reads")
 else:
 
