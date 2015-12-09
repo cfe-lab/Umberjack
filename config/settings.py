@@ -91,20 +91,24 @@ DEFAULT_REMOVE_DUPLICATES = True
 DEFAULT_INSERT = False
 
 
-def setup_logging(config_file=DEFAULT_LOG_CONFIG_FILE):
+def setup_logging(config_file=DEFAULT_LOG_CONFIG_FILE, config_dict=DEFAULT_LOG_CONFIG_DICT):
     """
     Set up logging globally using config file.
+    The priority for configurations:
+    1) config_file
+    2) If config file is not specified, then DEFAULT_LOG_CONFIG_FILE is used as config file
+    3) If the config file is explicity set to None/empty string, then config_dict is used
+    4) If config_dict is not specified, then DEFAULT_LOG_CONFIG_DICT is used as config_dict
+    5) If config_file and config_dict are both set to None or empty, then no configurations are set for logging
+
     :param str config_file:  file path to logging configuration file.
+    :param dict config_dict:  dict configuration for logging
     """
-    # if the logging.conf file doesn't exist, then use settings.DEFAULT_LOG_CONFIG_DICT configurations (DEBUG logging to RotatingFile)
-    logging.config.dictConfig(DEFAULT_LOG_CONFIG_DICT)
+    if config_file:
+        logging.config.fileConfig(config_file, disable_existing_loggers=False)
 
-    # NB:  fileconfig does not handle filters - how do we output IP without it???
-
-    # if not os.path.exists(config_file):
-    #     logging.config.dictConfig(DEFAULT_LOG_CONFIG_DICT)
-    # else:
-    #     logging.config.fileConfig(config_file, disable_existing_loggers=False)
+    elif config_dict:
+        logging.config.dictConfig(config_dict)
 
 
 
