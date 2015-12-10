@@ -387,30 +387,22 @@ function printSubTSV(outPerSiteBrSubFile, outPerSiteDnDsFile)
 				sChildCdn = commaCodonList(childAmbInfo, codonCodeToStrMap);
 				sParCdn = commaCodonList(parAmbInfo, codonCodeToStrMap);
 			
-				// ??? We aren't outputting the site-substitutions for NNN codons, but NNN still affect the codon resolution frequency across the phylo for 2-N or 1-N ambiguous codons.
-				// Ignore site-branches where parent or child has completely ambiguous codons.
-				// This is because every substitution is possible and will pollute any inference we make at this site.
-				if ( totalPossParCodons < stateCharCount && totalPossChildCodons < stateCharCount)  
+				// Ignore site-branches where parent is ambiguous.
+				// Resolve ambiguous child codons only if they aren't fully ambiguous (NNN, or ---). 
+				// Weight the possible child codons by the frequencies of unambiguous codons found across the phylogeny.
+				if ( totalPossParCodons == 1 && totalPossChildCodons < stateCharCount)  
 				{
 					// Count codon frequencies for this site only
 					siteFilter = ""+(iSite*3)+"-"+(iSite*3+2);
-					// Exclude all ambiguous codons in the codon frequency with the exception of the current parent and child ambiguous codons
-					curr_unambig_hor_filter = unambig_hor_filter;
-					if (curr_unambig_hor_filter == "" && totalPossParCodons > 1)
-					{
-						curr_unambig_hor_filter = "" + iParentSeq;
-					}
-					else if (curr_unambig_hor_filter != "" && totalPossParCodons > 1)
-					{
-						curr_unambig_hor_filter = curr_unambig_hor_filter + "," + iParentSeq;
-					}
-					if (curr_unambig_hor_filter == "" && totalPossChildCodons > 1)
+					
+					// Exclude all ambiguous codons in the codon frequency with the exception of the current child ambiguous codon.
+					if (unambig_hor_filter == "")
 					{
 						curr_unambig_hor_filter = "" + iChildSeq;
 					}
-					else if (curr_unambig_hor_filter != "" && totalPossChildCodons > 1)
+					else
 					{
-						curr_unambig_hor_filter = curr_unambig_hor_filter + "," + iChildSeq;
+						curr_unambig_hor_filter = unambig_hor_filter + "," + iChildSeq;
 					}
 					DataSetFilter filteredDataSite = CreateFilter (dsJoint,3,siteFilter, curr_unambig_hor_filter,GeneticCodeExclusions);  // Remove any site where either inner node or leaf has stop codon
 					//DataSetFilter filteredDataSite = CreateFilter (dsJoint,3,siteFilter, "",GeneticCodeExclusions);  // Remove any site where either inner node or leaf has stop codon
@@ -455,23 +447,15 @@ function printSubTSV(outPerSiteBrSubFile, outPerSiteDnDsFile)
 					}
 					
 					
-					for (iPossParCdn=0; iPossParCdn<stateCharCount; iPossParCdn=iPossParCdn+1)
+					for (iPossChildCdn=0; iPossChildCdn<stateCharCount; iPossChildCdn=iPossChildCdn+1)
 					{
-						if (parAmbInfo[iPossParCdn]>0)
+						if (childAmbInfo[iPossChildCdn]>0)
 						{		
-							parWeightFactor = parAmbCodon_phyloFreqs[iPossParCdn]/totalFreqParPossCodons;  // ambiguous codon count weighted by frequency across phylo
-							for (iPossChildCdn=0; iPossChildCdn<stateCharCount; iPossChildCdn=iPossChildCdn+1)
-							{
-								if (childAmbInfo[iPossChildCdn]>0)
-								{		
-									childWeightFactor = childAmbCodon_phyloFreqs[iPossChildCdn]/totalFreqChildPossCodons;  // ambiguous codon count weighted by frequency across phylo
-									avePairWeightfactor = parWeightFactor *  childWeightFactor;
-									_SITEBR_OS_COUNT[iPossParCdn][iPossChildCdn] = _SITEBR_OS_COUNT[iPossParCdn][iPossChildCdn] + avePairWeightfactor;		
-									_SITEBR_ON_COUNT[iPossParCdn][iPossChildCdn] = _SITEBR_ON_COUNT[iPossParCdn][iPossChildCdn] + avePairWeightfactor;		
-									_SITEBR_ES_COUNT[iPossParCdn][iPossChildCdn] = _SITEBR_ES_COUNT[iPossParCdn][iPossChildCdn] + avePairWeightfactor*branchFactor;		
-									_SITEBR_EN_COUNT[iPossParCdn][iPossChildCdn] = _SITEBR_EN_COUNT[iPossParCdn][iPossChildCdn] + avePairWeightfactor*branchFactor;
-								}
-							} 
+							childWeightFactor = childAmbCodon_phyloFreqs[iPossChildCdn]/totalFreqChildPossCodons;  // ambiguous codon count weighted by frequency across phylo
+							_SITEBR_OS_COUNT[iPossParCdn][iPossChildCdn] = _SITEBR_OS_COUNT[iPossParCdn][iPossChildCdn] + childWeightFactor;		
+							_SITEBR_ON_COUNT[iPossParCdn][iPossChildCdn] = _SITEBR_ON_COUNT[iPossParCdn][iPossChildCdn] + childWeightFactor;		
+							_SITEBR_ES_COUNT[iPossParCdn][iPossChildCdn] = _SITEBR_ES_COUNT[iPossParCdn][iPossChildCdn] + childWeightFactor*branchFactor;		
+							_SITEBR_EN_COUNT[iPossParCdn][iPossChildCdn] = _SITEBR_EN_COUNT[iPossParCdn][iPossChildCdn] + childWeightFactor*branchFactor;
 						}
 					}
 				}
