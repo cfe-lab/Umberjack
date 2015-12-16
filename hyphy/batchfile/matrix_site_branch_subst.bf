@@ -374,7 +374,7 @@ function printSubTSV(outPerSiteBrSubFile, outPerSiteDnDsFile)
 				sChildCdn = codonCodeToStrMap[iChildCdn];
 				sParCdn = codonCodeToStrMap[iParCdn];
 			}	
-			else  //ambiguities here
+			else if(RESOLVE_AMBIGUITIES == 1 )  //ambiguities here
 			{
 
 				GetDataInfo    (childAmbInfo, filteredDataJoint, iChildSeq, iUniqSite);

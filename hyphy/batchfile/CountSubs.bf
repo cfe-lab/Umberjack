@@ -31,6 +31,7 @@ Maintains the same input tree root, input tree node names, input tree branch len
 
 */
 
+RESOLVE_AMBIGUITIES = 0;  // Do not resolve ambiguous codons when counting substitutions
 
 #include "matrix_site_branch_subst.bf";
 
