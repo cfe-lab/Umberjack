@@ -126,7 +126,7 @@ def get_fasta_headers(fasta_filename):
     with open(fasta_filename, 'r') as fasta_fh:
         for line in fasta_fh:
             if line and line[0] == '>':
-                header = line[1:].rstrip().split()
+                header = line[1:].rstrip().split()[0]
                 yield header
 
 
@@ -415,6 +415,26 @@ def  calc_metric_entropy(symbol_to_count):
 
     return metric_entropy
 
+
+def  calc_shannon_entropy(symbol_to_count):
+    """
+    calculates shannon entropy for dict of symbols to count
+    :param dict symbol_to_count:  str ==> float
+    :return:
+    """
+
+    total_seqs = float(sum(symbol_to_count.values()))
+    if not total_seqs:
+        return None
+
+    total_entropy = 0.0
+    for symbol, count in symbol_to_count.iteritems():
+        if count:
+            p_symbol = count / total_seqs  # probability of this symbol
+            log_p_symbol = math.log(p_symbol, 2)  # Log2  probability of letter
+            total_entropy -= (p_symbol * log_p_symbol)
+
+    return total_entropy
 
 
 class Consensus:
@@ -809,21 +829,45 @@ class Consensus:
                                                      is_count_pad=is_count_pad,
                                                      is_convert=True)
 
-        total_symbols  = float(sum(unambig_codon_to_count.values()))
+        total_entropy = calc_shannon_entropy(unambig_codon_to_count)
+        return total_entropy
 
-        if not total_symbols:
-            total_entropy = None
-        else:
-            total_entropy = 0.0
-            for codon, count  in unambig_codon_to_count.iteritems():
 
-                if count:
-                    p_symbol = count / total_symbols  # probability of this symbol (aka codon) occuring at this position
-                    log_p_symbol = math.log(p_symbol, 2)  # Log2  probability of symbol
-                    total_entropy -= (p_symbol * log_p_symbol)
+    def get_aa_shannon_entropy(self, codon_pos_0based):
+        """
+        Gets the Shannon Entropy (measure of bits required to represent each symbol) at the given codon site.
+        Only unambiguous AA counted.
+        :param int codon_pos_0based: 0-based codon position in the multiple sequence alignment
+        :return: Shannon Entropy.  Log2 based.
+        :rtype float
+        """
+        aa_to_count = self.get_aa_freq(codon_pos_0based)
+        total_entropy = calc_shannon_entropy(aa_to_count)
 
         return total_entropy
 
+    def get_aa_conserve(self, codon_pos_0based):
+        """
+        Gets fraction of most common aa
+        Only unambiguous AA counted.
+        :param int codon_pos_0based: 0-based codon position in the multiple sequence alignment
+        :return: conservation fraction
+        :rtype float
+        """
+        conserve_count = 0.0
+        total_count = 0.0
+
+        aa_to_count = self.get_aa_freq(codon_pos_0based)
+
+        for aa, count in aa_to_count.iteritems():
+            if conserve_count < count:
+                conserve_count = count
+            total_count += count
+
+        if total_count:
+            return conserve_count/total_count
+        else:
+            return None
 
     def get_ave_shannon_entropy(self, start_pos_0based, after_end_pos_0based, is_count_ambig=False, is_count_gaps=False, is_count_pad=False):
         """

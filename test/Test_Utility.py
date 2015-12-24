@@ -399,6 +399,36 @@ class MyTestCase(unittest.TestCase):
         os.remove(tmpfile.name)
 
 
+    def test_aa_entropy(self):
+        tmpfile = tempfile.NamedTemporaryFile(delete=False)
+        # -VT
+        # -V-
+        # ?VP
+        tmpfile.write(">seq1\n")
+        tmpfile.write("---GTNACT\n")
+        tmpfile.write(">seq2\n")
+        tmpfile.write("-NTGTC---\n")
+        tmpfile.write(">seq3\n")
+        tmpfile.write("NNNGTGCCG\n")
+        tmpfile.flush()
+        os.fsync(tmpfile.file.fileno())
+        tmpfile.close()
+
+        cons = Utility.Consensus()
+        cons.parse(tmpfile.name)
+
+
+        expected = [None,
+                    0,
+                    -2 * (1.0/2) * math.log(1.0/2, 2)]
+
+        for pos in range (0, len(expected)/3):
+            actual = cons.get_codon_shannon_entropy(pos, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
+            self.assertEqual(expected[pos], actual, "Pos={} expected={} actual={}".format(pos, expected[pos], actual))
+
+        os.remove(tmpfile.name)
+
+
     def test_codon_conserve(self):
         tmpfile = tempfile.NamedTemporaryFile(delete=False)
         # --- GTN ACT
