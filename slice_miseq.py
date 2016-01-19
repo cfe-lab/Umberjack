@@ -334,7 +334,7 @@ def tabulate_dnds(output_prefix, ref, ref_nuc_len, output_csv_filename, comments
     :param str output_csv_filename: full filepath of aggregated selection tsv to write to
     :param str comments: any comments to add at the top of the aggregated selection tsv
     """
-    LOGGER.debug("Start Ave Dn/DS for all windows for dir=" + dnds_tsv_dir + " ref=" + ref + " " + output_csv_filename)
+    LOGGER.debug("Start Ave Dn/DS for all windows for output_prefix=" + output_prefix + " ref=" + ref + " " + output_csv_filename)
 
     seq_dnds_info = get_seq_dnds_info(output_prefix=output_prefix,
                                       ref_codon_len=ref_nuc_len / Utility.NUC_PER_CODON)
@@ -370,7 +370,7 @@ def tabulate_dnds(output_prefix, ref, ref_nuc_len, output_csv_filename, comments
             outrow["dnMinusDsWeightBySubsNoLowSubs"] = site_dnds_info.get_ave_dn_minus_ds_weightby_subs(is_exclude_low_sub=True)
             writer.writerow(outrow)
 
-    LOGGER.debug("Done Ave Dn/DS for all windows  for dir=" + dnds_tsv_dir + " ref=" + ref + ".  Wrote to " + output_csv_filename)
+    LOGGER.debug("Done Ave Dn/DS for all windows  for output_prefix=" + output_prefix + " ref=" + ref + ".  Wrote to " + output_csv_filename)
 
 
 

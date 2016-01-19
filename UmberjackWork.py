@@ -777,7 +777,7 @@ class UmberjackWork(object):
                 else:
                     ref_len = Utility.get_len_1st_seq(job.File)
 
-                kwds_list.append({"output_prefix": output_prefix,
+                kwds_list.append({"output_prefix": job.OutputPrefix,
                                   "ref": job.Ref,
                                   "ref_nuc_len": ref_len,
                                   "output_csv_filename": output_csv_filename
