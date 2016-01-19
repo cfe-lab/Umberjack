@@ -770,14 +770,14 @@ class UmberjackWork(object):
             kwds_list = []
             for job in self.job_iter():
                 output_csv_filename = job.OutputPrefix + ".dnds.csv"
-                out_dir = os.path.dirname(output_csv_filename)
+
 
                 if job.FileType == UmberjackWork.InputFileTypes.SAM:
                     ref_len = sam_handler.get_reflen(sam_filename=job.File, ref=job.Ref)
                 else:
                     ref_len = Utility.get_len_1st_seq(job.File)
 
-                kwds_list.append({"dnds_tsv_dir": out_dir,
+                kwds_list.append({"output_prefix": output_prefix,
                                   "ref": job.Ref,
                                   "ref_nuc_len": ref_len,
                                   "output_csv_filename": output_csv_filename
