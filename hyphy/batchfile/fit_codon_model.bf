@@ -70,7 +70,7 @@ Tree	codon_tree = tree_string;	// NB:  Model must be defined before the Tree
 
 
 /* constrain branch lengths */
-// original branch lengths in nucleotide subst/site.  We want branch lengths in syn subst/site, since that is what SLAC uses for scaling expected syn, nonsyn sites.
+// original branch lengths in nucleotide subst/ nucleotide site.  We want branch lengths in nucleotide subst per codon site, since that is what SLAC uses for scaling expected syn, nonsyn sites.
 fprintf(stdout, "\nConstraining branch lengths", "\n");
 global scalingB 		= computeScalingFactorB (MG94custom, vectorOfFrequencies);
 ReplicateConstraint("this1.?.?:=this2.?.?__/scalingB", codon_tree, codon_tree); 

@@ -298,10 +298,12 @@ class TestTopology(unittest.TestCase):
             # Full population Treefile with tips resampled according to the read sequences used in the window fasta
             # Branch lengths can't be trusted if the recombinant-window overlap sequences
             # are different from the recombinant sequences.  In which case, only used as for topology guide.
-            expected_topology_treefile = expected_prefix + ".expected.topology.{}_{}.nwk".format(recomb_win_start, recomb_win_end)
+            expected_topology_treefile = expected_prefix + ".expected.topology.{}_{}.{}_{}.nwk".format(win_start, win_end,
+                                                                                                       recomb_win_start, recomb_win_end)
             # Full population Treefile with tips resampled according to the read sequences used in the window fasta
             # Branch lengths rescaled to fit the sequences in recombinant section-window overlap
-            expected_treefile = expected_prefix + ".expected.{}_{}.nwk".format(recomb_win_start, recomb_win_end)
+            expected_treefile = expected_prefix + ".expected.{}_{}.{}_{}.nwk".format(win_start, win_end,
+                                                                               recomb_win_start, recomb_win_end)
 
             # For each read in the window, make a copy of the individual's tip in the full population tree
             TestTopology.resample_tree_from_fasta(treefile=full_popn_recombo_treefile,
@@ -317,7 +319,8 @@ class TestTopology(unittest.TestCase):
             else:
 
                 # For each read in the window, make a copy of the individual's sequence from the full population fasta
-                expected_fasta = expected_prefix + ".expected.{}_{}.fasta".format(recomb_win_start, recomb_win_end)
+                expected_fasta = expected_prefix + ".expected.{}_{}.{}_{}.fasta".format(win_start, win_end,
+                                                                                        recomb_win_start, recomb_win_end)
                 TestTopology.resample_fasta_from_seq(src_fasta=window_fasta, dest_fasta=full_popn_fasta,
                                                      out_fasta=expected_fasta,
                                                      slice_range=(recomb_win_start, recomb_win_end))
@@ -331,10 +334,15 @@ class TestTopology(unittest.TestCase):
             rf_dist = TestTopology.get_weighted_rf_dist(expected_treefile, window_treefile)
 
             weighted_ave_dist +=  (recombo_win_size/float(win_size)) * rf_dist
+            # LOGGER.debug("{}_{}.{}_{}".format(win_start, win_end,
+            #                                         recomb_win_start, recomb_win_end) +
+            # " RF=" + str(rf_dist) + " weight=" + str(recombo_win_size/float(win_size)))
 
+        # LOGGER.debug("{}_{}".format(win_start, win_end) +
+        #              " WeightRF=" + str(weighted_ave_dist))
         # Clean up if we haven't encountered any errors.  Leave the expected files there for debugging if we crash before this.
-        if os.path.exists(expected_dir):
-            shutil.rmtree(expected_dir)
+        # if os.path.exists(expected_dir):
+        #     shutil.rmtree(expected_dir)
 
 
         return weighted_ave_dist
