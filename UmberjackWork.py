@@ -267,14 +267,9 @@ class UmberjackWork(object):
                         raise ValueError("File " + filename + " is neither sam or multiple sequence aligned fasta format")
 
                 except Exception, e:
-                    type, value, traceback = sys.exc_info()
-
-                    raise (ValueError,  # exception type
-                           ("File " + filename + " specified on line " + str(i+2) +
-                            " in " + self.input_csv + " is not valid.\n",
-                            type, value),  # exception value
-                           traceback  # previous exception stacktrace
-                    )
+                    msg = ("File " + filename + " specified on line " + str(i+2) +
+                            " in " + self.input_csv + " is not valid.\n" + e.message)
+                    raise ValueError(msg), None, sys.exc_info()[2]
 
 
 
@@ -415,12 +410,12 @@ class UmberjackWork(object):
                     name = line[1:].split()[0]  # Get the read ID and ignore the description
                     formatted_name = Utility.newick_nice_name(name)
                     if formatted_name in names:
-                        raise ValueError("Sequences with duplicate names after replacing periods, semicolons, colons, brackets with underscore")
+                        raise ValueError("Fasta " + msa_fasta + " Sequences with duplicate names after replacing periods, semicolons, colons, brackets with underscore")
                     names.add(formatted_name)
 
                     if seq is not None:
                         if last_seq_len is not None and last_seq_len != len(seq):
-                            raise ValueError("Fasta is not multiple sequence aligned. Every sequence should be same length")
+                            raise ValueError("Fasta " + msa_fasta + " is not multiple sequence aligned. Every sequence should be same length")
                         last_seq_len = len(seq)
 
                     seq = ""

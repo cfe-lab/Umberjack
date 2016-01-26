@@ -96,7 +96,7 @@ def get_seq2len(fasta_filename):
     :param str fasta_filename: full filepath to fasta
     """
     seq2len = {}
-    with open(fasta_filename, 'r') as ref_fasta_fh:
+    with open(fasta_filename, 'rU') as ref_fasta_fh:
         header = ''
         seq_len = 0
         for line in ref_fasta_fh:
@@ -123,7 +123,7 @@ def get_fasta_headers(fasta_filename):
     :rtype:  iterator of str
     :param str fasta_filename : full file path to the fasta file
     """
-    with open(fasta_filename, 'r') as fasta_fh:
+    with open(fasta_filename, 'rU') as fasta_fh:
         for line in fasta_fh:
             if line and line[0] == '>':
                 header = line[1:].rstrip().split()[0]
@@ -137,7 +137,7 @@ def get_first_header(fasta_filename):
     :return str:  Returns the first header in a fasta or None if there aren't any
     """
     first_header = ""
-    with open(fasta_filename, 'r') as fasta_fh:
+    with open(fasta_filename, 'rU') as fasta_fh:
         for line in fasta_fh:
             if line and line[0] == '>':
                 first_header = line[1:].rstrip().split()[0]
@@ -178,7 +178,7 @@ def get_longest_seq_size_from_fasta(fasta_filename):
     :param fasta_filename: full filepath to the fasta.
     """
     longest_seq_len = -1
-    with open(fasta_filename, 'r') as fasta_fh:
+    with open(fasta_filename, 'rU') as fasta_fh:
         seq_len = 0
         for line in fasta_fh:
             line = line.rstrip()
@@ -216,7 +216,7 @@ def get_total_nongap_all_pos(msa_fasta_filename, gap_chars=["N", "n", "-"]):
     """
     longest_seq_size = get_longest_seq_size_from_fasta(msa_fasta_filename)
     total_nongap_by_pos = [0] * longest_seq_size
-    with open(msa_fasta_filename, 'r') as fh:
+    with open(msa_fasta_filename, 'rU') as fh:
         seq = ""
         for line in fh:
             line = line.rstrip()
@@ -245,7 +245,7 @@ def get_total_nongap_nuc_by_pos(msa_fasta_filename, pos):
     :return:
     """
     pos_total_nongap = 0
-    with open(msa_fasta_filename, 'r') as fh:
+    with open(msa_fasta_filename, 'rU') as fh:
         seq = ""
         for line in fh:
             line = line.rstrip()
@@ -271,7 +271,7 @@ def get_total_nongap_nuc_all_pos(msa_fasta_filename):
 
     longest_seq_size = get_longest_seq_size_from_fasta(msa_fasta_filename)
     total_nongap_by_pos = [0] * longest_seq_size
-    with open(msa_fasta_filename, 'r') as fh:
+    with open(msa_fasta_filename, 'rU') as fh:
         seq = ""
         for line in fh:
             line = line.rstrip()
@@ -296,7 +296,7 @@ def get_len_1st_seq(msa_fasta_filename):
     :return int:  seq length of 1st seq
     """
 
-    with open(msa_fasta_filename, 'r') as fasta_fh:
+    with open(msa_fasta_filename, 'rU') as fasta_fh:
         seq_len = 0
         header = None
         for line in fasta_fh:
