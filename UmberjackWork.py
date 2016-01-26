@@ -633,11 +633,13 @@ class UmberjackWork(object):
             queue_ref_end_nucpos =  self.end_nucpos
 
 
-        total_windows = int(math.ceil(((queue_ref_end_nucpos - queue_ref_start_nucpos + 1) - self.window_size + 1)/self.window_slide))
+        total_windows = max(1, int(math.ceil(((queue_ref_end_nucpos - queue_ref_start_nucpos + 1) - self.window_size + 1)/self.window_slide)))
         LOGGER.debug("Queuing " + str(total_windows) + " total windows for sam=" + samfile + " ref=" + ref)
 
 
-        for start_window_nucpos in range(queue_ref_start_nucpos, queue_ref_end_nucpos-self.window_size+2, self.window_slide):
+        for start_window_nucpos in range(queue_ref_start_nucpos,
+                                         max(queue_ref_start_nucpos+1, queue_ref_end_nucpos-self.window_size+2),
+                                         self.window_slide):
             end_window_nucpos = start_window_nucpos + self.window_size - 1
 
             window_args = {"window_depth_cutoff": self.window_depth_cutoff,
@@ -689,12 +691,14 @@ class UmberjackWork(object):
         # TODO:  remove duplicates from msa fasta
 
         # All nucleotide positions are 1-based
-        total_windows = int(math.ceil(((queue_ref_end_nucpos - queue_ref_start_nucpos + 1) - self.window_size + 1)/self.window_slide))
+        total_windows = max(1, int(math.ceil(((queue_ref_end_nucpos - queue_ref_start_nucpos + 1) - self.window_size + 1)/self.window_slide)))
         LOGGER.debug("Queuing " + str(total_windows) + " total windows for msa fasta=" + msa_fasta)
         LOGGER.debug("queue_ref_end_nucpos=" + str(queue_ref_end_nucpos))
         LOGGER.debug("queue_ref_end_nucpos-self.window_size+1=" + str(queue_ref_end_nucpos-self.window_size+1))
 
-        for start_window_nucpos in range(queue_ref_start_nucpos, queue_ref_end_nucpos-self.window_size+2, self.window_slide):
+        for start_window_nucpos in range(queue_ref_start_nucpos,
+                                         max(queue_ref_start_nucpos+1, queue_ref_end_nucpos-self.window_size+2),
+                                         self.window_slide):
             end_window_nucpos = start_window_nucpos + self.window_size - 1
             window_args = {"window_depth_cutoff": self.window_depth_cutoff,
                            "window_breadth_cutoff": self.window_breadth_cutoff,
