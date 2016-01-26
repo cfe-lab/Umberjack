@@ -267,10 +267,13 @@ class UmberjackWork(object):
                         raise ValueError("File " + filename + " is neither sam or multiple sequence aligned fasta format")
 
                 except Exception, e:
-                    raise (ValueError("File " + filename + " specified on line " + str(i+2) +
-                                      " in " + self.input_csv + " is not valid.\n"),  # exception type
-                           None,  # exception value
-                           sys.exc_info()[:2]  # previous exception stacktrace
+                    type, value, traceback = sys.exc_info()
+
+                    raise (ValueError,  # exception type
+                           ("File " + filename + " specified on line " + str(i+2) +
+                            " in " + self.input_csv + " is not valid.\n",
+                            type, value),  # exception value
+                           traceback  # previous exception stacktrace
                     )
 
 
