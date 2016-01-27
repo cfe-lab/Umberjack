@@ -271,6 +271,10 @@ def get_seq_dnds_info(output_prefix, ref_codon_len):
             reader = csv.DictReader(dnds_fh, delimiter='\t')
             offset = 0
             for offset, codon_row in enumerate(reader):    # Every codon site is a row in the *.dnds.tsv file
+                # If the window is larger than the reference size, then quit
+                ref_codon_0based = win_start_codon_1based_wrt_ref + offset - 1
+                if ref_codon_0based >= ref_codon_len:
+                    continue
                 dN = float(codon_row[hyphy_handler.HYPHY_TSV_DN_COL])
                 dS = float(codon_row[hyphy_handler.HYPHY_TSV_DS_COL])
                 dn_minus_ds = float(codon_row[hyphy_handler.HYPHY_TSV_SCALED_DN_MINUS_DS_COL])
@@ -278,7 +282,7 @@ def get_seq_dnds_info(output_prefix, ref_codon_len):
                 nonsyn_subs = float(codon_row[hyphy_handler.HYPHY_TSV_N_COL])
                 exp_syn_subs = float(codon_row[hyphy_handler.HYPHY_TSV_EXP_S_COL])
                 exp_nonsyn_subs = float(codon_row[hyphy_handler.HYPHY_TSV_EXP_N_COL])
-                ref_codon_0based = win_start_codon_1based_wrt_ref + offset - 1
+
                 codons = aln.get_codon_depth(codon_pos_0based=offset, is_count_ambig=False, is_count_gaps=False, is_count_pad=False)
 
                 # TODO:  remove me -- hack to get past bug
