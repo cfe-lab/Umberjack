@@ -57,8 +57,10 @@ def make_rooted_tree(unrooted_treefile, threads=1):
     # when hyphy scales the tree branch lengths from nucleotide substitutions/site to codon substitutions/site,
     # it can set the zero-length branches to non-zero length codon branches, albeit with very very very small length.
     # In order to avoid this, we convert the binary tree back to polytomies before sending to hyphy to reconstruct ancestors.
-    named_rooted_treefile = file_prefix + ".named.nwk"
-    named_rooted_time_treefile = file_prefix + ".named.nwk"
+    # We also specify our own inner node names so that we don't have to depend on HyPhy going through a specific
+    # branch traversal order to identify branches, which can be nondeterministic for polytomies.
+    named_rooted_treefile = file_prefix + ".rooted.named.nwk"  # units in subs/site
+    named_rooted_time_treefile = file_prefix + ".rooted.time.named.nwk"  # units in subs/time
     LOGGER.debug("Collapsing 0-length branches and adding inner node names to " + named_rooted_treefile + " and " + named_rooted_time_treefile)
     if (os.path.exists(named_rooted_treefile) and os.path.getsize(named_rooted_treefile) and
             os.path.exists(named_rooted_time_treefile) and os.path.getsize(named_rooted_time_treefile)):
